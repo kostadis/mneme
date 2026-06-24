@@ -52,8 +52,12 @@ and it is *yours* to author, not the LLM's to invent.
       restart managed services + source-hash drift check (not in-component validation);
       DGX endpoint = external dependency (health-checked, not started). No lockfile
       (would be a 2nd authority). **Review the ⚠ decisions before `/speckit.tasks`.**
-- [ ] `/speckit.tasks` → `/speckit.implement` — gated task by task (this edits the
-      *other* repos; that cross-repo editing is the actual re-architecture).
+- [x] `/speckit.tasks` — **DONE 2026-06-24.** `tasks.md` — 35 tasks across 7 phases
+      (Setup, Foundational, US1 MVP, US2 status, US4 lifecycle, US3 apply, Polish).
+      Cross-repo constant removal (T016–T021) folded into US1 (SC-002 grep is US1's
+      done-ness), gated one repo per task. Container acid test = T034.
+- [ ] `/speckit.implement` — gated task by task (T016–T021 edit the *other* repos; that
+      cross-repo editing is the actual re-architecture). Ratify D1/D2 first.
 
 ## Context
 
