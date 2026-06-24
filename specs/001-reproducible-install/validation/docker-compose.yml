@@ -1,0 +1,21 @@
+# SC-005 reproducibility acid test — PROOF ENVIRONMENT, not a deployment target.
+# Skeleton: completed in /speckit.implement. See README.md and research D10.
+
+services:
+  platform-validate:
+    build:
+      context: ../../../          # repo root: the manager + platform.yaml live here
+      dockerfile: specs/001-reproducible-install/validation/Dockerfile
+    environment:
+      # DGX endpoint sub-decision — test both ways (research D2 / D10):
+      #   real → reach the actual 192.0.2.10:8001 (also proves SC-004 by changing the IP)
+      #   stub → assert `platform status` reports the real DGX unreachable HONESTLY (no false green)
+      DGX_MODE: ${DGX_MODE:-stub}
+    # 'real' mode needs host network reachability to the DGX; 'stub' mode stays isolated.
+    # network_mode: host          # uncomment ONLY for DGX_MODE=real if the DGX is host-routable
+    # depends_on: [dgx-stub]      # for DGX_MODE=stub
+
+  # dgx-stub:                     # minimal OpenAI-compatible stub for DGX_MODE=stub
+  #   image: <stub-image>
+  #   # serves /v1/models so the *stub* path is reachable; the REAL dgx in platform.yaml
+  #   # is still pointed at 192.0.2.10 so `status` honestly reports it unreachable.

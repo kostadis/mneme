@@ -46,7 +46,12 @@ and it is *yours* to author, not the LLM's to invent.
 - [ ] `/speckit.clarify` + review — optional deeper pass (the 2 critical scope decisions
       were already resolved during specify; open for plan: FR-009 coherence mechanism,
       DGX-side process scope).
-- [ ] `/speckit.plan` — review boundary / render-vs-import decisions.
+- [x] `/speckit.plan` — **DONE 2026-06-24.** plan.md + research.md + data-model.md +
+      contracts/{cli,platform-yaml.schema}.md + quickstart.md. Constitution gate PASS.
+      Two decisions flagged ⚠ for ratification: FR-009 coherence = re-render-on-apply +
+      restart managed services + source-hash drift check (not in-component validation);
+      DGX endpoint = external dependency (health-checked, not started). No lockfile
+      (would be a 2nd authority). **Review the ⚠ decisions before `/speckit.tasks`.**
 - [ ] `/speckit.tasks` → `/speckit.implement` — gated task by task (this edits the
       *other* repos; that cross-repo editing is the actual re-architecture).
 
