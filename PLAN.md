@@ -29,7 +29,7 @@ and it is *yours* to author, not the LLM's to invent.
 - [x] `git init` the umbrella repo.
 - [x] `specify init` — scaffold present.
 - [x] Resolve the `platform/platform/` nesting — un-nested to repo root 2026-06-24.
-- [ ] First commit (scaffold + this plan).
+- [x] First commit (scaffold + constitution + plan) — 2026-06-24, `bd4567c` on `master`.
 - [x] Author the constitution — done 2026-06-24, distilled from the Kostadis Engine
       lenses (Tribunal/Anti-Gravity/Lagrange/Value-Bridge) into 8 principles +
       economic + human-checkpoint sections. v1.0.0 at `.specify/memory/constitution.md`.
@@ -38,9 +38,14 @@ and it is *yours* to author, not the LLM's to invent.
       strengthened to cover runtime cache coherence, not just restore.)
       (Authored directly from the doctrine rather than via `/speckit.constitution`'s
       interview, per "human owns structure.")
-- [ ] `/speckit.specify 001-reproducible-install` — spec body = `platform.yaml`
-      schema + installer responsibilities + the constants to externalize.
-- [ ] `/speckit.clarify` + review — the precision checkpoint.
+- [x] `/speckit.specify 001-reproducible-install` — **DONE 2026-06-24** on branch
+      `001-reproducible-install`. `specs/001-reproducible-install/spec.md` (14 FRs,
+      4 user stories, 6 success criteria) + requirements checklist. Clarified at author
+      time: all six components in scope; `platform` owns service lifecycle (up/down in
+      dependency order).
+- [ ] `/speckit.clarify` + review — optional deeper pass (the 2 critical scope decisions
+      were already resolved during specify; open for plan: FR-009 coherence mechanism,
+      DGX-side process scope).
 - [ ] `/speckit.plan` — review boundary / render-vs-import decisions.
 - [ ] `/speckit.tasks` → `/speckit.implement` — gated task by task (this edits the
       *other* repos; that cross-repo editing is the actual re-architecture).
