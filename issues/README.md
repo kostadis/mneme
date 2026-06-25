@@ -9,3 +9,4 @@ Local issue tracker (mneme has no GitHub remote — local-first). One file per i
 | [0002](0002-cg-remaining-external-constants.md) | resolved | CG: remaining external constants (SC-002 tail) |
 | [0003](0003-query-rpg-lib-direct-access.md) | open | query_rpg_lib reaches into the rpg-lib index directly (should be HTTP-only) |
 | [0004](0004-gm-assistant-campaigns-path.md) | open | gm-assistant skills reference `~/src/campaigns` but live in `~/campaigns` |
+| [0005](0005-hypostasis-substrate-layer.md) | open | mneme depends on an underlying "hypostasis" layer that provisions the DGX and rpg-lib |
