@@ -121,6 +121,17 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
 
     data_roots = {k: _expand(v) for k, v in (raw.get("data_roots") or {}).items()}
 
+    # Process environment exported to managed services on `up` (env-wiring, e.g.
+    # MEMPALACE_BACKEND). Values must be scalars — they become env var strings.
+    env: dict[str, str] = {}
+    for k, v in (raw.get("env") or {}).items():
+        if isinstance(v, (str, int, float, bool)):
+            env[str(k)] = str(v)
+        else:
+            problems.append(
+                f"env.{k}: value must be a scalar (string/number/bool), got {type(v).__name__}"
+            )
+
     return ConfigEntity(
         venv=venv,
         machines=machines,
@@ -128,6 +139,7 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
         components=components,
         order=order,
         data_roots=data_roots,
+        env=env,
         source_path=path,
     )
 

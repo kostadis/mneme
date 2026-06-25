@@ -109,11 +109,10 @@ def test_repo_templates_all_render():
     entity = cfg.load(repo_root / "mneme.yaml")
     rendered = rnd.render_all(entity)
     # Components that render a wiring/config fragment. dgxlib + claudelib are
-    # SOVEREIGN libraries (install-only — mneme does not own their config);
-    # gm_assistant has no template.
+    # SOVEREIGN libraries (install-only); mempalace is env-driven (wired via the
+    # top-level `env:`, no file render); gm_assistant has no template.
     assert {d.component for d in rendered} == {
         "turbovecdb",
-        "mempalace",
         "rpg_lib",
         "CampaignGenerator",
     }

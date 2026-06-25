@@ -64,6 +64,7 @@ class ConfigEntity:
     components: dict[str, Component]
     order: Order
     data_roots: dict[str, Path] = field(default_factory=dict)
+    env: dict[str, str] = field(default_factory=dict)  # exported to managed services on `up`
     source_path: Path | None = None
 
 

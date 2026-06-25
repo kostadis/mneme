@@ -15,6 +15,7 @@ The single source of write authority (Principle V). Hand-edited. Top-level field
 | `venv` | path | Required. The runtime venv location (e.g. `~/.venvs/main`). |
 | `machines` | map<name, Machine> | Required. At least the `dgx` machine. |
 | `data_roots` | map<name, path> | Paths to external data (referenced, not owned). |
+| `env` | map<name, scalar> | Optional. Process env exported to managed services on `up` (env-wiring for env-driven components, e.g. `MEMPALACE_BACKEND`). Values must be scalars. |
 | `services` | map<name, Service> | Managed or externally-checked services. |
 | `components` | map<name, Component> | The six installable units. |
 | `order.install` | list<component-name> | Required. Acyclic; every name must exist in `components`. |

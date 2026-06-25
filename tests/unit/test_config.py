@@ -114,6 +114,19 @@ def test_all_problems_reported_at_once(tmp_path):
     assert len(ei.value.problems) >= 2
 
 
+def test_env_scalars_parse_and_coerce_to_str(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["env"] = {"MEMPALACE_BACKEND": "turbovec", "N": 1, "FLAG": True}
+    entity = load_raw(tmp_path, raw)
+    assert entity.env == {"MEMPALACE_BACKEND": "turbovec", "N": "1", "FLAG": "True"}
+
+
+def test_env_nonscalar_value_rejected(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["env"] = {"BAD": {"nested": "map"}}
+    assert_problem(tmp_path, raw, "must be a scalar")
+
+
 def test_repo_mneme_yaml_is_valid():
     """The real authority shipped in the repo must validate."""
     import pathlib
@@ -129,3 +142,5 @@ def test_repo_mneme_yaml_is_valid():
     assert "claudelib" not in entity.services
     # every order name resolves; every managed service has start/stop (validated on load)
     assert entity.services["dgx"].managed is False
+    # env-wiring present (mempalace backend)
+    assert entity.env.get("MEMPALACE_BACKEND") == "turbovec"
