@@ -81,7 +81,7 @@ and confirm every component is at its pin with a stamped rendered config, and th
 > Cross-repo constant removal (gated, one repo per task — the actual re-architecture; breaking changes accepted per 2026-06-24 decision). Each reads from its OWN rendered config (Principle VII), not a mneme import.
 
 - [X] T016 [P] [US1] Replace hardcoded constants in ~/src/CampaignGenerator (extract_facts.py `DEFAULT_ENDPOINT`, prep.py, campaignlib/api/backends.py, config/config.yaml 5etools+rpg-lib) with reads from its rendered config (depends on T012, T014)
-- [ ] T017 [P] [US1] Replace hardcoded infra assumptions in ~/src/dgx / dgxlib (endpoint/venv) with values from the rendered models.yaml (depends on T012, T014)
+- [X] T017 [P] [US1] dgxlib is a SOVEREIGN library (driver for the physical DGX; github.com/kostadis/dgx-fun) — install-only. **Dissolved 2026-06-24:** mneme does not own/render dgxlib's config (removed its config_template/target + template). The DGX endpoint reaches dgxlib from callers (machines.dgx, done in T016); dgxlib's own DEFAULT_ENDPOINT is dgx-fun's concern (their #19).
 - [ ] T018 [P] [US1] Replace hardcoded constants in ~/src/mempalace (backend/device, turbovec endpoint) with reads from its rendered mempalace.yaml (depends on T012, T014)
 - [ ] T019 [P] [US1] Replace hardcoded constants in ~/src/mytools/rpg-lib (`localhost:8000`, lib dir) with reads from its rendered config (depends on T012, T014)
 - [ ] T020 [P] [US1] Replace hardcoded constants in ~/src/turbovecdb(-service) (port `8077`, venv) with reads from its rendered config (depends on T012, T014)

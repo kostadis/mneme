@@ -43,11 +43,9 @@ services:
     stop: "pkill -f rpg-library"
 
 components:                      # six in-scope components (FR-011) + claudelib (shared library dep)
-  dgxlib:                        # LIBRARY
-    source: { path: ~/src/dgx }
-    pin: 8771104a2586ef6983f903543005c77db88e9de7
-    config_template: dgxlib.models.yaml.j2
-    config_target: ~/src/dgx/models.yaml
+  dgxlib:                        # SOVEREIGN LIBRARY — driver for the physical DGX (github.com/kostadis/dgx-fun).
+    source: { path: ~/src/dgx }  # install-only: mneme does NOT own/render dgxlib's config. Its bundled
+    pin: 8771104a2586ef6983f903543005c77db88e9de7  # models.yaml is its own; the endpoint reaches it from callers (machines.dgx).
   claudelib:                     # LIBRARY (no service / lifecycle); rpg_lib depends on it
     source: { path: ~/src/mytools/claudelib }
     pin: f432a8b419455a6fe11de2d98ca25f77d95c47f4
