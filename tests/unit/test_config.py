@@ -133,8 +133,9 @@ def test_repo_mneme_yaml_is_valid():
 
     repo_root = pathlib.Path(__file__).resolve().parents[2]
     entity = cfg.load(repo_root / "mneme.yaml")
-    # what mneme installs: dgxlib, turbovecdb, mempalace, CampaignGenerator, gm_assistant
-    assert len(entity.components) == 5
+    # what mneme installs: dgxlib, turbovecdb, mempalace, CampaignGenerator
+    # (rpg-lib/claudelib external #0003; gm-assistant is workspace content, not a component)
+    assert len(entity.components) == 4
     assert entity.order.install[0] == "dgxlib"
     # rpg-lib + claudelib are external / rpg-lib's — not installed by mneme (issue #0003)
     assert "rpg_lib" not in entity.components

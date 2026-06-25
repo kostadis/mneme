@@ -55,10 +55,10 @@ components:                      # what mneme INSTALLS. rpg-lib + claudelib are 
     pin: 09622f6b185b9d9d2af9ece6ee7e38a4759d3d42
     config_template: campaigngenerator.wiring.yaml.j2
     config_target: ~/src/CampaignGenerator/config/wiring.yaml
-  gm_assistant:                  # reads CampaignGenerator's rendered config (T021); no own template
-    source: { path: ~/campaigns/gm-assistant }
-    pin: fb94fe0390f91fdb1acbf4429fe6a8ffa9990aca
+  # NOTE: gm-assistant is NOT a component — it's pure-markdown Claude Code skills that ship
+  # with the campaigns workspace (data_roots.campaigns: ~/campaigns/gm-assistant). Not
+  # pip-installable; self-contained per its own README. (path bug tracked in issue #0004)
 
 order:
-  install: [dgxlib, turbovecdb, mempalace, CampaignGenerator, gm_assistant]
+  install: [dgxlib, turbovecdb, mempalace, CampaignGenerator]
   startup: [dgx, rpg_lib]   # both EXTERNAL (managed:false) — mneme health-checks/orders against them, starts neither.
