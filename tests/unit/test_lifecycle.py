@@ -92,7 +92,9 @@ def test_up_dir_override_wins_over_config(tmp_path):
 def test_up_dir_override_missing_fails(tmp_path):
     e = make_entity(tmp_path)
     with pytest.raises(lifecycle.LifecycleError) as ei:
-        lifecycle.up(e, "X", campaign_dir=str(tmp_path / "nope"), prober=all_up, render=False, dry_run=True)
+        lifecycle.up(
+            e, "X", campaign_dir=str(tmp_path / "nope"), prober=all_up, render=False, dry_run=True
+        )
     assert "not found" in str(ei.value)
 
 
