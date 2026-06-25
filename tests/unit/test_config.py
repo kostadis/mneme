@@ -120,7 +120,12 @@ def test_repo_mneme_yaml_is_valid():
 
     repo_root = pathlib.Path(__file__).resolve().parents[2]
     entity = cfg.load(repo_root / "mneme.yaml")
-    assert len(entity.components) == 6
+    # six in-scope components + claudelib (shared library dep)
+    assert len(entity.components) == 7
     assert entity.order.install[0] == "dgxlib"
+    # claudelib is a pure library: installed, no rendered config, no service entry
+    assert "claudelib" in entity.components
+    assert entity.components["claudelib"].config_template is None
+    assert "claudelib" not in entity.services
     # every order name resolves; every managed service has start/stop (validated on load)
     assert entity.services["dgx"].managed is False

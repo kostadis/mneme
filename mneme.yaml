@@ -1,10 +1,11 @@
-# platform.yaml — THE single authority for config/wiring (Principle V).
+# mneme.yaml — THE single authority for config/wiring (Principle V).
 # Hand-edited. One per deployment. Derived component configs are rendered from this
-# file and are NON-authoritative (never hand-edit a rendered file; run `platform apply`).
+# file and are NON-authoritative (never hand-edit a rendered file; run `mneme apply`).
 #
-# Pins below are the PRE-REFACTOR baseline (each component's current HEAD as of
-# 2026-06-24). They bump to the post-refactor commits once T016–T021 externalize the
-# hardcoded constants in each component repo.
+# Pins are the pre-refactor baseline (each unit's HEAD as of 2026-06-24), EXCEPT
+# claudelib + rpg_lib, which are at the T036 commit f432a8b on the mytools
+# 001-reproducible-install refactor branch (where they became pip-installable).
+# Baseline pins bump to their post-refactor commits as each repo's edits land.
 
 venv: ~/.venvs/main
 
@@ -29,20 +30,23 @@ services:
     health: { type: http, path: /health }
     start: "turbovecdb-service --port 8077"
     stop: "pkill -f turbovecdb-service"
-  rpg_lib:
+  rpg_lib:                       # rpg-lib's library_server (console script `rpg-library`)
     url: http://localhost:8000
     port: 8000
     managed: true
     health: { type: http, path: / }
-    start: "python -m rpg_lib.server"
-    stop: "pkill -f rpg_lib.server"
+    start: "rpg-library --port 8000"
+    stop: "pkill -f rpg-library"
 
-components:                      # the six in-scope units (FR-011)
-  dgxlib:
+components:                      # six in-scope components (FR-011) + claudelib (shared library dep)
+  dgxlib:                        # LIBRARY
     source: { path: ~/src/dgx }
     pin: 8771104a2586ef6983f903543005c77db88e9de7
     config_template: dgxlib.models.yaml.j2
     config_target: ~/src/dgx/models.yaml
+  claudelib:                     # LIBRARY (no service / lifecycle); rpg_lib depends on it
+    source: { path: ~/src/mytools/claudelib }
+    pin: f432a8b419455a6fe11de2d98ca25f77d95c47f4
   turbovecdb:
     source: { path: ~/src/turbovecdb }
     pin: fea4d804b5bbc744c17afcf3e7a75f6e7c9edb49
@@ -53,9 +57,9 @@ components:                      # the six in-scope units (FR-011)
     pin: 46fcfc2adf50e31f68889edaf8965a7cb2adcfff
     config_template: mempalace.yaml.j2
     config_target: ~/.config/mempalace/mempalace.yaml
-  rpg_lib:
+  rpg_lib:                       # LIBRARY (library_api) + SERVICE (library_server)
     source: { path: ~/src/mytools/rpg-lib }
-    pin: 5693acbc81c54dba568aa6e5cdf2f5abd6722df3
+    pin: f432a8b419455a6fe11de2d98ca25f77d95c47f4
     config_template: rpg_lib.config.yaml.j2
     config_target: ~/src/mytools/rpg-lib/rpg_lib.config.yaml
   CampaignGenerator:
@@ -68,5 +72,5 @@ components:                      # the six in-scope units (FR-011)
     pin: fb94fe0390f91fdb1acbf4429fe6a8ffa9990aca
 
 order:
-  install: [dgxlib, turbovecdb, mempalace, rpg_lib, CampaignGenerator, gm_assistant]
+  install: [dgxlib, claudelib, turbovecdb, mempalace, rpg_lib, CampaignGenerator, gm_assistant]
   startup: [dgx, turbovecdb, rpg_lib]   # dgx (external) gated first; managed ones started in order
