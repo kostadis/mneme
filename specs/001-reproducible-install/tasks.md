@@ -102,13 +102,13 @@ reachability per service; stop a service or hand-install a wrong version and con
 
 ### Tests for User Story 2
 
-- [ ] T023 [P] [US2] Unit tests for status (observed-version read; version-drift FAIL; render-drift via stamped-hash mismatch; unreachable-service FAIL; all-PASS→exit 0 / any-FAIL→exit 1) in tests/unit/test_status.py
+- [X] T023 [P] [US2] Unit tests for status (observed-version read; version-drift FAIL; render-drift via stamped-hash mismatch; unreachable-service FAIL; all-PASS→exit 0 / any-FAIL→exit 1) in tests/unit/test_status.py
 
 ### Implementation for User Story 2
 
-- [ ] T024 [P] [US2] Implement the health/reachability probe (tcp/http per `service.health`; shared by status and up-gating) in mneme/probe.py (depends on T006)
-- [ ] T025 [US2] Implement status (observed version via importlib.metadata / `git rev-parse` vs pin; render-drift via stamped hash; reachability via probe; PASS/FAIL rows; exit 1 on any FAIL) in mneme/status.py (depends on T011, T024)
-- [ ] T026 [US2] Wire `mneme status` in mneme/cli.py (table + `--json` rows) (depends on T025)
+- [X] T024 [P] [US2] Implement the health/reachability probe (tcp/http per `service.health`; shared by status and up-gating) in mneme/probe.py (depends on T006)
+- [X] T025 [US2] Implement status (observed version via importlib.metadata / `git rev-parse` vs pin; render-drift via stamped hash; reachability via probe; PASS/FAIL rows; exit 1 on any FAIL) in mneme/status.py (depends on T011, T024)
+- [X] T026 [US2] Wire `mneme status` in mneme/cli.py (table + `--json` rows) (depends on T025)
 
 **Checkpoint**: Status is honest (Principle I); no False Green Dashboard.
 

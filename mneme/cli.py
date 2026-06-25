@@ -13,12 +13,14 @@ invalid config fails the same way everywhere.
 from __future__ import annotations
 
 import json as _json
+from dataclasses import asdict
 
 import typer
 
 from . import config as cfg
 from . import install as inst
 from . import render as rnd
+from . import status as sts
 from .models import ConfigEntity
 
 EXIT_OK = 0
@@ -110,9 +112,22 @@ def down(config: str = _config_opt, json: bool = _json_opt) -> None:
 
 @app.command()
 def status(config: str = _config_opt, json: bool = _json_opt) -> None:
-    """Report observed installed versions, reachability, and render drift."""
-    _load_or_exit(config)
-    _not_yet("status", "T025/T026")
+    """Report observed component drift, reachability, and render drift (Principle I)."""
+    entity = _load_or_exit(config)
+    rows, code = sts.status_report(entity)
+    if json:
+        typer.echo(_json.dumps([asdict(r) for r in rows]))
+    else:
+        for r in rows:
+            mark = "PASS" if r.ok else "FAIL"
+            line = f"{mark}  {r.kind:9} {r.name:18} {r.observed:24} (pin {r.expected})"
+            if r.note:
+                line += f"  · {r.note}"
+            typer.echo(line)
+        passed = sum(1 for r in rows if r.ok)
+        verdict = "OK" if code == EXIT_OK else "FAIL"
+        typer.echo(f"\n{verdict}: {passed}/{len(rows)} checks passed")
+    raise typer.Exit(code)
 
 
 def main() -> None:  # pragma: no cover - thin entry shim
