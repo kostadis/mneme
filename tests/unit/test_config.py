@@ -1,11 +1,11 @@
-"""T008 — validation of the single authority (mneme.yaml)."""
+"""T008 — validation of the single authority (hypostasis.yaml)."""
 
 from __future__ import annotations
 
 import pytest
 import yaml
 
-from mneme import config as cfg
+from hypostasis import config as cfg
 
 
 def valid_raw(tmp_path) -> dict:
@@ -32,7 +32,7 @@ def valid_raw(tmp_path) -> dict:
 
 
 def write(tmp_path, raw) -> str:
-    path = tmp_path / "mneme.yaml"
+    path = tmp_path / "hypostasis.yaml"
     path.write_text(yaml.safe_dump(raw))
     return str(path)
 
@@ -89,7 +89,7 @@ def test_editable_pin_rejected(tmp_path):
 def test_second_authority_rejected(tmp_path):
     # A lockfile pointer would be a second writable authority (Principle V).
     raw = valid_raw(tmp_path)
-    raw["lockfile"] = str(tmp_path / "mneme.lock")
+    raw["lockfile"] = str(tmp_path / "hypostasis.lock")
     assert_problem(tmp_path, raw, "forbidden field 'lockfile'")
 
 
@@ -127,17 +127,17 @@ def test_env_nonscalar_value_rejected(tmp_path):
     assert_problem(tmp_path, raw, "must be a scalar")
 
 
-def test_repo_mneme_yaml_is_valid():
+def test_repo_hypostasis_yaml_is_valid():
     """The real authority shipped in the repo must validate."""
     import pathlib
 
     repo_root = pathlib.Path(__file__).resolve().parents[2]
-    entity = cfg.load(repo_root / "mneme.yaml")
-    # what mneme installs: dgxlib, turbovecdb, mempalace, CampaignGenerator
+    entity = cfg.load(repo_root / "hypostasis.yaml")
+    # what hypostasis installs: dgxlib, turbovecdb, mempalace, CampaignGenerator
     # (rpg-lib/claudelib external #0003; gm-assistant is workspace content, not a component)
     assert len(entity.components) == 4
     assert entity.order.install[0] == "dgxlib"
-    # rpg-lib + claudelib are external / rpg-lib's — not installed by mneme (issue #0003)
+    # rpg-lib + claudelib are external / rpg-lib's — not installed by hypostasis (issue #0003)
     assert "rpg_lib" not in entity.components
     assert "claudelib" not in entity.components
     # rpg-lib is interacted-with, not owned: a health-checked external service like dgx

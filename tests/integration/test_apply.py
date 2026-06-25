@@ -6,9 +6,9 @@ from pathlib import Path
 
 import yaml
 
-from mneme import config as cfg
-from mneme import render as rnd
-from mneme import status as sts
+from hypostasis import config as cfg
+from hypostasis import render as rnd
+from hypostasis import status as sts
 
 
 def _write_config(path: Path, endpoint: str, target: Path) -> None:
@@ -35,7 +35,7 @@ def test_apply_rerenders_with_no_stale_copy(tmp_path):
     tdir.mkdir()
     (tdir / "wiring.yaml.j2").write_text("endpoint: {{ machines.dgx.endpoint }}\n")
     target = tmp_path / "out" / "wiring.yaml"
-    cfg_path = tmp_path / "mneme.yaml"
+    cfg_path = tmp_path / "hypostasis.yaml"
 
     # v1 — render the old value
     _write_config(cfg_path, "http://OLD:8001/v1", target)
@@ -66,7 +66,7 @@ def test_apply_is_idempotent(tmp_path):
     tdir.mkdir()
     (tdir / "wiring.yaml.j2").write_text("endpoint: {{ machines.dgx.endpoint }}\n")
     target = tmp_path / "out" / "wiring.yaml"
-    cfg_path = tmp_path / "mneme.yaml"
+    cfg_path = tmp_path / "hypostasis.yaml"
     _write_config(cfg_path, "http://x:8001/v1", target)
     entity = cfg.load(cfg_path)
 

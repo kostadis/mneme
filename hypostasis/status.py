@@ -1,6 +1,6 @@
 """Honest status — observed vs declared (Principle I: Silicon Truth).
 
-`status` never echoes `mneme.yaml` as if it were reality. It reads the silicon:
+`status` never echoes `hypostasis.yaml` as if it were reality. It reads the silicon:
 - component drift: the source repo's HEAD vs the declared `pin` (catches the
   editable-install drift this whole project exists to kill);
 - service reachability: a live probe (never "should be up");
@@ -86,12 +86,12 @@ def render_row(entity: ConfigEntity, comp: Component) -> Row:
         return Row(comp.name, "render", "—", "—", True, "no render target")
     if not target.exists():
         return Row(comp.name, "render", "(not rendered)", "stamped", False,
-                   "config_target missing — run `mneme apply`")
+                   "config_target missing — run `hypostasis apply`")
     stamped = _render.read_stamp(target)
     current = _render.subtree_sha256(_render.component_context(entity, comp))
     ok = stamped == current
     return Row(comp.name, "render", (stamped or "?")[:12], current[:12], ok,
-               "" if ok else "stale render — run `mneme apply`")
+               "" if ok else "stale render — run `hypostasis apply`")
 
 
 def service_row(name: str, service: Service, prober: Prober = _probe.reachable) -> Row:

@@ -70,7 +70,7 @@ def _verify_path_pin(comp: Component, runner: Runner) -> None:
         raise InstallError(
             comp.name,
             f"working tree at {observed[:12]} != pinned {comp.pin} — "
-            "checkout the pin or update mneme.yaml",
+            "checkout the pin or update hypostasis.yaml",
         )
 
 

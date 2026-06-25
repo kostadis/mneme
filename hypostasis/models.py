@@ -1,7 +1,7 @@
 """Config-entity dataclasses (see specs/.../data-model.md).
 
 Pure data, no I/O. The ConfigEntity is the in-memory form of the single authority
-(`mneme.yaml`). DerivedConfig is a *non-authoritative* rendered artifact.
+(`hypostasis.yaml`). DerivedConfig is a *non-authoritative* rendered artifact.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class Order:
 
 @dataclass(frozen=True)
 class ConfigEntity:
-    """The single authoritative config/wiring entity (`mneme.yaml`)."""
+    """The single authoritative config/wiring entity (`hypostasis.yaml`)."""
 
     venv: Path
     machines: dict[str, Machine]

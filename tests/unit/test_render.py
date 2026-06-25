@@ -10,8 +10,8 @@ from pathlib import Path
 
 import yaml
 
-from mneme import config as cfg
-from mneme import render as rnd
+from hypostasis import config as cfg
+from hypostasis import render as rnd
 
 _FIXTURE_TEMPLATE = (
     "{# test fixture #}\n"
@@ -52,7 +52,7 @@ def make_config(tmp_path, endpoint="http://192.0.2.10:8001/v1"):
         },
         "order": {"install": ["widget"], "startup": ["dgx", "turbovecdb"]},
     }
-    path = tmp_path / "mneme.yaml"
+    path = tmp_path / "hypostasis.yaml"
     path.write_text(yaml.safe_dump(raw))
     return cfg.load(path), target, tdir
 
@@ -106,10 +106,10 @@ def test_repo_templates_all_render():
     import pathlib
 
     repo_root = pathlib.Path(__file__).resolve().parents[2]
-    entity = cfg.load(repo_root / "mneme.yaml")
+    entity = cfg.load(repo_root / "hypostasis.yaml")
     rendered = rnd.render_all(entity)
     # CampaignGenerator is the only component that needs a rendered config fragment.
-    # Everything else is install-only (sovereign/mneme-private libs: dgxlib, claudelib,
+    # Everything else is install-only (sovereign/hypostasis-private libs: dgxlib, claudelib,
     # turbovecdb) or CLI/env-driven (mempalace, rpg_lib via top-level `env:`);
     # gm_assistant has no template.
     assert {d.component for d in rendered} == {"CampaignGenerator"}

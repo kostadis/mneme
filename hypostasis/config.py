@@ -1,8 +1,8 @@
-"""Load and validate the single authority (`mneme.yaml`).
+"""Load and validate the single authority (`hypostasis.yaml`).
 
 Loading is tolerant (it parses what it can so that validation can report *all*
 problems at once); validation enforces the invariants from the schema contract
-(contracts/mneme-yaml.schema.md). Any violation raises ConfigError, which the
+(contracts/hypostasis-yaml.schema.md). Any violation raises ConfigError, which the
 CLI maps to exit code 2 — before any side effect.
 """
 
@@ -40,7 +40,7 @@ class ConfigError(Exception):
 
     def __init__(self, problems: list[str]):
         self.problems = problems
-        super().__init__("invalid mneme.yaml:\n  - " + "\n  - ".join(problems))
+        super().__init__("invalid hypostasis.yaml:\n  - " + "\n  - ".join(problems))
 
 
 def _expand(value: str) -> Path:
@@ -228,7 +228,7 @@ def validate(entity: ConfigEntity, raw: dict) -> list[str]:
 
 
 def load(path: str | Path) -> ConfigEntity:
-    """Parse and validate `mneme.yaml`. Raises ConfigError on any violation."""
+    """Parse and validate `hypostasis.yaml`. Raises ConfigError on any violation."""
     path = Path(path)
     text = path.read_text()  # FileNotFoundError handled by the CLI
     try:
@@ -236,7 +236,7 @@ def load(path: str | Path) -> ConfigEntity:
     except yaml.YAMLError as e:
         raise ConfigError([f"YAML parse error: {e}"]) from e
     if not isinstance(raw, dict):
-        raise ConfigError(["top level of mneme.yaml must be a mapping"])
+        raise ConfigError(["top level of hypostasis.yaml must be a mapping"])
 
     problems: list[str] = []
     entity = _parse(raw, path, problems)

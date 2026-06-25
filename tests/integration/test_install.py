@@ -12,8 +12,8 @@ import subprocess
 
 import pytest
 
-from mneme import install as inst
-from mneme.models import Component, ConfigEntity, Machine, Order, Source
+from hypostasis import install as inst
+from hypostasis.models import Component, ConfigEntity, Machine, Order, Source
 
 
 class FakeRunner:

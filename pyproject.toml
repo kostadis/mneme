@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mneme"
+name = "hypostasis"
 version = "0.1.0"
-description = "Single-authority installer/orchestrator for the campaign/DGX system"
+description = "hypostasis (configure the environment) + mneme (per-campaign runtime) for the campaign/DGX system"
 requires-python = ">=3.11"
 dependencies = [
   "typer>=0.12",
@@ -19,13 +19,14 @@ dependencies = [
 dev = ["pytest>=8", "ruff>=0.5"]
 
 [project.scripts]
-mneme = "mneme.cli:app"
+hypostasis = "hypostasis.cli:app"   # configure the environment (run once)
+mneme = "mneme.cli:app"             # spin up per campaign (run each time)
 
 [tool.setuptools]
-packages = ["mneme"]
+packages = ["hypostasis", "mneme"]
 
 [tool.setuptools.package-data]
-mneme = ["templates/*.j2"]
+hypostasis = ["templates/*.j2"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

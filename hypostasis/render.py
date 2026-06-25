@@ -2,8 +2,8 @@
 
 Each rendered file is stamped with the SHA-256 of the exact authority *subtree*
 it derived from, so `status` can detect drift (a hand-edited copy, or a
-`mneme.yaml` changed without `apply`). Rendering is the only write path into a
-component's native config — components are never asked to import `mneme`
+`hypostasis.yaml` changed without `apply`). Rendering is the only write path into a
+component's native config — components are never asked to import `hypostasis`
 (low coupling, Principle VII).
 """
 
@@ -18,7 +18,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from .models import Component, ConfigEntity, DerivedConfig
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
-STAMP_PREFIX = "# mneme-rendered; source-sha256:"
+STAMP_PREFIX = "# hypostasis-rendered; source-sha256:"
 STAMP_SUFFIX = "do-not-edit"
 
 

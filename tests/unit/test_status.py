@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import subprocess
 
-from mneme import render, status
-from mneme.models import (
+from hypostasis import render, status
+from hypostasis.models import (
     Component,
     ConfigEntity,
     Health,
@@ -97,13 +97,13 @@ def make_render_entity(tmp_path, endpoint="http://dgx:8001/v1"):
 def test_render_in_sync_passes(tmp_path):
     e, comp, target = make_render_entity(tmp_path)
     digest = render.subtree_sha256(render.component_context(e, comp))
-    target.write_text(f"# mneme-rendered; source-sha256: {digest}; do-not-edit\nkey: val\n")
+    target.write_text(f"# hypostasis-rendered; source-sha256: {digest}; do-not-edit\nkey: val\n")
     assert status.render_row(e, comp).ok
 
 
 def test_render_stale_fails(tmp_path):
     e, comp, target = make_render_entity(tmp_path)
-    target.write_text("# mneme-rendered; source-sha256: deadbeef; do-not-edit\nkey: val\n")
+    target.write_text("# hypostasis-rendered; source-sha256: deadbeef; do-not-edit\nkey: val\n")
     row = status.render_row(e, comp)
     assert not row.ok and "stale" in row.note
 
