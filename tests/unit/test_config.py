@@ -127,6 +127,18 @@ def test_env_nonscalar_value_rejected(tmp_path):
     assert_problem(tmp_path, raw, "must be a scalar")
 
 
+def test_default_config_path_uses_xdg(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    assert cfg.default_config_path() == tmp_path / "hypostasis" / "hypostasis.yaml"
+
+
+def test_default_config_path_falls_back_to_dot_config(monkeypatch):
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    p = cfg.default_config_path()
+    assert p.parent.name == "hypostasis" and p.name == "hypostasis.yaml"
+    assert ".config" in str(p)
+
+
 def test_repo_hypostasis_yaml_is_valid():
     """The real authority shipped in the repo must validate."""
     import pathlib

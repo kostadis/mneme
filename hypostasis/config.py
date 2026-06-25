@@ -47,6 +47,17 @@ def _expand(value: str) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(str(value))))
 
 
+def default_config_path() -> Path:
+    """XDG location of the environment authority.
+
+    ``$XDG_CONFIG_HOME/hypostasis/hypostasis.yaml`` (default
+    ``~/.config/hypostasis/hypostasis.yaml``). The config lives in the user's config
+    dir, never in the repo — the repo ships only ``hypostasis.example.yaml``.
+    """
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / "hypostasis" / "hypostasis.yaml"
+
+
 def _is_range_or_editable(pin: str) -> bool:
     """A pin must be an *exact* version or git ref — no ranges, no editable installs."""
     pin = pin.strip()

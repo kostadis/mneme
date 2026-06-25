@@ -20,11 +20,13 @@ The doctrine behind it lives in `.specify/memory/constitution.md`; the design in
 
 ```bash
 pip install .                          # provides two commands: `hypostasis` and `mneme`
-cp hypostasis.example.yaml hypostasis.yaml   # then edit it for your environment
+mkdir -p ~/.config/hypostasis
+cp hypostasis.example.yaml ~/.config/hypostasis/hypostasis.yaml   # then edit it
 ```
 
-`hypostasis.yaml` is your real environment config (endpoints, paths) and is **gitignored** —
-keep internal values local. The committed `hypostasis.example.yaml` uses placeholder values.
+Your real environment config lives at **`~/.config/hypostasis/hypostasis.yaml`** (XDG —
+override with `$XDG_CONFIG_HOME` or `--config`), **never in the repo**. The committed
+`hypostasis.example.yaml` is the placeholder template.
 
 ## `hypostasis` — configure the environment (run once)
 

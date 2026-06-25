@@ -25,5 +25,6 @@ Thumbs.db
 # mneme runtime bookkeeping (disposable, non-authoritative — Principle IV)
 .mneme/run/
 
-# your real environment config (keep internal values local; copy from hypostasis.example.yaml)
+# env config lives in ~/.config/hypostasis/hypostasis.yaml (XDG), never in the repo;
+# ignore any repo-local copy too as a safety net.
 hypostasis.yaml

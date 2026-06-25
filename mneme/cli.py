@@ -23,7 +23,9 @@ app = typer.Typer(
     help="Spin up the campaign runtime (CampaignGenerator) for a specific campaign.",
 )
 
-_config_opt = typer.Option("hypostasis.yaml", "--config", "-c", help="Path to hypostasis.yaml")
+_config_opt = typer.Option(
+    str(cfg.default_config_path()), "--config", "-c", help="Path to hypostasis.yaml"
+)
 
 
 def _load_or_exit(config_path: str) -> ConfigEntity:
@@ -31,6 +33,10 @@ def _load_or_exit(config_path: str) -> ConfigEntity:
         return cfg.load(config_path)
     except FileNotFoundError:
         typer.echo(f"error: env config not found: {config_path}", err=True)
+        typer.echo(
+            "  copy hypostasis.example.yaml → "
+            f"{cfg.default_config_path()} and edit it.", err=True,
+        )
         raise typer.Exit(EXIT_INVALID_CONFIG) from None
     except cfg.ConfigError as e:
         typer.echo("error: invalid hypostasis.yaml:", err=True)

@@ -26,7 +26,7 @@ EXIT_OK = 0
 EXIT_RUNTIME = 1
 EXIT_INVALID_CONFIG = 2
 
-DEFAULT_CONFIG = "hypostasis.yaml"
+DEFAULT_CONFIG = str(cfg.default_config_path())  # ~/.config/hypostasis/hypostasis.yaml
 
 app = typer.Typer(
     add_completion=False,
@@ -42,7 +42,11 @@ def _load_or_exit(config_path: str) -> ConfigEntity:
     try:
         return cfg.load(config_path)
     except FileNotFoundError:
-        typer.echo(f"error: config not found: {config_path}", err=True)
+        typer.echo(f"error: env config not found: {config_path}", err=True)
+        typer.echo(
+            f"  create it: copy hypostasis.example.yaml → {cfg.default_config_path()} "
+            "and edit it (or pass --config).", err=True,
+        )
         raise typer.Exit(EXIT_INVALID_CONFIG) from None
     except cfg.ConfigError as e:
         typer.echo("error: invalid hypostasis.yaml:", err=True)
