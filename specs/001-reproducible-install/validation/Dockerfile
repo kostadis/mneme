@@ -1,35 +1,28 @@
 # SC-005 reproducibility acid test — PROOF ENVIRONMENT, not a deployment target.
-# Skeleton: encodes intent; completed in /speckit.implement once the `hypostasis` CLI exists.
 #
-# The point: a clean image has NO pre-existing venv, NO ~/src checkouts, NO host state.
-# If `hypostasis install` brings the system up from hypostasis.yaml alone in here, the
-# Infrastructure-Proxy constants (II) and Fragmented-State config (III) are proven
-# externalized — not a configured-box illusion.
+# A clean image with NO pre-existing venv, NO ~/src checkouts, NO host state. If
+# `pip install .` yields working `hypostasis` + `mneme` commands and the
+# config→render→apply→status loop runs from the authority alone, the tool is
+# reproducibly installable and the Principle-V coherence holds — not a configured-box
+# illusion. (It does NOT install the heavy components or reach the real substrate —
+# that needs the DGX + the repos; D2. This proves the TOOL.)
 
 FROM python:3.11-slim
 
-# git: fetch component sources at their pinned refs. No other host state is copied in.
-RUN apt-get update && apt-get install -y --no-install-recommends git curl \
+RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/mneme
+WORKDIR /opt/hypostasis
 
-# Bring in ONLY the manager (the mneme CLI) + the single authority. Everything else
-# the system needs is resolved by `hypostasis install` from hypostasis.yaml — that is the test.
-#   COPY mneme/ ./mneme/
-#   COPY pyproject.toml ./
-#   COPY hypostasis.yaml ./                # the validation hypostasis.yaml (pins = git refs)
-# RUN pip install --no-cache-dir .       # install the manager itself
+# Bring in ONLY the tool (both commands) + its packaging. No host venv/checkouts/state.
+COPY pyproject.toml ./
+COPY hypostasis/ ./hypostasis/
+COPY mneme/ ./mneme/
+COPY specs/001-reproducible-install/validation/run-validation.sh ./validation/run-validation.sh
 
-# Canonical ports are safe here: separate network namespace, no host conflict.
-#   8000 rpg-lib, 8077 turbovecdb-service
+# Proves the package installs cleanly → `hypostasis` + `mneme` land on PATH (with the
+# shipped templates as package-data).
+RUN pip install --no-cache-dir .
 
-# DGX endpoint mode is injected at run time (see compose): real | stub.
-ENV DGX_MODE=stub
-
-# Entrypoint runs the full honesty loop and exits non-zero on any FAIL (Principle I):
-#   mneme install \
-#     && mneme up \
-#     && mneme status \
-#     && sed -i 's/<old-ip>/<new-ip>/' hypostasis.yaml && mneme apply && mneme status
-# ENTRYPOINT ["/opt/mneme/validation/run-validation.sh"]
+# The acid test runs the loop from the authority alone and exits non-zero on any FAIL.
+ENTRYPOINT ["bash", "/opt/hypostasis/validation/run-validation.sh"]

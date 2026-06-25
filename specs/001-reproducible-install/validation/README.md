@@ -1,28 +1,34 @@
 # Validation harness — SC-005 reproducibility acid test
 
-**This is a proof environment, NOT a deployment target for 001.** It exists to *prove* the
-SC-005 claim — "one `hypostasis.yaml` reproduces the system on a fresh environment with no manual
-edits" — in true isolation. A clean container has no pre-existing `~/.venvs/main`, no `~/src`
-checkouts, and none of the host's operator discipline, so a passing run here can't be a
-configured-box illusion (see [research D10](../research.md#d10--containerized-validation-harness-sc-005-acid-test)).
+**Proof environment, NOT a deployment target.** It proves the tool is reproducibly installable and
+its core loop works *from the authority alone*, in true isolation — a clean container has no
+pre-existing `~/.venvs/main`, no `~/src` checkouts, and none of the host's operator discipline, so a
+passing run can't be a configured-box illusion (see
+[research D10](../research.md#d10--containerized-validation-harness-sc-005-acid-test)).
 
-> Containerizing the six components *as the deployment model* is a different, larger feature
-> (a future `002`). Do not let this harness grow into that by momentum.
+## Run
 
-## What it does
-`docker compose run --rm mneme-validate` runs, inside a clean container, the full loop:
-`mneme install → mneme up → mneme status → change-value → mneme apply → status`
-against a `hypostasis.yaml` whose component sources are pinned git refs (fetched at build), so the
-container is reproducible from the one authority alone.
+```bash
+bash run-validation.sh                                              # on the host
+docker compose run --rm validate                                   # clean container
+```
 
-## DGX endpoint — pick one (deliberate sub-decision, test both ways)
-Per research D2 the DGX is an *external* dependency `mneme` health-checks, not starts.
-- `DGX_MODE=real` — container reaches the real `192.0.2.10:8001`; exercises the real
-  external-dependency path. Point `hypostasis.yaml` at a different IP to also prove SC-004.
-- `DGX_MODE=stub` — a stub endpoint stands in; assert `hypostasis status` reports the *real* DGX
-  **unreachable honestly** (exit 1, FAIL) — no False Green Dashboard (Principle I).
+## What it proves (reframed for the hypostasis/mneme split)
 
-## Status
-Skeletons below encode intent. The runnable Dockerfile/compose are completed in
-`/speckit.implement` (they depend on the `hypostasis` CLI, which 001 builds). Marked here so the
-plan's reproducibility claim has a concrete, named home rather than living as a promise.
+`run-validation.sh`, from a self-contained sample authority (no real components/substrate):
+
+1. both commands resolve — `hypostasis` + `mneme` (the package installs cleanly);
+2. `hypostasis status` runs and reports honestly;
+3. `hypostasis apply` renders the wiring with a `# hypostasis-rendered` source-hash stamp;
+4. change one value + apply → **no stale copy** (Principle V / SC-004);
+5. `mneme up <campaign> --dry-run` previews the per-campaign launch incl. env-delivery.
+
+Exit non-zero on any FAIL (Principle I — a red dashboard exits red).
+
+## Scope (honest)
+
+It does **not** install the heavy components or reach the real DGX/rpg-lib substrate — that needs
+the DGX + the component repos (D2). This proves the **tool**, not a live system. Bringing the real
+substrate up is hypostasis's still-open job ([issues/0005](../../../issues/0005-hypostasis-substrate-layer.md)).
+Containerizing the components *as the deployment model* is a deliberate future `002`, not this — do
+not let this harness grow into that by momentum.

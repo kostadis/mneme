@@ -161,10 +161,10 @@ config regenerated and no `config_target` or running process retains the old val
 
 **Purpose**: Prove reproducibility in isolation; run the quickstart; document.
 
-- [ ] T032 Complete the SC-005 validation harness — make validation/Dockerfile + docker-compose.yml runnable and add validation/run-validation.sh (the install→up→status→change→apply loop, exit non-zero on any FAIL) (depends on T031)
-- [ ] T033 [P] Run quickstart.md Scenarios 1–4 on host; fix any gaps (depends on T031)
-- [ ] T034 Run quickstart.md Scenario 5 — clean-container acid test (SC-005) via the harness, DGX_MODE=real AND DGX_MODE=stub (assert honest-unreachable) (depends on T032)
-- [ ] T035 [P] Docs: add a `mneme` README (hypostasis.yaml + CLI usage) and update PLAN.md status (depends on T031)
+- [X] T032 Complete the SC-005 validation harness — make validation/Dockerfile + docker-compose.yml runnable and add validation/run-validation.sh (the install→up→status→change→apply loop, exit non-zero on any FAIL) (depends on T031)
+- [X] T033 [P] Run quickstart.md Scenarios 1–4 on host; fix any gaps (depends on T031)
+- [X] T034 Run quickstart.md Scenario 5 — clean-container acid test (SC-005) via the harness, DGX_MODE=real AND DGX_MODE=stub (assert honest-unreachable) (depends on T032)
+- [X] T035 [P] Docs: add a `mneme` README (hypostasis.yaml + CLI usage) and update PLAN.md status (depends on T031)
 
 ---
 

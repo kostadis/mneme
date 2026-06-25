@@ -12,7 +12,7 @@ installed in the target venv. See [contracts/cli.md](./contracts/cli.md) for com
 
 ## Scenario 1 — Reproducible install from one source of truth (SC-001, SC-002)
 ```
-mneme install
+hypostasis install
 ```
 **Expect**: exit 0; venv created; all six components installed at their pins; every
 `config_target` written with a `source-sha256` stamp.
@@ -37,13 +37,13 @@ mneme down
 
 ## Scenario 3 — Honest status, including drift (SC-003)
 ```
-mneme up && mneme status
+mneme up && hypostasis status
 ```
 **Expect**: exit 0; every component row shows observed version == pin (PASS); every service
 reachable (PASS).
 **Now force a lie** — stop a service out of band, then:
 ```
-mneme status
+hypostasis status
 ```
 **Expect**: exit 1; the stopped service row is `FAIL` (unreachable), not assumed up.
 **Version drift** — install a different version of one component by hand, then `hypostasis status`
@@ -52,13 +52,13 @@ mneme status
 ## Scenario 4 — Change one value, everything follows, no stale copies (SC-004)
 ```
 # edit hypostasis.yaml: change machines.dgx.endpoint to a new IP — ONE edit, one file
-mneme apply
+hypostasis apply
 ```
 **Expect**: exit 0; every `DerivedConfig` referencing the DGX endpoint regenerated with a
 fresh stamp; affected managed services restarted.
 **Verify no stale copy**:
 ```
-mneme status            # no render drift; all PASS
+hypostasis status            # no render drift; all PASS
 grep -rn "<old-ip>" <all config_targets>   # zero matches
 ```
 **Expect**: nothing still references the old endpoint (SC-004 = 100% propagation, 0 stale).
@@ -73,7 +73,7 @@ the install target** — containerizing the system as a deployment model would b
 ```
 cd specs/001-reproducible-install/validation
 docker compose build
-docker compose run --rm mneme-validate     # runs install -> up -> status -> apply loop
+docker compose run --rm validate     # runs install -> up -> status -> apply loop
 ```
 **Expect**: inside the clean container, from `hypostasis.yaml` alone, the system installs at pins,
 comes up on canonical ports (`8000`/`8077`, no host conflict — separate netns), and `status`
