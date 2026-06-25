@@ -9,10 +9,10 @@ overrides. The rest are conventional.
 
 ## D1 — FR-009 coherence mechanism (no stale copies) ✅ RATIFIED 2026-06-24
 
-**Decision**: Guarantee coherence by **`mneme apply` = re-render all derived configs +
-restart the affected managed services**. Editing `mneme.yaml` and running `apply` (or
+**Decision**: Guarantee coherence by **`hypostasis apply` = re-render all derived configs +
+restart the affected managed services**. Editing `hypostasis.yaml` and running `apply` (or
 `install`) is the only supported write path. Each rendered file carries a header stamping
-the **SHA-256 of the `mneme.yaml` subtree it derived from**; `mneme status` flags any
+the **SHA-256 of the `hypostasis.yaml` subtree it derived from**; `hypostasis status` flags any
 rendered file whose stamped hash ≠ the current source as drift (FR-010). Components are
 **not** asked to self-validate freshness.
 
@@ -22,7 +22,7 @@ new cache-invalidation subsystem. Restarting a managed service after re-render e
 residual "stale in-memory copy" case the constitution flagged. Keeping validation out of the
 components honors low coupling (Principle VII) — they stay ignorant of `mneme`. The
 hash-stamp is the cheap detector for *out-of-band* edits (someone hand-edits a rendered file or
-`mneme.yaml` without `apply`), caught by `status` as a FAIL rather than silently used
+`hypostasis.yaml` without `apply`), caught by `status` as a FAIL rather than silently used
 (Principle I). This is the V-over-VII precedence applied: we force a behavior change in *how
 services start* (mneme-owned restart), not a new dependency in each component.
 
@@ -39,7 +39,7 @@ the manager-side guarantee is insufficient.
   mismatch* — strongest in-component guarantee, but pushes mneme-awareness into every repo
   (couples them to the mneme schema; tension with VII). Rejected as the primary mechanism;
   retained conceptually as the `status` drift check, done by the manager instead.
-- *Components read `mneme.yaml` directly (no render)* — eliminates the cache entirely but
+- *Components read `hypostasis.yaml` directly (no render)* — eliminates the cache entirely but
   couples all six components to one schema and makes `mneme` non-transient (violates IV).
   Rejected.
 - *No restart, rely on file re-render only* — leaves long-running processes on stale in-memory
@@ -81,8 +81,8 @@ more verbose than typer).
 
 ## D4 — Config rendering engine
 
-**Decision**: `jinja2` templates, one per component, living in `mneme/templates/`, rendered
-from the validated `mneme.yaml` model into each component's **native** config format
+**Decision**: `jinja2` templates, one per component, living in `hypostasis/templates/`, rendered
+from the validated `hypostasis.yaml` model into each component's **native** config format
 (`config.yaml`, `.env`, `models.yaml`, etc.).
 
 **Rationale**: Components keep their existing native config readers (Principle VII, low
@@ -96,14 +96,14 @@ YAML); a shared settings library imported by components (rejected — coupling, 
 
 ## D5 — Version pinning & install execution
 
-**Decision**: Pins live in `mneme.yaml` per component as either a released version
+**Decision**: Pins live in `hypostasis.yaml` per component as either a released version
 (`pin: 3.3.5`) or a git ref (`pin: <sha-or-tag>`) with a `source` (PyPI or a local path / git
-URL). `mneme install` resolves and installs each into the venv **non-editable at the pin**
+URL). `hypostasis install` resolves and installs each into the venv **non-editable at the pin**
 (`pip install <pkg>==<ver>` or `pip install git+<url>@<ref>`), in dependency order. Editable
 installs (`-e`) are eliminated for in-scope components (kills the silent-drift failure, FR-004).
 
 **Rationale**: Non-editable pinned installs make a `git checkout` in one repo unable to change
-another's behavior. Keeping pins in `mneme.yaml` (not a lockfile) preserves the single
+another's behavior. Keeping pins in `hypostasis.yaml` (not a lockfile) preserves the single
 authority (Principle V); the installed version is then *observed* live by `status`, not stored.
 
 **Alternatives**: `uv` instead of `pip` (faster; acceptable drop-in — record as an
@@ -114,7 +114,7 @@ authority, see Complexity Tracking in plan.md).
 
 ## D6 — Dependency / startup order (the DAG)
 
-**Decision**: Declare both **install order** and **startup order** in `mneme.yaml`
+**Decision**: Declare both **install order** and **startup order** in `hypostasis.yaml`
 (explicit, not inferred). Seed values from the known coupling:
 - Install (libs before consumers): `dgxlib` (leaf) → `turbovecdb` → `mempalace` →
   `rpg-lib` → `CampaignGenerator` → `gm-assistant`.
@@ -148,7 +148,7 @@ long-running manager component — rejected, conflicts with "manager is transien
 
 ## D8 — Health / reachability checks
 
-**Decision**: Per-service check declared in `mneme.yaml` (default: TCP/HTTP probe of the
+**Decision**: Per-service check declared in `hypostasis.yaml` (default: TCP/HTTP probe of the
 service's URL/port; HTTP GET on a known path where one exists, e.g. the DGX `/v1` and
 turbovecdb/rpg-lib health routes). `status` and `up` use the same check.
 
@@ -161,7 +161,7 @@ no divergence between what `up` waits for and what `status` reports (Principle I
 
 **Decision**: `status` reads each component's installed version from the venv
 (`importlib.metadata.version()` for packages; `git rev-parse` in the source dir for
-git-pinned local installs) and compares to the `mneme.yaml` pin; mismatch = FAIL.
+git-pinned local installs) and compares to the `hypostasis.yaml` pin; mismatch = FAIL.
 
 **Rationale**: Observed-from-silicon, never echoed from the declaration (Principle I). No stored
 "installed version" file (would be a second authority).
@@ -175,21 +175,21 @@ under the feature) is the **canonical SC-005 reproducibility test** and the home
 `install → up → status → change-value → apply` integration loop, run in true isolation. The
 container is a **proof environment, NOT a deployment target** for 001.
 
-**Rationale**: SC-005 claims one `mneme.yaml` reproduces the system on a fresh environment
+**Rationale**: SC-005 claims one `hypostasis.yaml` reproduces the system on a fresh environment
 with no manual edits. A container is the most honest "fresh": no pre-existing `~/.venvs/main`,
 no `~/src/*` checkouts, none of the operator discipline that currently *hides* the
-fragmentation. If `mneme install` brings the system up in a clean container, the
+fragmentation. If `hypostasis install` brings the system up in a clean container, the
 Infrastructure-Proxy constants (II) and Fragmented-State config (III) are *proven*
 externalized, not merely appearing to work on a configured box. It also resolves the
 port-collision caveat of same-host isolation: the container is its own network namespace, so it
 can use the canonical ports (`8000`, `8077`) with zero conflict against live host services.
 Composes with (does not replace) git-ref/worktree source isolation: the container gets the
-component **sources at their pins**; `mneme install` does the rest.
+component **sources at their pins**; `hypostasis install` does the rest.
 
 **DGX sub-decision (test both ways — deliberate)**: per D2 the DGX is an external dependency
 `mneme` health-checks but does not start. Inside the container:
 1. **Reach the real DGX** over the network → exercises the real external-dependency path; also
-   lets us point `mneme.yaml` at a different IP and confirm it follows (this *is* SC-004).
+   lets us point `hypostasis.yaml` at a different IP and confirm it follows (this *is* SC-004).
 2. **No DGX reachability** → use a stub endpoint, and confirm `status` reports the real one
    **unreachable honestly** (Principle I — no False Green Dashboard) rather than wedging. Worth
    seeing this failure mode on purpose.

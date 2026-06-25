@@ -4,25 +4,25 @@ The CLI is the manager's interface. Every command is **honest** (Principle I): a
 exit code means the silicon did not confirm success. No command echoes declared state as if
 it were observed.
 
-Global: all commands read `mneme.yaml` from the repo root (override `--config PATH`).
+Global: all commands read `hypostasis.yaml` from the repo root (override `--config PATH`).
 `--json` emits machine-readable output. Validation failure (schema/integrity/cycle) →
 exit 2 before any side effect.
 
 ---
 
-## `mneme install`
+## `hypostasis install`
 Create/validate the venv, install every in-scope component at its pin in `order.install`,
 then render every `DerivedConfig`.
 
-- **Pre**: valid `mneme.yaml`; component sources resolvable.
+- **Pre**: valid `hypostasis.yaml`; component sources resolvable.
 - **Post**: venv exists; each component installed at exactly its `pin` (non-editable);
   each `config_target` written with a current source-sha256 stamp.
 - **Exit**: `0` all installed + rendered & verified; `2` invalid config; `1` any component
   unresolved/failed (names the component; does **not** report success on partial result, FR-006).
-- **Idempotent**: re-running with an unchanged `mneme.yaml` is a no-op (same pins, same hashes).
+- **Idempotent**: re-running with an unchanged `hypostasis.yaml` is a no-op (same pins, same hashes).
 
-## `mneme apply`
-Re-render all `DerivedConfig` from the current `mneme.yaml`; restart affected `managed`
+## `hypostasis apply`
+Re-render all `DerivedConfig` from the current `hypostasis.yaml`; restart affected `managed`
 services so none runs on a stale copy (FR-009).
 
 - **Pre**: system installed.
@@ -48,7 +48,7 @@ Stop the `managed` services `mneme` started (reverse `order.startup`).
 - **Post**: managed services stopped. External deps untouched.
 - **Exit**: `0` stopped; `1` a stop failed (names it).
 
-## `mneme status`
+## `hypostasis status`
 Report, per component, the **observed installed** version vs its `pin`; per service, live
 reachability; and any `DerivedConfig` drift. Pure read — no side effects.
 
@@ -60,9 +60,9 @@ reachability; and any `DerivedConfig` drift. Pure read — no side effects.
 ---
 
 ## Cross-cutting contract guarantees
-- **Observed-not-declared**: `status` never derives "installed version" from `mneme.yaml`.
+- **Observed-not-declared**: `status` never derives "installed version" from `hypostasis.yaml`.
 - **No second authority**: no command writes a lockfile or a competing config store; the only
   writes are the venv, `DerivedConfig` targets, and the disposable run/PID bookkeeping.
 - **Fail loud**: partial/unverified outcomes exit non-zero and name the unit (FR-006/014).
-- **Single edit→propagate path**: changing config = edit `mneme.yaml` → `apply`/`install`;
+- **Single edit→propagate path**: changing config = edit `hypostasis.yaml` → `apply`/`install`;
   there is no command that mutates a `DerivedConfig` directly.

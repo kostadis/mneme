@@ -1,8 +1,8 @@
 # SC-005 reproducibility acid test — PROOF ENVIRONMENT, not a deployment target.
-# Skeleton: encodes intent; completed in /speckit.implement once the `mneme` CLI exists.
+# Skeleton: encodes intent; completed in /speckit.implement once the `hypostasis` CLI exists.
 #
 # The point: a clean image has NO pre-existing venv, NO ~/src checkouts, NO host state.
-# If `mneme install` brings the system up from mneme.yaml alone in here, the
+# If `hypostasis install` brings the system up from hypostasis.yaml alone in here, the
 # Infrastructure-Proxy constants (II) and Fragmented-State config (III) are proven
 # externalized — not a configured-box illusion.
 
@@ -15,10 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git curl \
 WORKDIR /opt/mneme
 
 # Bring in ONLY the manager (the mneme CLI) + the single authority. Everything else
-# the system needs is resolved by `mneme install` from mneme.yaml — that is the test.
+# the system needs is resolved by `hypostasis install` from hypostasis.yaml — that is the test.
 #   COPY mneme/ ./mneme/
 #   COPY pyproject.toml ./
-#   COPY mneme.yaml ./                # the validation mneme.yaml (pins = git refs)
+#   COPY hypostasis.yaml ./                # the validation hypostasis.yaml (pins = git refs)
 # RUN pip install --no-cache-dir .       # install the manager itself
 
 # Canonical ports are safe here: separate network namespace, no host conflict.
@@ -31,5 +31,5 @@ ENV DGX_MODE=stub
 #   mneme install \
 #     && mneme up \
 #     && mneme status \
-#     && sed -i 's/<old-ip>/<new-ip>/' mneme.yaml && mneme apply && mneme status
+#     && sed -i 's/<old-ip>/<new-ip>/' hypostasis.yaml && mneme apply && mneme status
 # ENTRYPOINT ["/opt/mneme/validation/run-validation.sh"]

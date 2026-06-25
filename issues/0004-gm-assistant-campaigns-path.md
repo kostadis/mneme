@@ -2,7 +2,7 @@
 
 **Status:** open (2026-06-24)
 **Area:** gm-assistant (campaigns repo) · workspace paths · T021
-**Related:** `~/campaigns/gm-assistant/{SKILLS.md,README.md,skills/*/SKILL.md}`, mneme `data_roots.campaigns`
+**Related:** `~/campaigns/gm-assistant/{SKILLS.md,README.md,skills/*/SKILL.md}`, hypostasis `data_roots.campaigns`
 
 ## Problem
 
@@ -18,10 +18,10 @@ is a *separate* dir (just an `Obelisk/` tree, not the campaigns repo). So the sk
 Claude Code at the **wrong workspace root** — the symlink instructions, campaign-isolation rule,
 and `CLAUDE.md` references resolve to the wrong (or empty) location.
 
-mneme's authority already uses the correct path: `data_roots.campaigns: ~/campaigns`.
+hypostasis's authority already uses the correct path: `data_roots.campaigns: ~/campaigns`.
 
 ## Fix
 
 Replace `~/src/campaigns` → `~/campaigns` throughout gm-assistant (SKILLS.md, README.md, and the
 `skills/*/SKILL.md` files), OR decide which is canonical and align everything (incl. the actual
-symlink locations). Pure docs/markdown change in the campaigns repo — no mneme code involved.
+symlink locations). Pure docs/markdown change in the campaigns repo — no hypostasis code involved.

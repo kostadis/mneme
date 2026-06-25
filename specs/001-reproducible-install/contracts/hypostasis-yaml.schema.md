@@ -1,4 +1,4 @@
-# Contract — `mneme.yaml` schema (the single authority)
+# Contract — `hypostasis.yaml` schema (the single authority)
 
 Authoritative config/wiring entity. Hand-edited. One per deployment. See
 [data-model.md](../data-model.md) for field rules; this is the shape + a worked example.

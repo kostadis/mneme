@@ -2,7 +2,7 @@
 
 **Status:** open (deferred 2026-06-24)
 **Area:** render model · config ownership · T016 (CampaignGenerator)
-**Related:** [[mneme.yaml]], `campaignlib/config.py`, constitution Principle II (Sovereign
+**Related:** [[hypostasis.yaml]], `campaignlib/config.py`, constitution Principle II (Sovereign
 Identity / no Infrastructure Proxy)
 
 ## Working principle (the part we DID settle)
@@ -11,7 +11,7 @@ A component's configuration splits into two kinds, by one test —
 **"does this config item name or reach something *outside* the component?"**
 
 - **External** (names/reaches another service, machine, or shared data root) → **mneme owns it.**
-  mneme renders it from `mneme.yaml` into a file the component reads. These are the
+  mneme renders it from `hypostasis.yaml` into a file the component reads. These are the
   Infrastructure-Proxy constants that must never be hardcoded.
 - **Internal** (only concerns the component's own behavior) → **the component owns it**,
   hand-edited in its own config.
@@ -42,6 +42,6 @@ For CampaignGenerator this sorts cleanly for most keys:
 ## Why deferred
 
 The external keys CG needs (`dgx_endpoint`, `rpg_library_url`, `fivetools_data_root`) are
-already in `mneme.yaml` and are unambiguous, so T016's constant-removal can proceed on those
+already in `hypostasis.yaml` and are unambiguous, so T016's constant-removal can proceed on those
 without resolving the `documents`/workspace edge. This issue tracks the boundary cases so they
 get a deliberate decision rather than an accidental one.

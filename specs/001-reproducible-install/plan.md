@@ -8,17 +8,17 @@
 
 Stand up a `mneme` CLI in the umbrella repo that turns the campaign/DGX system into
 a reproducibly-installable, single-source-of-truth system. One hand-edited
-`mneme.yaml` is the sole authority for config/wiring (endpoints, ports, paths, venv,
+`hypostasis.yaml` is the sole authority for config/wiring (endpoints, ports, paths, venv,
 version pins, dependency/startup order). The CLI:
 
-- `mneme install` — create/validate the venv, install all six components at pinned
+- `hypostasis install` — create/validate the venv, install all six components at pinned
   versions in dependency order, and **render** each component's native config/env from
-  `mneme.yaml` (no shared import forced into components).
-- `mneme apply` — re-render derived configs after a `mneme.yaml` change and
+  `hypostasis.yaml` (no shared import forced into components).
+- `hypostasis apply` — re-render derived configs after a `hypostasis.yaml` change and
   restart affected managed services, guaranteeing no component runs on a stale copy.
 - `mneme up` / `mneme down` — start/stop managed services in declared dependency
   order (external DGX endpoint is health-checked and ordered against, not started).
-- `mneme status` — report each component's *observed installed* version + per-service
+- `hypostasis status` — report each component's *observed installed* version + per-service
   reachability, and flag any declared-vs-observed or render drift as a failure.
 
 The coherence guarantee (Principle V, no stale copies) falls out of the lifecycle
@@ -31,17 +31,17 @@ source-hash header on each rendered file lets `status` detect out-of-band drift.
 **Language/Version**: Python 3.11+ (matches the existing ecosystem — every component is
 Python; `~/.venvs/main` is the shared runtime).
 
-**Primary Dependencies**: standard-library-first. `PyYAML` (read `mneme.yaml`),
+**Primary Dependencies**: standard-library-first. `PyYAML` (read `hypostasis.yaml`),
 `jinja2` (render component configs from templates), `click` or `typer` (CLI),
 `httpx`/stdlib for reachability checks, `packaging` for version resolution. Install/pin
 execution shells out to `pip`/`uv` against the venv. No database.
 
-**Storage**: `mneme.yaml` — the single authoritative file. Derived/rendered component
+**Storage**: `hypostasis.yaml` — the single authoritative file. Derived/rendered component
 configs are non-authoritative regenerated outputs. **No lockfile and no second store**
 (observed/resolved state is read live from the venv, never persisted as a competing
 authority — that would violate Principle V).
 
-**Testing**: `pytest`. Unit tests for render (golden-file: `mneme.yaml` → expected
+**Testing**: `pytest`. Unit tests for render (golden-file: `hypostasis.yaml` → expected
 native config), schema validation, drift detection. The full install→up→status→change-value
 →apply integration loop runs in a **clean container** (`validation/`) — the canonical SC-005
 reproducibility acid test (research D10): a fresh environment with no pre-existing venv/checkouts
@@ -83,10 +83,10 @@ deployments, occasionally reproduced on a second machine.
 | Principle | Gate | This plan |
 |---|---|---|
 | I — Silicon Truth | `status` reports observed, never declared | ✅ `status` reads installed version from the venv + live reachability; render drift detected by hash. Install fails loudly on partial/unverified result. |
-| II — Sovereign Identity / no Infra Proxy | no hardcoded IP/port/path in component logic | ✅ All five constants move to `mneme.yaml`; implement replaces them with reads from each component's rendered config. |
+| II — Sovereign Identity / no Infra Proxy | no hardcoded IP/port/path in component logic | ✅ All five constants move to `hypostasis.yaml`; implement replaces them with reads from each component's rendered config. |
 | III — Intrinsic State / no Horcruxes | no orphaned/hand-synced side state | ✅ One authority; derived configs are regenerated, never hand-edited; no parallel truth. |
-| IV — Manager is a Transient Viewer | delete `mneme`, components still run; reinstall reconstructs | ✅ Components run from their own rendered config without `mneme` present; `install` reconstructs wiring from `mneme.yaml`. No irreplaceable state in the manager. |
-| V — One Entity, One DB / no stale copies | single authority; coherent caches | ✅ `mneme.yaml` is the sole authority; `apply` re-renders + restarts so no stale in-memory copy; hash-header drift detection. **No lockfile** (would be a 2nd authority). |
+| IV — Manager is a Transient Viewer | delete `mneme`, components still run; reinstall reconstructs | ✅ Components run from their own rendered config without `mneme` present; `install` reconstructs wiring from `hypostasis.yaml`. No irreplaceable state in the manager. |
+| V — One Entity, One DB / no stale copies | single authority; coherent caches | ✅ `hypostasis.yaml` is the sole authority; `apply` re-renders + restarts so no stale in-memory copy; hash-header drift detection. **No lockfile** (would be a 2nd authority). |
 | VI — Federated Authority, input[∞] | per-component, degrade independently; acyclic deps | ✅ install/status/up operate per-component; one unreachable service = one FAIL, not a wedged run; dependency order declared and acyclic (leaf `dgxlib` first). |
 | VII — Logical Datasets / low coupling | components consume meanings, not encodings; render not import | ✅ Render into each component's native config; no shared `mneme` import forced in. Subordinate to V per precedence. |
 | VIII — Transform the Constraint | simpler coordinate before complexity | ✅ Reuse each component's *existing* native config as the injection point (no new runtime); lifecycle ownership makes coherence fall out of restart rather than a new cache-invalidation subsystem. |
@@ -108,11 +108,11 @@ Split-Brain (no second authoritative store, restart-on-apply — avoided).
 specs/001-reproducible-install/
 ├── plan.md              # This file
 ├── research.md          # Phase 0 — decisions + rationale
-├── data-model.md        # Phase 1 — mneme.yaml schema + entities
+├── data-model.md        # Phase 1 — hypostasis.yaml schema + entities
 ├── quickstart.md        # Phase 1 — runnable validation scenarios (maps to SC-001..006)
 ├── contracts/
 │   ├── cli.md           # mneme install/apply/up/down/status command contract
-│   └── mneme-yaml.schema.md  # the authoritative config schema
+│   └── hypostasis-yaml.schema.md  # the authoritative config schema
 ├── validation/          # SC-005 acid test — clean-container proof env (Dockerfile, compose, README)
 └── tasks.md             # Phase 2 — /speckit.tasks (NOT created here)
 ```
@@ -123,7 +123,7 @@ specs/001-reproducible-install/
 mneme/                      # the CLI package (the manager — transient viewer)
 ├── __init__.py
 ├── cli.py                     # install / apply / up / down / status entrypoints
-├── config.py                  # load + validate mneme.yaml (the single authority)
+├── config.py                  # load + validate hypostasis.yaml (the single authority)
 ├── render.py                  # render derived component configs (jinja2), stamp source hash
 ├── install.py                 # venv + pinned installs in dependency order
 ├── lifecycle.py               # up/down: ordered start/stop of managed services
@@ -134,7 +134,7 @@ mneme/                      # the CLI package (the manager — transient viewer)
     ├── dgxlib.models.yaml.j2
     └── ...                     # rpg-lib, turbovecdb(-service), gm-assistant
 
-mneme.yaml                  # THE single authority (repo root; hand-edited)
+hypostasis.yaml                  # THE single authority (repo root; hand-edited)
 
 tests/
 ├── unit/                      # render golden-files, schema validation, drift detection
@@ -148,7 +148,7 @@ tests/
 
 **Structure Decision**: Single-project CLI. The `mneme/` package is the manager; it
 is *transient* (Principle IV) — it installs, renders, starts, and reports, but holds no
-authoritative state itself. The only authority is `mneme.yaml` at the repo root.
+authoritative state itself. The only authority is `hypostasis.yaml` at the repo root.
 Per-component templates live with the manager (it owns the encoding, Principle VII), not
 in the component repos.
 
@@ -158,5 +158,5 @@ in the component repos.
 
 | Choice | Why | Simpler/other alternative rejected because |
 |---|---|---|
-| No lockfile; pins live only in `mneme.yaml`; observed state read live | A lockfile would be a second store of the same truth → Principle V violation (split-brain on restore) | A lockfile "for reproducibility" is unnecessary: pins are already exact in the one authority; reproducibility comes from the authority + live verification, not a parallel file. |
+| No lockfile; pins live only in `hypostasis.yaml`; observed state read live | A lockfile would be a second store of the same truth → Principle V violation (split-brain on restore) | A lockfile "for reproducibility" is unnecessary: pins are already exact in the one authority; reproducibility comes from the authority + live verification, not a parallel file. |
 | Render into native config (not a shared `mneme` import) | Lowest coupling; components stay ignorant of `mneme` (IV, VII) | A shared runtime import would couple every component to the mneme schema and make `mneme` non-transient. |

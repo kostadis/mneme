@@ -7,7 +7,7 @@
 ## Problem
 
 rpg-lib is an **external index service** — an index over a large file set, exposed via
-`library_server` (HTTP, `:8000`). mneme/CG **interact with it but don't own it**. All access
+`library_server` (HTTP, `:8000`). hypostasis/CG **interact with it but don't own it**. All access
 should go through its HTTP API.
 
 `CampaignGenerator/query_rpg_lib.py` violates this: it `from library_api import db` and opens
@@ -17,16 +17,16 @@ site — `rpg_retriever.py` already speaks HTTP (`urllib`, URL from wiring).
 T016 removed query_rpg_lib's `sys.path` hack and pointed it at the installed `library_api`, but
 that only swapped one form of direct access for another. The real boundary fix is **HTTP**.
 
-## Consequence (applied in mneme now)
+## Consequence (applied in hypostasis now)
 
-Because direct access is the *only* reason anything in mneme's component set imports
-`library_api` (and `claudelib` is only used by rpg-lib + pdf-translators, neither a mneme
-component), mneme should **not install rpg-lib or claudelib**:
+Because direct access is the *only* reason anything in hypostasis's component set imports
+`library_api` (and `claudelib` is only used by rpg-lib + pdf-translators, neither a hypostasis
+component), hypostasis should **not install rpg-lib or claudelib**:
 - `services.rpg_lib` → `managed: false` (health-checked external dependency, like the DGX; not
-  started by mneme).
+  started by hypostasis).
 - rpg-lib and claudelib **removed from `components` / `order.install`**.
 
-Until this bug is fixed, **`query_rpg_lib` is non-functional** (mneme no longer installs
+Until this bug is fixed, **`query_rpg_lib` is non-functional** (hypostasis no longer installs
 `library_api` into the venv). That is the intended, tracked state.
 
 ## Fix

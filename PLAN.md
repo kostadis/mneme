@@ -1,4 +1,11 @@
-# mneme re-architecture plan (Spec Kit umbrella)
+# hypostasis + mneme re-architecture plan (Spec Kit umbrella)
+
+> **2026-06-25 — the tool split into TWO commands (same repo): `hypostasis` configures the
+> environment (run once: install shared libs, reference the DGX/rpg-lib substrate, render shared
+> config, honest `status`); `mneme up <campaign>` spins up CampaignGenerator per campaign on that
+> environment. The original single "mneme" tool became `hypostasis`; the per-campaign `up`/`down`
+> became `mneme`. Much of the prose below predates the split and says "mneme" for the env tool —
+> read those as `hypostasis` (everything except `mneme up`/`down`).**
 
 > **Status: scaffold stood up; constitution + first spec not yet authored.**
 > Updated 2026-06-24. This is the working plan for `~/src/platform`, the umbrella
@@ -17,7 +24,7 @@ What exists on disk:
   resolve the repo root via git, so the move was clean.
 - `.specify/memory/constitution.md` — **still the unfilled template** (placeholders).
 - **No `specs/` directory** — no `001-…` spec created.
-- **No `mneme.yaml`, no installer, no status tool.**
+- **No `hypostasis.yaml`, no installer, no status tool.**
 
 Net: scaffolding only. None of the precision work (constitution principles,
 the `001` spec body, the config schema) has been authored. That is the next step
@@ -47,7 +54,7 @@ and it is *yours* to author, not the LLM's to invent.
       were already resolved during specify; open for plan: FR-009 coherence mechanism,
       DGX-side process scope).
 - [x] `/speckit.plan` — **DONE 2026-06-24.** plan.md + research.md + data-model.md +
-      contracts/{cli,mneme-yaml.schema}.md + quickstart.md. Constitution gate PASS.
+      contracts/{cli,hypostasis-yaml.schema}.md + quickstart.md. Constitution gate PASS.
       Two decisions flagged ⚠ for ratification: FR-009 coherence = re-render-on-apply +
       restart managed services + source-hash drift check (not in-component validation);
       DGX endpoint = external dependency (health-checked, not started). No lockfile
@@ -154,7 +161,7 @@ architecture unreviewed.
 
 A new umbrella repo `~/src/platform` that owns the **integration plane** only.
 
-**1. Single source of truth: `mneme.yaml`** (lives in `~/src/platform`, the
+**1. Single source of truth: `hypostasis.yaml`** (lives in `~/src/platform`, the
 one file you hand-edit). Sketch:
 
 ```yaml
@@ -177,15 +184,15 @@ components:               # version pins -> kills editable-install drift
   CampaignGenerator: { source: ~/src/CampaignGenerator, pin: <git-sha> }
 ```
 
-**2. An installer (`mneme install`)** that:
+**2. An installer (`hypostasis install`)** that:
 - creates/validates the venv,
 - installs components in dependency order at their pinned versions,
-- **renders each component's native config/env from `mneme.yaml`** rather than
+- **renders each component's native config/env from `hypostasis.yaml`** rather than
   forcing a new shared import. (Lower coupling: components keep reading their own
   `config.yaml`/env; the installer is the only thing that knows the global truth.
   This respects boundaries and matches "human owns structure, tool renders.")
 
-**3. Status (`mneme status`)** that reports installed versions + health-checks
+**3. Status (`hypostasis status`)** that reports installed versions + health-checks
 each service — generated, replacing the `current-setup.md` discipline.
 
 This directly attacks pains 1–4: hardcoded constants come from one file; one
@@ -202,14 +209,14 @@ In `~/src/platform`:
    v1.0.0). Covers single source of truth, no hardcoded infra, acyclic deps,
    reproducible install, honest-status-by-tool, single-authority/no-stale-copies (V),
    human-owns-structure, and the four doctrine anti-patterns by name.
-3. **`/speckit.specify 001-reproducible-install`** — spec body = the `mneme.yaml`
+3. **`/speckit.specify 001-reproducible-install`** — spec body = the `hypostasis.yaml`
    schema, installer responsibilities, config-rendering targets (enumerate the
    hardcoded constants above as the things to externalize), version-pinning rules.
    Run **`/speckit.clarify`** and review — this is the precision checkpoint.
    Carry the **scope boundary** below into the spec verbatim.
 4. **`/speckit.plan`** — LLM drafts the technical plan; you review the boundary
    decisions (which component reads what, render-vs-import).
-5. **`/speckit.tasks` → `/speckit.implement`** — builds `mneme.yaml`, the
+5. **`/speckit.tasks` → `/speckit.implement`** — builds `hypostasis.yaml`, the
    installer/status tool, and the per-component config templates. Note: implement
    will edit the *other* repos (replace hardcoded constants with config-sourced
    values). That cross-repo editing is the actual re-architecture — gate it task
@@ -217,24 +224,24 @@ In `~/src/platform`:
 
 ### `001` scope boundary — the config entity, not the data plane (carry into the spec)
 
-Principle V applies to *every* entity, but `001`'s single authority — `mneme.yaml`
+Principle V applies to *every* entity, but `001`'s single authority — `hypostasis.yaml`
 — owns exactly **one** of them: the **config / wiring entity** (endpoints, ports,
 paths, venv, version pins). The "collapse component-local databases into
-`mneme.yaml`" decision means *config* state only. It does **not** mean pulling
-runtime/data-plane stores into `mneme.yaml`:
+`hypostasis.yaml`" decision means *config* state only. It does **not** mean pulling
+runtime/data-plane stores into `hypostasis.yaml`:
 
-- **In scope for `001` (config entity → authority = `mneme.yaml`):** the hardcoded
+- **In scope for `001` (config entity → authority = `hypostasis.yaml`):** the hardcoded
   constants (DGX endpoint, 5etools data root, rpg-lib URL/dir, turbovecdb port, venv),
   version pins, install order, and any *config* a component today hand-maintains in a
   parallel file — those get collapsed/rendered from the one authority.
 - **Out of scope for `001` (separate data-plane entities, each already single-authority):**
   mempalace's ChromaDB vectors, turbovecdb's stored vectors, campaign/5etools data
   roots. These are *data*, not config. Each is its own entity that already owns its
-  own truth; the fix there is **not** "move into `mneme.yaml`" but "don't let a
-  second store cache or duplicate it." `mneme.yaml` *references* where they live
+  own truth; the fix there is **not** "move into `hypostasis.yaml`" but "don't let a
+  second store cache or duplicate it." `hypostasis.yaml` *references* where they live
   (a path/endpoint — config) without *containing* their contents.
 - **The test that keeps the boundary honest:** if a field's value is something you'd
-  *edit to wire the system*, it's config → `mneme.yaml`. If it's something the
+  *edit to wire the system*, it's config → `hypostasis.yaml`. If it's something the
   system *produces or ingests at runtime*, it's data → stays in its own store, merely
   pointed at. Principle V is satisfied for data-plane entities by each having one
   authoritative store, not by centralizing them.
@@ -250,11 +257,11 @@ generates.
 ## Verification (the acid test for `001`)
 
 When executed, the spec is "done" when:
-1. `mneme install` from a single edited `mneme.yaml` brings the system up on
+1. `hypostasis install` from a single edited `hypostasis.yaml` brings the system up on
    a fresh venv (or a second machine) with no manual path/IP edits.
-2. `mneme status` reports each component's pinned version + a health check per service.
+2. `hypostasis status` reports each component's pinned version + a health check per service.
 3. Grep proves the constants moved: `grep -rn "192.0.2.10\|5etools-kostadis/data\|localhost:8000\|.venvs/main" src/CampaignGenerator src/dgx` returns only config/template references, not logic.
-4. Change the DGX IP in `mneme.yaml` only, re-render, and every component picks it up.
+4. Change the DGX IP in `hypostasis.yaml` only, re-render, and every component picks it up.
 
 ## Decisions captured
 
@@ -267,6 +274,6 @@ When executed, the spec is "done" when:
   today's state spread across multiple hand-maintained config files + databases is
   the bug, not a constraint. Constitution Principle V wins over VII (low coupling):
   components will be forced to change — collapse component-local DBs into
-  `mneme.yaml`, replace hand-edited configs with generated ones — to reach one
+  `hypostasis.yaml`, replace hand-edited configs with generated ones — to reach one
   authority. The sin is multiple *authorities*, not multiple physical files; derived
   read-only copies kept coherent with the one authority are fine.

@@ -2,7 +2,7 @@
 
 **Status:** resolved 2026-06-24 (all sites externalized in T016; see resolution at bottom)
 **Area:** T016 (CampaignGenerator) · SC-002 grep-clean · render model
-**Related:** [[0001-config-ownership-boundary]], `mneme.yaml`, T020 (turbovecdb), T036 (rpg-lib)
+**Related:** [[0001-config-ownership-boundary]], `hypostasis.yaml`, T020 (turbovecdb), T036 (rpg-lib)
 
 ## Context
 
@@ -21,10 +21,10 @@ tail, because several items need a decision rather than a mechanical repoint.
 | Site | Constant | Notes / decision needed |
 |---|---|---|
 | `query_rpg_lib.py:32` | `DEFAULT_RPGLIB_DIR = ~/src/mytools/rpg-lib` | Used for a **`sys.path` import** of rpg-lib modules **and** to locate `rpg_library.db`. rpg-lib is now pip-installed (T036) → drop the sys.path hack, import directly. The **DB location is data-plane** (out of config scope) — needs its own treatment. (Decision 2's "module invocation" premise was wrong: it's an import, not a subprocess.) |
-| `fivetools_ingest.py:74-75` | `_DEFAULT_RPGLIB_DB` (`…/rpg-lib/rpg_library.db`), `_DEFAULT_PDF_TRANSLATORS` (`…/pdf-translators`) | DB path = data-plane; pdf-translators dir = another external repo path not in `mneme.yaml`. |
-| `resolve_refs.py:43` | `homebrew_private = ~/src/homebrew-private` | Another shared external data root — add to `mneme.yaml` `data_roots`? |
+| `fivetools_ingest.py:74-75` | `_DEFAULT_RPGLIB_DB` (`…/rpg-lib/rpg_library.db`), `_DEFAULT_PDF_TRANSLATORS` (`…/pdf-translators`) | DB path = data-plane; pdf-translators dir = another external repo path not in `hypostasis.yaml`. |
+| `resolve_refs.py:43` | `homebrew_private = ~/src/homebrew-private` | Another shared external data root — add to `hypostasis.yaml` `data_roots`? |
 | `server/routers/scene_editor.py:627` | `… or "http://localhost:8000"` | DGX-endpoint fallback in the **web server** (its own `CONFIG`); wire to `wiring_get` in the server context. |
-| `launch_5etools_mcp.py:52` | `DEFAULT_MCP_INDEX = ~/src/5etools-kostadis/mcp/index.js` | The 5etools MCP index path — external; add a key to `mneme.yaml` (sibling of `data_roots.fivetools`)? |
+| `launch_5etools_mcp.py:52` | `DEFAULT_MCP_INDEX = ~/src/5etools-kostadis/mcp/index.js` | The 5etools MCP index path — external; add a key to `hypostasis.yaml` (sibling of `data_roots.fivetools`)? |
 
 Docstring/help-text mentions (e.g. `ensemble.py:23`, `apply_ingest_manifest.py:15`,
 `fivetools_copy.py:20`) are **left as-is** per the agreed decision (SC-002 targets logic
@@ -32,7 +32,7 @@ defaults, not documentation).
 
 ## To resolve
 
-1. **mneme.yaml additions** for the genuinely-external-but-unmodeled roots: `homebrew_private`,
+1. **hypostasis.yaml additions** for the genuinely-external-but-unmodeled roots: `homebrew_private`,
    the 5etools MCP index, possibly `pdf-translators`. Decide which become `data_roots` entries.
 2. **Data-plane line** for `rpg_library.db` — referenced by location, not owned (per the
    established config-vs-data boundary). Where does its path live?
@@ -46,7 +46,7 @@ primary tools; this tail is tracked, not silently dropped.
 
 ## Resolution (2026-06-24)
 
-All sites externalized in T016. `mneme.yaml` `data_roots` gained `homebrew`,
+All sites externalized in T016. `hypostasis.yaml` `data_roots` gained `homebrew`,
 `fivetools_mcp_index`, `pdf_translators`, and `rpg_library_db` (location referenced — contents
 stay data-plane), exposed via the CG wiring template. Repointed: `resolve_refs` (homebrew),
 `fivetools_ingest` (rpg DB + pdf-translators), `launch_5etools_mcp` (MCP index),

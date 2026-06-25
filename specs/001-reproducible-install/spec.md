@@ -33,9 +33,9 @@ moving it to a second machine.
 
 ### User Story 1 - Reproducible install from one source of truth (Priority: P1)
 
-The operator edits a single `mneme.yaml`, runs one install command, and the whole
+The operator edits a single `hypostasis.yaml`, runs one install command, and the whole
 system comes up on a fresh virtual environment — every component installed at its
-pinned version, every component's own config/env populated from `mneme.yaml` —
+pinned version, every component's own config/env populated from `hypostasis.yaml` —
 with **no manual path/IP/port edits anywhere else**.
 
 **Why this priority**: This is the core of the feature and the MVP. If only this
@@ -43,20 +43,20 @@ ships, the system is already reproducible and the hardcoded-constant / scattered
 pain (the bulk of the problem) is gone. Everything else builds on the single
 authority this establishes.
 
-**Independent Test**: On a clean venv (or a second machine), with only `mneme.yaml`
+**Independent Test**: On a clean venv (or a second machine), with only `hypostasis.yaml`
 edited for that environment, run the install and confirm the system is usable without
 touching any component's own config or source.
 
 **Acceptance Scenarios**:
 
-1. **Given** a fresh venv and a filled-in `mneme.yaml`, **When** the operator runs
+1. **Given** a fresh venv and a filled-in `hypostasis.yaml`, **When** the operator runs
    the install, **Then** every in-scope component is installed at its pinned version
-   and its native config/env is populated from `mneme.yaml`, with no further manual
+   and its native config/env is populated from `hypostasis.yaml`, with no further manual
    edits required.
 2. **Given** a working install, **When** the operator greps the component repos for the
    previously-hardcoded constants (`192.0.2.10`, `5etools-kostadis/data`,
    `localhost:8000`, `8077`, `.venvs/main`), **Then** matches appear only in
-   config/templates sourced from `mneme.yaml`, never in component logic.
+   config/templates sourced from `hypostasis.yaml`, never in component logic.
 3. **Given** an install run where a component source or pinned version cannot be
    resolved, **When** the install proceeds, **Then** it fails loudly and names the
    unresolved component, rather than partially completing and reporting success.
@@ -82,7 +82,7 @@ and confirm status reports it as down.
 1. **Given** an installed system, **When** the operator runs status, **Then** it reports
    each in-scope component's *observed installed* version and a reachability result per
    service.
-2. **Given** a component whose installed version no longer matches its `mneme.yaml`
+2. **Given** a component whose installed version no longer matches its `hypostasis.yaml`
    pin, **When** the operator runs status, **Then** that drift is reported as a failure,
    not a pass (no False Green Dashboard).
 3. **Given** a service that is not running, **When** the operator runs status, **Then**
@@ -92,7 +92,7 @@ and confirm status reports it as down.
 
 ### User Story 3 - Change one value, everything follows — no stale copies (Priority: P3)
 
-The operator changes a single value in `mneme.yaml` (e.g. the DGX IP), re-applies,
+The operator changes a single value in `hypostasis.yaml` (e.g. the DGX IP), re-applies,
 and every component picks up the new value. No component is left running on a stale
 cached/rendered copy of the old value.
 
@@ -101,15 +101,15 @@ cached/rendered copy of the old value.
 cached copy and broke" failure. Lower priority only because it builds on P1's rendering
 mechanism; the coherence guarantee is non-negotiable once rendering exists.
 
-**Independent Test**: Change the DGX endpoint in `mneme.yaml` only, re-apply, and
+**Independent Test**: Change the DGX endpoint in `hypostasis.yaml` only, re-apply, and
 confirm every component now uses the new endpoint and none reads the old one.
 
 **Acceptance Scenarios**:
 
-1. **Given** an installed system, **When** the operator changes a value in `mneme.yaml`
+1. **Given** an installed system, **When** the operator changes a value in `hypostasis.yaml`
    and re-applies, **Then** every derived component config is regenerated and no component
    continues to use the prior value.
-2. **Given** a derived component config that has drifted from `mneme.yaml` (edited out
+2. **Given** a derived component config that has drifted from `hypostasis.yaml` (edited out
    of band, or not re-rendered after a change), **When** status runs, **Then** the
    staleness is detected and reported rather than silently tolerated.
 
@@ -144,14 +144,14 @@ services come up in order and pass reachability; run bring-down and confirm they
 
 - **Partial install failure**: a component fails mid-install — the run reports failure and
   what completed; it never reports overall success on a partial result (Principle I).
-- **Declared-vs-installed version drift**: `mneme.yaml` pins version X, the venv has Y —
+- **Declared-vs-installed version drift**: `hypostasis.yaml` pins version X, the venv has Y —
   reported as a failure by status.
-- **Stale render**: `mneme.yaml` changed but a component's derived config was not
+- **Stale render**: `hypostasis.yaml` changed but a component's derived config was not
   regenerated — detected (e.g. source-hash mismatch) and reported, not silently used.
 - **Service down at status time**: reported unreachable, not assumed up.
 - **Unresolvable pin/source**: a git sha/tag/version or a component source path that does
   not exist — fail loudly and name it.
-- **Second machine / fresh venv**: only `mneme.yaml` differs for the new environment;
+- **Second machine / fresh venv**: only `hypostasis.yaml` differs for the new environment;
   no per-component edits needed.
 
 ## Requirements *(mandatory)*
@@ -159,48 +159,48 @@ services come up in order and pass reachability; run bring-down and confirm they
 ### Functional Requirements
 
 - **FR-001**: The system MUST have exactly one authoritative, hand-edited source of truth
-  for the system's config/wiring (`mneme.yaml`): endpoints, ports, paths, the venv,
+  for the system's config/wiring (`hypostasis.yaml`): endpoints, ports, paths, the venv,
   and component version pins. No second hand-maintained store of this config may exist.
 - **FR-002**: All previously-hardcoded infrastructure constants MUST be sourced from
-  `mneme.yaml` and MUST NOT appear in component logic. At minimum: the DGX endpoint and
+  `hypostasis.yaml` and MUST NOT appear in component logic. At minimum: the DGX endpoint and
   default model, the 5etools data root, the rpg-lib URL and directory, the
   turbovecdb-service URL/port, and the venv location.
-- **FR-003**: A single install action MUST, from `mneme.yaml`: create/validate the venv;
+- **FR-003**: A single install action MUST, from `hypostasis.yaml`: create/validate the venv;
   install each in-scope component at its pinned version in declared dependency order; and
-  populate each component's own native config/env from `mneme.yaml`.
+  populate each component's own native config/env from `hypostasis.yaml`.
 - **FR-004**: Component versions MUST be pinned (git sha/tag or released version) so that a
   `git checkout` or upstream change in one repo cannot silently alter another's behavior.
   Editable-install drift MUST be eliminated for in-scope components.
-- **FR-005**: The install MUST be reproducible: the same `mneme.yaml` on a fresh venv (or
+- **FR-005**: The install MUST be reproducible: the same `hypostasis.yaml` on a fresh venv (or
   a second machine) MUST bring up an equivalent system with no manual path/IP/port edits.
 - **FR-006**: The install MUST fail loudly and name the offending component when a pin or
   source cannot be resolved, or when a step fails — it MUST NOT report success on a partial
   or unverified result.
 - **FR-007**: A single status action MUST report, per in-scope component, the *observed
   installed* version and a per-service reachability/health result — derived from the live
-  system, never echoed back from `mneme.yaml`'s declarations.
+  system, never echoed back from `hypostasis.yaml`'s declarations.
 - **FR-008**: Status MUST report as a failure (not a pass) any case where observed state
   contradicts declared state: installed version ≠ pinned version, or a service that should
   be up is unreachable.
 - **FR-009**: Derived/rendered component configs are non-authoritative copies and MUST be
-  kept coherent with `mneme.yaml`: after a change to `mneme.yaml`, no component may
+  kept coherent with `hypostasis.yaml`: after a change to `hypostasis.yaml`, no component may
   continue to operate on a stale copy. Changing a value through the single supported write
   path MUST NOT be able to leave any component on a stale rendered value. *(The mechanism —
   re-render-on-apply, restart/reload of affected components, source-hash freshness checks,
   or a combination — is a `/speckit.plan` decision; this requirement fixes the guaranteed
   behavior, not the implementation.)*
 - **FR-010**: Status MUST detect and report a derived config that has drifted from
-  `mneme.yaml` (e.g. changed but not re-rendered), rather than silently tolerating it.
+  `hypostasis.yaml` (e.g. changed but not re-rendered), rather than silently tolerating it.
 - **FR-011** *(resolved 2026-06-24)*: The in-scope component set for this feature is **all
   six**: dgxlib, mempalace, turbovecdb (+ turbovecdb-service), CampaignGenerator, rpg-lib,
   and gm-assistant. 001 delivers one reproducible install of the whole system, not a slice.
 - **FR-012** *(resolved 2026-06-24)*: `mneme` MUST own service **lifecycle**. A single
   bring-up action MUST start the system's services (rpg-lib server, turbovecdb-service, and
   any other declared service) in declared dependency order, and a bring-down action MUST stop
-  them. The dependency/startup order is declared in `mneme.yaml`, not held as operator
+  them. The dependency/startup order is declared in `hypostasis.yaml`, not held as operator
   tribal knowledge. (The DGX endpoint, if it runs on separate hardware, MAY be a depended-upon
   external service that `mneme` reachability-checks rather than starts — see Assumptions.)
-- **FR-013**: After install + bring-up from a filled-in `mneme.yaml`, the system MUST reach
+- **FR-013**: After install + bring-up from a filled-in `hypostasis.yaml`, the system MUST reach
   a running state with **no** manual service-start steps outside `mneme`.
 - **FR-014**: Bring-up MUST be ordering-correct and honest: a service whose dependency is not
   yet healthy MUST NOT be reported as up, and a failure to start MUST be reported loudly
@@ -209,7 +209,7 @@ services come up in order and pass reachability; run bring-down and confirm they
 ### Key Entities
 
 - **Config/wiring entity** — the single entity this feature governs. Its authoritative store
-  is `mneme.yaml`. Attributes: machines/endpoints, data roots, service URLs/ports, venv,
+  is `hypostasis.yaml`. Attributes: machines/endpoints, data roots, service URLs/ports, venv,
   and per-component version pins + source. (Constitution Principle V applies: one authority.)
 - **Component** — an installable unit (a repo or package) with a name, a source, a pinned
   version, a place in the dependency order, and a native config/env that the installer
@@ -217,11 +217,11 @@ services come up in order and pass reachability; run bring-down and confirm they
 - **Service** — a running endpoint a component exposes or depends on (DGX endpoint, rpg-lib,
   turbovecdb-service) that `mneme` starts/stops (per FR-012) and status reachability-checks.
   Carries a declared place in the startup dependency order.
-- **Derived config** — a non-authoritative, regenerated-from-`mneme.yaml` copy of a
+- **Derived config** — a non-authoritative, regenerated-from-`hypostasis.yaml` copy of a
   component's native config. Never hand-edited; kept coherent with the authority.
 - **Out-of-scope (named to bound the feature): data-plane entities** — mempalace's vector
   store, turbovecdb's stored vectors, and the campaign/5etools *data* roots' contents. Each
-  is its own entity that already owns its truth; `mneme.yaml` *references where they live*
+  is its own entity that already owns its truth; `hypostasis.yaml` *references where they live*
   (a path/endpoint — config) without *containing their contents*. This feature does not move,
   centralize, or own data-plane state.
 
@@ -229,16 +229,16 @@ services come up in order and pass reachability; run bring-down and confirm they
 
 ### Measurable Outcomes
 
-- **SC-001**: From a single edited `mneme.yaml` on a fresh venv, one install command brings
+- **SC-001**: From a single edited `hypostasis.yaml` on a fresh venv, one install command brings
   the in-scope system up with **zero** manual path/IP/port edits elsewhere.
 - **SC-002**: Grep of the in-scope component repos for the five hardcoded constants returns
-  **zero** matches in logic (only config/template references sourced from `mneme.yaml`).
+  **zero** matches in logic (only config/template references sourced from `hypostasis.yaml`).
 - **SC-003**: One status command reports observed installed version + reachability for **every**
   in-scope component/service, and reports any declared-vs-observed drift as a failure.
-- **SC-004**: Changing exactly one value in `mneme.yaml` (e.g. the DGX IP) and re-applying
+- **SC-004**: Changing exactly one value in `hypostasis.yaml` (e.g. the DGX IP) and re-applying
   causes **100%** of in-scope components to use the new value, with **zero** left on the old
   value (verified by status showing no drift and no component reaching the old endpoint).
-- **SC-005**: Reproducibility — the same `mneme.yaml` produces an equivalent working system
+- **SC-005**: Reproducibility — the same `hypostasis.yaml` produces an equivalent working system
   on a second venv/machine, demonstrated at least once.
 - **SC-006**: From an installed system, one bring-up command starts **all** of the system's
   managed services in correct dependency order and they pass reachability; one bring-down
@@ -246,14 +246,14 @@ services come up in order and pass reachability; run bring-down and confirm they
 
 ## Assumptions
 
-- `mneme.yaml` is hand-edited as a file; the file itself is the single write path, and an
+- `hypostasis.yaml` is hand-edited as a file; the file itself is the single write path, and an
   apply/install action re-renders derived configs from it. (Not assuming a separate
   `mneme config set` CLI; revisit if FR-012 implies it.)
 - Component repos are local checkouts under `~/src` (and selected PyPI packages), as today.
 - Breaking changes to component repos (replacing hardcoded constants with config-sourced
-  values, collapsing a component-local *config* store into `mneme.yaml`) are accepted per
+  values, collapsing a component-local *config* store into `hypostasis.yaml`) are accepted per
   the 2026-06-24 decision — components are not held immutable.
-- The venv model (`~/.venvs/main`) remains the runtime; its *location* becomes a `mneme.yaml`
+- The venv model (`~/.venvs/main`) remains the runtime; its *location* becomes a `hypostasis.yaml`
   value rather than a hardcoded assumption.
 - `mneme` owns the lifecycle of services it can start locally (rpg-lib server,
   turbovecdb-service). The DGX endpoint, when it runs on separate hardware (`192.0.2.10`), is
@@ -265,10 +265,10 @@ services come up in order and pass reachability; run bring-down and confirm they
 ## Constitution Alignment
 
 This feature is the first application of the constitution; each principle has a concrete hook
-here: single authority + no stale copies (**V**) is `mneme.yaml` + coherent renders;
+here: single authority + no stale copies (**V**) is `hypostasis.yaml` + coherent renders;
 no Infrastructure Proxy (**II**) is FR-002; observed-not-declared status (**I**) is FR-007/008;
 manager-is-a-transient-viewer (**IV**) is "delete mneme, components still run from rendered
-config; reinstall reconstructs from `mneme.yaml`"; render-into-native-config for low coupling
+config; reinstall reconstructs from `hypostasis.yaml`"; render-into-native-config for low coupling
 (**VII**) is the default mechanism, subordinate to V per the V-over-VII precedence rule.
 
 ## Clarifications
@@ -278,7 +278,7 @@ config; reinstall reconstructs from `mneme.yaml`"; render-into-native-config for
   turbovecdb(+service), CampaignGenerator, rpg-lib, gm-assistant). One reproducible install of
   the whole system, not a vertical slice.
 - **FR-012 — service lifecycle** → **`mneme` owns lifecycle**: `up` starts services in
-  declared dependency order, `down` stops them; order lives in `mneme.yaml`. (DGX endpoint
+  declared dependency order, `down` stops them; order lives in `hypostasis.yaml`. (DGX endpoint
   on separate hardware is an external dependency to order/health-check, not start — confirm in
   `/speckit.plan`.)
 
