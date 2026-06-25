@@ -14,9 +14,13 @@ machines:
     endpoint: http://192.0.2.10:8001/v1
     default_model: Qwen/Qwen3-Next-80B-A3B-Instruct-FP8
 
-data_roots:                      # referenced only — data-plane is out of scope (001)
+data_roots:                      # external paths mneme references (not owned; data-plane contents stay out of scope)
   fivetools: ~/src/5etools-kostadis/data
   campaigns: ~/campaigns
+  homebrew: ~/src/homebrew-private
+  fivetools_mcp_index: ~/src/5etools-kostadis/mcp/index.js   # 5etools MCP entry point
+  pdf_translators: ~/src/mytools/pdf-translators             # sibling mytools tool (validation)
+  rpg_library_db: ~/src/mytools/rpg-lib/rpg_library.db       # rpg-lib's DB (location referenced; contents are data-plane)
 
 services:
   dgx:                           # external dependency — health-checked, never started (D2)
@@ -62,11 +66,11 @@ components:                      # six in-scope components (FR-011) + claudelib 
     pin: f432a8b419455a6fe11de2d98ca25f77d95c47f4
     config_template: rpg_lib.config.yaml.j2
     config_target: ~/src/mytools/rpg-lib/rpg_lib.config.yaml
-  CampaignGenerator:
+  CampaignGenerator:             # SERVICE (+ many CLI tools); reads mneme wiring from config/wiring.yaml
     source: { path: ~/src/CampaignGenerator }
     pin: 09622f6b185b9d9d2af9ece6ee7e38a4759d3d42
-    config_template: campaigngenerator.config.yaml.j2
-    config_target: ~/src/CampaignGenerator/config/config.yaml
+    config_template: campaigngenerator.wiring.yaml.j2
+    config_target: ~/src/CampaignGenerator/config/wiring.yaml
   gm_assistant:                  # reads CampaignGenerator's rendered config (T021); no own template
     source: { path: ~/campaigns/gm-assistant }
     pin: fb94fe0390f91fdb1acbf4429fe6a8ffa9990aca

@@ -1,0 +1,11 @@
+{# Rendered from mneme.yaml — do not edit (see header stamp). #}
+# CampaignGenerator EXTERNAL wiring (mneme-owned). Internal config (system_prompt,
+# agents, documents, log_dir) stays hand-edited in config.yaml.
+dgx_endpoint: {{ machines.dgx.endpoint }}
+dgx_model: {{ machines.dgx.default_model }}
+rpg_library_url: {{ services.rpg_lib.url }}
+fivetools_data_root: {{ data_roots.fivetools }}
+fivetools_mcp_index: {{ data_roots.fivetools_mcp_index }}
+rpg_library_db: {{ data_roots.rpg_library_db }}
+pdf_translators: {{ data_roots.pdf_translators }}
+homebrew_private: {{ data_roots.homebrew }}

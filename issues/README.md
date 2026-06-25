@@ -6,3 +6,4 @@ Local issue tracker (mneme has no GitHub remote — local-first). One file per i
 | # | Status | Title |
 |---|---|---|
 | [0001](0001-config-ownership-boundary.md) | open (deferred) | Config ownership boundary: `documents` / workspace split |
+| [0002](0002-cg-remaining-external-constants.md) | resolved | CG: remaining external constants (SC-002 tail) |
