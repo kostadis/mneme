@@ -19,8 +19,12 @@ The doctrine behind it lives in `.specify/memory/constitution.md`; the design in
 ## Install
 
 ```bash
-pip install .          # provides two commands: `hypostasis` and `mneme`
+pip install .                          # provides two commands: `hypostasis` and `mneme`
+cp hypostasis.example.yaml hypostasis.yaml   # then edit it for your environment
 ```
+
+`hypostasis.yaml` is your real environment config (endpoints, paths) and is **gitignored** —
+keep internal values local. The committed `hypostasis.example.yaml` uses placeholder values.
 
 ## `hypostasis` — configure the environment (run once)
 

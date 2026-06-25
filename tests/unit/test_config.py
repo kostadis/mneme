@@ -32,7 +32,7 @@ def valid_raw(tmp_path) -> dict:
 
 
 def write(tmp_path, raw) -> str:
-    path = tmp_path / "hypostasis.yaml"
+    path = tmp_path / "hypostasis.example.yaml"
     path.write_text(yaml.safe_dump(raw))
     return str(path)
 
@@ -132,7 +132,7 @@ def test_repo_hypostasis_yaml_is_valid():
     import pathlib
 
     repo_root = pathlib.Path(__file__).resolve().parents[2]
-    entity = cfg.load(repo_root / "hypostasis.yaml")
+    entity = cfg.load(repo_root / "hypostasis.example.yaml")
     # what hypostasis installs: dgxlib, turbovecdb, mempalace, CampaignGenerator
     # (rpg-lib/claudelib external #0003; gm-assistant is workspace content, not a component)
     assert len(entity.components) == 4

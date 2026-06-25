@@ -24,3 +24,6 @@ Thumbs.db
 
 # mneme runtime bookkeeping (disposable, non-authoritative — Principle IV)
 .mneme/run/
+
+# your real environment config (keep internal values local; copy from hypostasis.example.yaml)
+hypostasis.yaml
