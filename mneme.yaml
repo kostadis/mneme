@@ -31,13 +31,9 @@ services:
     url: http://192.0.2.10:8001/v1
     managed: false
     health: { type: http, path: /v1/models }
-  turbovecdb:
-    url: http://127.0.0.1:8077
-    port: 8077
-    managed: true
-    health: { type: http, path: /health }
-    start: "turbovecdb-service --port 8077"
-    stop: "pkill -f turbovecdb-service"
+  # NOTE: no turbovecdb service here — the :8077 HTTP layer is llm_wiki's, and really a
+  # turbovecdb feature (turbovecdb#4), not a mneme-managed service. mempalace uses turbovec
+  # EMBEDDED (connect(path)), so nothing in the mneme set needs the HTTP service.
   rpg_lib:                       # rpg-lib's library_server (console script `rpg-library`)
     url: http://localhost:8000
     port: 8000
@@ -53,11 +49,9 @@ components:                      # six in-scope components (FR-011) + claudelib 
   claudelib:                     # LIBRARY (no service / lifecycle); rpg_lib depends on it
     source: { path: ~/src/mytools/claudelib }
     pin: f432a8b419455a6fe11de2d98ca25f77d95c47f4
-  turbovecdb:
-    source: { path: ~/src/turbovecdb }
-    pin: fea4d804b5bbc744c17afcf3e7a75f6e7c9edb49
-    config_template: turbovecdb.config.yaml.j2
-    config_target: ~/src/turbovecdb/turbovecdb.config.yaml
+  turbovecdb:                    # mneme-private storage engine (embedded; mempalace sits on it). Install-only —
+    source: { path: ~/src/turbovecdb }  # no infra constants, no config to render. The :8077 HTTP service is
+    pin: fea4d804b5bbc744c17afcf3e7a75f6e7c9edb49  # a turbovecdb feature, not a mneme component (turbovecdb#4).
   mempalace:                     # mneme-native internal DB, but ALREADY env-driven — no file render.
     source: { path: ~/src/mempalace }  # wiring via top-level `env:`; stored memories are data-plane (out of scope).
     pin: 46fcfc2adf50e31f68889edaf8965a7cb2adcfff
@@ -77,4 +71,4 @@ components:                      # six in-scope components (FR-011) + claudelib 
 
 order:
   install: [dgxlib, claudelib, turbovecdb, mempalace, rpg_lib, CampaignGenerator, gm_assistant]
-  startup: [dgx, turbovecdb, rpg_lib]   # dgx (external) gated first; managed ones started in order
+  startup: [dgx, rpg_lib]   # dgx (external) gated first; rpg_lib started after. (turbovecdb has no managed service — turbovecdb#4)
