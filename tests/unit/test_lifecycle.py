@@ -78,6 +78,24 @@ def test_up_gates_on_unreachable_substrate(tmp_path):
     assert "substrate not ready" in str(ei.value) and "dgx" in str(ei.value)
 
 
+def test_up_dir_override_wins_over_config(tmp_path):
+    e = make_entity(tmp_path)  # data_roots.campaigns has oota/
+    explicit = tmp_path / "elsewhere" / "MyCampaign"
+    explicit.mkdir(parents=True)
+    res = lifecycle.up(
+        e, "MyCampaign", campaign_dir=str(explicit), prober=all_up, render=False, dry_run=True
+    )
+    assert res.campaign_dir == str(explicit)
+    assert str(explicit) in res.command
+
+
+def test_up_dir_override_missing_fails(tmp_path):
+    e = make_entity(tmp_path)
+    with pytest.raises(lifecycle.LifecycleError) as ei:
+        lifecycle.up(e, "X", campaign_dir=str(tmp_path / "nope"), prober=all_up, render=False, dry_run=True)
+    assert "not found" in str(ei.value)
+
+
 def test_up_campaign_not_found(tmp_path):
     e = make_entity(tmp_path, make_campaign=False)
     with pytest.raises(lifecycle.LifecycleError) as ei:

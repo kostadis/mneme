@@ -34,13 +34,20 @@ def _run(cmd: list[str], env: dict) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, env=env, capture_output=True, text=True)
 
 
-def _campaign_dir(entity: ConfigEntity, campaign: str) -> Path:
+def _campaign_dir(entity: ConfigEntity, campaign: str, override: str | None = None) -> Path:
+    """Resolve the campaign workspace: an explicit ``override`` path wins; otherwise
+    the campaign NAME is resolved against ``data_roots.campaigns`` (config-based)."""
+    if override:
+        cdir = Path(override).expanduser()
+        if not cdir.is_dir():
+            raise LifecycleError(f"campaign workspace not found: {cdir}")
+        return cdir
     root = entity.data_roots.get("campaigns")
     if root is None:
-        raise LifecycleError("hypostasis.yaml has no data_roots.campaigns")
+        raise LifecycleError("hypostasis.yaml has no data_roots.campaigns (or pass --dir)")
     cdir = Path(root) / campaign
     if not cdir.is_dir():
-        raise LifecycleError(f"campaign workspace not found: {cdir}")
+        raise LifecycleError(f"campaign workspace not found: {cdir} (or pass --dir)")
     return cdir
 
 
@@ -88,6 +95,7 @@ def up(
     entity: ConfigEntity,
     campaign: str,
     *,
+    campaign_dir: str | None = None,
     session: str | None = None,
     port: int = 5000,
     prober: Prober = _probe.reachable,
@@ -95,7 +103,7 @@ def up(
     render: bool = True,
     dry_run: bool = False,
 ) -> UpResult:
-    cdir = _campaign_dir(entity, campaign)
+    cdir = _campaign_dir(entity, campaign, campaign_dir)
     deps = [n for n in entity.order.startup if entity.services.get(n) is not None]
     cmd = [str(_cg_source(entity) / "start"), "--campaign-dir", str(cdir), "--port", str(port)]
     if session:

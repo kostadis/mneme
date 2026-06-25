@@ -47,7 +47,10 @@ def _load_or_exit(config_path: str) -> ConfigEntity:
 
 @app.command()
 def up(
-    campaign: str = typer.Argument(..., help="Campaign name under data_roots.campaigns"),
+    campaign: str = typer.Argument(..., help="Campaign name (resolved under data_roots.campaigns)"),
+    campaign_dir: str = typer.Option(
+        None, "--dir", "-d", help="Explicit campaign workspace path (overrides the name lookup)"
+    ),
     session: str = typer.Option(None, "--session", "-s", help="Session dir (rel/absolute)"),
     port: int = typer.Option(5000, "--port", "-p"),
     config: str = _config_opt,
@@ -56,7 +59,9 @@ def up(
     """Bring CampaignGenerator up for CAMPAIGN (gate deps, render wiring, export env, start)."""
     entity = _load_or_exit(config)
     try:
-        result = lifecycle.up(entity, campaign, session=session, port=port, dry_run=dry_run)
+        result = lifecycle.up(
+            entity, campaign, campaign_dir=campaign_dir, session=session, port=port, dry_run=dry_run
+        )
     except lifecycle.LifecycleError as e:
         typer.echo(f"FAIL up: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
