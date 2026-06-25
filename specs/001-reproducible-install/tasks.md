@@ -236,7 +236,7 @@ the prior. The container acid test in T034 is the definitive SC-005 proof.
 
 ## Tracked Fixes (discovered during implementation)
 
-- [ ] T036 [US1] Make `~/src/mytools/rpg-lib` pip-installable — add a `pyproject.toml`
+- [X] T036 [US1] Make `~/src/mytools/rpg-lib` pip-installable — add a `pyproject.toml`
   (packaging metadata) so `mneme install` can install it at a pin like the other components.
   **Discovered during the T013 smoke test**: `pip install ~/src/mytools/rpg-lib` fails with
   "Neither 'setup.py' nor 'pyproject.toml' found." Blocks the rpg_lib leg of install and is a
