@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [x] No [NEEDS CLARIFICATION] markers remain — resolved 2026-06-24 (FR-011 all six; FR-012 platform owns lifecycle)
+- [x] No [NEEDS CLARIFICATION] markers remain — resolved 2026-06-24 (FR-011 all six; FR-012 mneme owns lifecycle)
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -32,9 +32,9 @@
 ## Notes
 
 - All [NEEDS CLARIFICATION] markers resolved 2026-06-24 (FR-011 all six components; FR-012
-  platform owns service lifecycle). Spec is complete and validated; ready for `/speckit.plan`
+  mneme owns service lifecycle). Spec is complete and validated; ready for `/speckit.plan`
   (or `/speckit.clarify` if you want a deeper pass first).
 - FR-009's coherence *mechanism* is deliberately deferred to `/speckit.plan` (HOW), not a spec
   gap — the requirement fixes the guaranteed behavior.
 - One sub-question carried into `/speckit.plan`: whether any DGX-side process (separate hardware)
-  is in `platform`'s lifecycle scope or treated purely as an external dependency.
+  is in `mneme`'s lifecycle scope or treated purely as an external dependency.

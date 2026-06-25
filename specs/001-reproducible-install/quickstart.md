@@ -1,18 +1,18 @@
 # Quickstart — Validate Reproducible Install & Unified Config
 
 Runnable validation scenarios that prove the feature works end-to-end. Each maps to a
-Success Criterion in [spec.md](./spec.md). Run from the repo root with the `platform` CLI
+Success Criterion in [spec.md](./spec.md). Run from the repo root with the `mneme` CLI
 installed in the target venv. See [contracts/cli.md](./contracts/cli.md) for command details.
 
 ## Prerequisites
-- A throwaway/fresh venv path set in `platform.yaml` `venv:`.
-- `platform.yaml` filled in for this environment (the only file you edit). See
-  [contracts/platform-yaml.schema.md](./contracts/platform-yaml.schema.md).
+- A throwaway/fresh venv path set in `mneme.yaml` `venv:`.
+- `mneme.yaml` filled in for this environment (the only file you edit). See
+  [contracts/mneme-yaml.schema.md](./contracts/mneme-yaml.schema.md).
 - Component sources reachable at their declared `source` + `pin`.
 
 ## Scenario 1 — Reproducible install from one source of truth (SC-001, SC-002)
 ```
-platform install
+mneme install
 ```
 **Expect**: exit 0; venv created; all six components installed at their pins; every
 `config_target` written with a `source-sha256` stamp.
@@ -25,40 +25,40 @@ grep -rn "192.0.2.10\|5etools-kostadis/data\|localhost:8000\|8077\|.venvs/main" 
 
 ## Scenario 2 — Bring the system up in order (SC-006)
 ```
-platform up
+mneme up
 ```
 **Expect**: exit 0; DGX endpoint health-checked first; managed services (`turbovecdb`,
 `rpg_lib`) started in `order.startup` and each reachable before dependents. No manual
 service-start steps used.
 ```
-platform down
+mneme down
 ```
 **Expect**: managed services stopped; external DGX untouched.
 
 ## Scenario 3 — Honest status, including drift (SC-003)
 ```
-platform up && platform status
+mneme up && mneme status
 ```
 **Expect**: exit 0; every component row shows observed version == pin (PASS); every service
 reachable (PASS).
 **Now force a lie** — stop a service out of band, then:
 ```
-platform status
+mneme status
 ```
 **Expect**: exit 1; the stopped service row is `FAIL` (unreachable), not assumed up.
-**Version drift** — install a different version of one component by hand, then `platform status`
+**Version drift** — install a different version of one component by hand, then `mneme status`
 **Expect**: exit 1; that component row `FAIL` (installed ≠ pin).
 
 ## Scenario 4 — Change one value, everything follows, no stale copies (SC-004)
 ```
-# edit platform.yaml: change machines.dgx.endpoint to a new IP — ONE edit, one file
-platform apply
+# edit mneme.yaml: change machines.dgx.endpoint to a new IP — ONE edit, one file
+mneme apply
 ```
 **Expect**: exit 0; every `DerivedConfig` referencing the DGX endpoint regenerated with a
 fresh stamp; affected managed services restarted.
 **Verify no stale copy**:
 ```
-platform status            # no render drift; all PASS
+mneme status            # no render drift; all PASS
 grep -rn "<old-ip>" <all config_targets>   # zero matches
 ```
 **Expect**: nothing still references the old endpoint (SC-004 = 100% propagation, 0 stale).
@@ -73,22 +73,22 @@ the install target** — containerizing the system as a deployment model would b
 ```
 cd specs/001-reproducible-install/validation
 docker compose build
-docker compose run --rm platform-validate     # runs install -> up -> status -> apply loop
+docker compose run --rm mneme-validate     # runs install -> up -> status -> apply loop
 ```
-**Expect**: inside the clean container, from `platform.yaml` alone, the system installs at pins,
+**Expect**: inside the clean container, from `mneme.yaml` alone, the system installs at pins,
 comes up on canonical ports (`8000`/`8077`, no host conflict — separate netns), and `status`
 is all-PASS — with **zero** per-component edits.
 
 **DGX sub-decision (test both ways)** — set in the compose env:
-- *Real DGX reachable*: `platform up` health-checks the real endpoint; change
+- *Real DGX reachable*: `mneme up` health-checks the real endpoint; change
   `machines.dgx.endpoint` and confirm it follows (doubles as SC-004).
-- *DGX stubbed/unreachable*: confirm `platform status` reports the real DGX **unreachable
+- *DGX stubbed/unreachable*: confirm `mneme status` reports the real DGX **unreachable
   honestly** (exit 1, FAIL row) rather than wedging or showing a false green.
 
 *(A second physical machine is an equivalent but higher-friction proof; the container gives the
 same guarantee on demand.)*
 
 ## Failure-honesty checks (Principle I / FR-006, FR-014)
-- Point a component `pin` at a non-existent ref → `platform install` exits 1 and **names** it.
-- Make a `managed` service's `start` command fail → `platform up` exits 1 and names the service;
+- Point a component `pin` at a non-existent ref → `mneme install` exits 1 and **names** it.
+- Make a `managed` service's `start` command fail → `mneme up` exits 1 and names the service;
   it does not report the system up.

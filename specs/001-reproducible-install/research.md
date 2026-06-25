@@ -1,47 +1,56 @@
 # Phase 0 Research — Reproducible Install & Unified Config
 
 Format per decision: **Decision** / **Rationale** / **Alternatives considered**.
-Two decisions are marked **⚠ RATIFY** — they are boundary/precision calls reserved for
-the human author (Constitution Principle VIII); the rest are conventional.
+Two decisions (D1, D2) were boundary/precision calls reserved for the human author
+(Constitution Principle VIII); **both RATIFIED 2026-06-24** by Kostadis — as written, no
+overrides. The rest are conventional.
 
 ---
 
-## D1 — FR-009 coherence mechanism (no stale copies) ⚠ RATIFY
+## D1 — FR-009 coherence mechanism (no stale copies) ✅ RATIFIED 2026-06-24
 
-**Decision**: Guarantee coherence by **`platform apply` = re-render all derived configs +
-restart the affected managed services**. Editing `platform.yaml` and running `apply` (or
+**Decision**: Guarantee coherence by **`mneme apply` = re-render all derived configs +
+restart the affected managed services**. Editing `mneme.yaml` and running `apply` (or
 `install`) is the only supported write path. Each rendered file carries a header stamping
-the **SHA-256 of the `platform.yaml` subtree it derived from**; `platform status` flags any
+the **SHA-256 of the `mneme.yaml` subtree it derived from**; `mneme status` flags any
 rendered file whose stamped hash ≠ the current source as drift (FR-010). Components are
 **not** asked to self-validate freshness.
 
-**Rationale**: The spec's lifecycle decision (FR-012, `platform` owns up/down) makes this the
+**Rationale**: The spec's lifecycle decision (FR-012, `mneme` owns up/down) makes this the
 *simplest coordinate* (Principle VIII): coherence falls out of restart rather than needing a
 new cache-invalidation subsystem. Restarting a managed service after re-render eliminates the
 residual "stale in-memory copy" case the constitution flagged. Keeping validation out of the
-components honors low coupling (Principle VII) — they stay ignorant of `platform`. The
+components honors low coupling (Principle VII) — they stay ignorant of `mneme`. The
 hash-stamp is the cheap detector for *out-of-band* edits (someone hand-edits a rendered file or
-`platform.yaml` without `apply`), caught by `status` as a FAIL rather than silently used
+`mneme.yaml` without `apply`), caught by `status` as a FAIL rather than silently used
 (Principle I). This is the V-over-VII precedence applied: we force a behavior change in *how
-services start* (platform-owned restart), not a new dependency in each component.
+services start* (mneme-owned restart), not a new dependency in each component.
+
+**Ratification note (2026-06-24)**: ratified as written. Accepted limitation acknowledged:
+the coherence *guarantee* holds only for services `mneme` manages and restarts; an
+out-of-band consumer (hand-started process, non-reloading cache) is caught *reactively* by
+`status` drift-FAIL, not *prevented*. A component-side startup hash check (the rejected
+alternative) was considered and explicitly declined to keep the six components decoupled from
+the mneme schema; it may be added in a later feature if a real stale-copy incident shows
+the manager-side guarantee is insufficient.
 
 **Alternatives considered**:
 - *Each component validates its rendered config's hash at startup and refuses to run on
-  mismatch* — strongest in-component guarantee, but pushes platform-awareness into every repo
-  (couples them to the platform schema; tension with VII). Rejected as the primary mechanism;
+  mismatch* — strongest in-component guarantee, but pushes mneme-awareness into every repo
+  (couples them to the mneme schema; tension with VII). Rejected as the primary mechanism;
   retained conceptually as the `status` drift check, done by the manager instead.
-- *Components read `platform.yaml` directly (no render)* — eliminates the cache entirely but
-  couples all six components to one schema and makes `platform` non-transient (violates IV).
+- *Components read `mneme.yaml` directly (no render)* — eliminates the cache entirely but
+  couples all six components to one schema and makes `mneme` non-transient (violates IV).
   Rejected.
 - *No restart, rely on file re-render only* — leaves long-running processes on stale in-memory
   config. Rejected (this is exactly the failure the principle forbids).
 
 ---
 
-## D2 — DGX-side process scope ⚠ RATIFY
+## D2 — DGX-side process scope ✅ RATIFIED 2026-06-24
 
 **Decision**: In 001 the **DGX endpoint** (`192.0.2.10:8001`, separate hardware) is an
-**external dependency**. `platform up` does **not** start a process on the DGX; it
+**external dependency**. `mneme up` does **not** start a process on the DGX; it
 **health-checks** the endpoint and **orders** local services after confirming it is reachable.
 If unreachable at `up`, report it (and fail or warn per the `up` contract), never assume up.
 
@@ -52,7 +61,7 @@ honest reachability) and Principle VI (federated — a down external dep yields 
 wedged run). A later feature can add DGX-side lifecycle if wanted.
 
 **Alternatives considered**:
-- *`platform` SSHes to the DGX and starts the vLLM/endpoint process* — deferred to a future
+- *`mneme` SSHes to the DGX and starts the vLLM/endpoint process* — deferred to a future
   spec; out of scope for a reproducible-install MVP.
 
 ---
@@ -72,8 +81,8 @@ more verbose than typer).
 
 ## D4 — Config rendering engine
 
-**Decision**: `jinja2` templates, one per component, living in `platform/templates/`, rendered
-from the validated `platform.yaml` model into each component's **native** config format
+**Decision**: `jinja2` templates, one per component, living in `mneme/templates/`, rendered
+from the validated `mneme.yaml` model into each component's **native** config format
 (`config.yaml`, `.env`, `models.yaml`, etc.).
 
 **Rationale**: Components keep their existing native config readers (Principle VII, low
@@ -87,14 +96,14 @@ YAML); a shared settings library imported by components (rejected — coupling, 
 
 ## D5 — Version pinning & install execution
 
-**Decision**: Pins live in `platform.yaml` per component as either a released version
+**Decision**: Pins live in `mneme.yaml` per component as either a released version
 (`pin: 3.3.5`) or a git ref (`pin: <sha-or-tag>`) with a `source` (PyPI or a local path / git
-URL). `platform install` resolves and installs each into the venv **non-editable at the pin**
+URL). `mneme install` resolves and installs each into the venv **non-editable at the pin**
 (`pip install <pkg>==<ver>` or `pip install git+<url>@<ref>`), in dependency order. Editable
 installs (`-e`) are eliminated for in-scope components (kills the silent-drift failure, FR-004).
 
 **Rationale**: Non-editable pinned installs make a `git checkout` in one repo unable to change
-another's behavior. Keeping pins in `platform.yaml` (not a lockfile) preserves the single
+another's behavior. Keeping pins in `mneme.yaml` (not a lockfile) preserves the single
 authority (Principle V); the installed version is then *observed* live by `status`, not stored.
 
 **Alternatives**: `uv` instead of `pip` (faster; acceptable drop-in — record as an
@@ -105,7 +114,7 @@ authority, see Complexity Tracking in plan.md).
 
 ## D6 — Dependency / startup order (the DAG)
 
-**Decision**: Declare both **install order** and **startup order** in `platform.yaml`
+**Decision**: Declare both **install order** and **startup order** in `mneme.yaml`
 (explicit, not inferred). Seed values from the known coupling:
 - Install (libs before consumers): `dgxlib` (leaf) → `turbovecdb` → `mempalace` →
   `rpg-lib` → `CampaignGenerator` → `gm-assistant`.
@@ -123,9 +132,9 @@ honest and reviewable).
 
 ## D7 — Service lifecycle implementation (up/down)
 
-**Decision**: `platform up` starts each managed local service as a tracked subprocess (record
-PID + log path under a `platform`-owned runtime dir, e.g. `~/.platform/run/`), in declared
-order, health-checking each before starting dependents. `platform down` stops them by tracked
+**Decision**: `mneme up` starts each managed local service as a tracked subprocess (record
+PID + log path under a `mneme`-owned runtime dir, e.g. `~/.mneme/run/`), in declared
+order, health-checking each before starting dependents. `mneme down` stops them by tracked
 PID. The runtime/PID dir is **disposable bookkeeping, not authoritative state** (Principle IV —
 on loss, `status` rediscovers liveness by probing; it is not a second source of truth).
 
@@ -139,7 +148,7 @@ long-running manager component — rejected, conflicts with "manager is transien
 
 ## D8 — Health / reachability checks
 
-**Decision**: Per-service check declared in `platform.yaml` (default: TCP/HTTP probe of the
+**Decision**: Per-service check declared in `mneme.yaml` (default: TCP/HTTP probe of the
 service's URL/port; HTTP GET on a known path where one exists, e.g. the DGX `/v1` and
 turbovecdb/rpg-lib health routes). `status` and `up` use the same check.
 
@@ -152,7 +161,7 @@ no divergence between what `up` waits for and what `status` reports (Principle I
 
 **Decision**: `status` reads each component's installed version from the venv
 (`importlib.metadata.version()` for packages; `git rev-parse` in the source dir for
-git-pinned local installs) and compares to the `platform.yaml` pin; mismatch = FAIL.
+git-pinned local installs) and compares to the `mneme.yaml` pin; mismatch = FAIL.
 
 **Rationale**: Observed-from-silicon, never echoed from the declaration (Principle I). No stored
 "installed version" file (would be a second authority).
@@ -166,21 +175,21 @@ under the feature) is the **canonical SC-005 reproducibility test** and the home
 `install → up → status → change-value → apply` integration loop, run in true isolation. The
 container is a **proof environment, NOT a deployment target** for 001.
 
-**Rationale**: SC-005 claims one `platform.yaml` reproduces the system on a fresh environment
+**Rationale**: SC-005 claims one `mneme.yaml` reproduces the system on a fresh environment
 with no manual edits. A container is the most honest "fresh": no pre-existing `~/.venvs/main`,
 no `~/src/*` checkouts, none of the operator discipline that currently *hides* the
-fragmentation. If `platform install` brings the system up in a clean container, the
+fragmentation. If `mneme install` brings the system up in a clean container, the
 Infrastructure-Proxy constants (II) and Fragmented-State config (III) are *proven*
 externalized, not merely appearing to work on a configured box. It also resolves the
 port-collision caveat of same-host isolation: the container is its own network namespace, so it
 can use the canonical ports (`8000`, `8077`) with zero conflict against live host services.
 Composes with (does not replace) git-ref/worktree source isolation: the container gets the
-component **sources at their pins**; `platform install` does the rest.
+component **sources at their pins**; `mneme install` does the rest.
 
 **DGX sub-decision (test both ways — deliberate)**: per D2 the DGX is an external dependency
-`platform` health-checks but does not start. Inside the container:
+`mneme` health-checks but does not start. Inside the container:
 1. **Reach the real DGX** over the network → exercises the real external-dependency path; also
-   lets us point `platform.yaml` at a different IP and confirm it follows (this *is* SC-004).
+   lets us point `mneme.yaml` at a different IP and confirm it follows (this *is* SC-004).
 2. **No DGX reachability** → use a stub endpoint, and confirm `status` reports the real one
    **unreachable honestly** (Principle I — no False Green Dashboard) rather than wedging. Worth
    seeing this failure mode on purpose.

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mneme"
+version = "0.1.0"
+description = "Single-authority installer/orchestrator for the campaign/DGX system"
+requires-python = ">=3.11"
+dependencies = [
+  "typer>=0.12",
+  "PyYAML>=6",
+  "jinja2>=3.1",
+  "httpx>=0.27",
+  "packaging>=24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+mneme = "mneme.cli:app"
+
+[tool.setuptools]
+packages = ["mneme"]
+
+[tool.setuptools.package-data]
+mneme = ["templates/*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+markers = [
+  "slow: tests that create a real venv / install (deselect with -m 'not slow')",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

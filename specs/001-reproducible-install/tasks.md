@@ -7,7 +7,7 @@ description: "Task list for 001-reproducible-install"
 **Input**: Design documents from `specs/001-reproducible-install/`
 
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/cli.md,
-contracts/platform-yaml.schema.md, quickstart.md
+contracts/mneme-yaml.schema.md, quickstart.md
 
 **Tests**: INCLUDED — plan.md specifies a pytest approach (golden-file render, schema
 validation, drift detection, integration loop). Test tasks precede their implementation.
@@ -23,7 +23,7 @@ acceptance scenario 2 (the grep test) is part of US1's done-ness.
 
 ## Path Conventions
 
-Single-project CLI per plan.md: `platform/` package + `platform.yaml` at repo root;
+Single-project CLI per plan.md: `mneme/` package + `mneme.yaml` at repo root;
 `tests/` at repo root; `specs/001-reproducible-install/validation/` for the SC-005 harness.
 Cross-repo edits target `~/src/CampaignGenerator`, `~/src/dgx`, `~/src/mempalace`,
 `~/src/mytools/rpg-lib`, `~/src/turbovecdb`(`-service`), `~/campaigns/gm-assistant`.
@@ -34,9 +34,9 @@ Cross-repo edits target `~/src/CampaignGenerator`, `~/src/dgx`, `~/src/mempalace
 
 **Purpose**: Project initialization and structure.
 
-- [ ] T001 Create the `platform/` package layout and `pyproject.toml` at repo root (deps: typer, PyYAML, jinja2, httpx, packaging; dev: pytest, ruff) per plan.md structure
-- [ ] T002 [P] Configure pytest + ruff/format and the `tests/{unit,integration}/` layout in pyproject.toml / pytest.ini
-- [ ] T003 [P] Author a skeleton authoritative `platform.yaml` at repo root from contracts/platform-yaml.schema.md (all six components + services + order; `pin:` values left as TODO placeholders, filled in T015)
+- [X] T001 Create the `mneme/` package layout and `pyproject.toml` at repo root (deps: typer, PyYAML, jinja2, httpx, packaging; dev: pytest, ruff) per plan.md structure
+- [X] T002 [P] Configure pytest + ruff/format and the `tests/{unit,integration}/` layout in pyproject.toml / pytest.ini
+- [X] T003 [P] Author a skeleton authoritative `mneme.yaml` at repo root from contracts/mneme-yaml.schema.md (all six components + services + order; `pin:` values left as TODO placeholders, filled in T015)
 
 ---
 
@@ -46,11 +46,11 @@ Cross-repo edits target `~/src/CampaignGenerator`, `~/src/dgx`, `~/src/mempalace
 
 **⚠️ CRITICAL**: No user story can begin until this phase is complete.
 
-- [ ] T004 [P] Implement config entity dataclasses (ConfigEntity, Machine, Service, Component, DerivedConfig) in platform/models.py per data-model.md
-- [ ] T005 Implement `platform.yaml` loader with `~`/env expansion in platform/config.py (depends on T004)
-- [ ] T006 Implement validation in platform/config.py — schema, referential integrity, acyclicity, exact-pin (reject ranges/editable), single-authority (no lockfile/write-back), path sanity (invariants 1–6 of the schema contract) (depends on T005)
-- [ ] T007 Implement the CLI spine in platform/cli.py — typer app, `--config`/`--json`, exit-code convention (0 ok / 1 runtime FAIL / 2 invalid config), subcommands stubbed (depends on T005)
-- [ ] T008 [P] Unit tests for config validation (valid; missing field; dangling order ref; cycle; range/editable pin; injected second authority) in tests/unit/test_config.py (depends on T006)
+- [X] T004 [P] Implement config entity dataclasses (ConfigEntity, Machine, Service, Component, DerivedConfig) in mneme/models.py per data-model.md
+- [X] T005 Implement `mneme.yaml` loader with `~`/env expansion in mneme/config.py (depends on T004)
+- [X] T006 Implement validation in mneme/config.py — schema, referential integrity, acyclicity, exact-pin (reject ranges/editable), single-authority (no lockfile/write-back), path sanity (invariants 1–6 of the schema contract) (depends on T005)
+- [X] T007 Implement the CLI spine in mneme/cli.py — typer app, `--config`/`--json`, exit-code convention (0 ok / 1 runtime FAIL / 2 invalid config), subcommands stubbed (depends on T005)
+- [X] T008 [P] Unit tests for config validation (valid; missing field; dangling order ref; cycle; range/editable pin; injected second authority) in tests/unit/test_config.py (depends on T006)
 
 **Checkpoint**: Foundation ready — the authority loads and validates; CLI dispatches.
 
@@ -58,34 +58,34 @@ Cross-repo edits target `~/src/CampaignGenerator`, `~/src/dgx`, `~/src/mempalace
 
 ## Phase 3: User Story 1 - Reproducible install from one source of truth (Priority: P1) 🎯 MVP
 
-**Goal**: From one edited `platform.yaml`, one command installs all six components at pins
+**Goal**: From one edited `mneme.yaml`, one command installs all six components at pins
 and renders each component's native config; components read config, not hardcoded constants.
 
-**Independent Test**: On a fresh venv, with only `platform.yaml` edited, run `platform install`
+**Independent Test**: On a fresh venv, with only `mneme.yaml` edited, run `mneme install`
 and confirm every component is at its pin with a stamped rendered config, and the grep test
 (SC-002) finds the five constants only in config/templates, never in logic.
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Golden-file render unit tests (`platform.yaml` subtree → expected native config + `source-sha256` stamp) in tests/unit/test_render.py
-- [ ] T010 [P] [US1] Integration test for install (throwaway venv → components at pins + config_targets stamped; unresolved pin/partial failure exits non-zero and names the component, FR-006) in tests/integration/test_install.py
+- [X] T009 [P] [US1] Golden-file render unit tests (`mneme.yaml` subtree → expected native config + `source-sha256` stamp) in tests/unit/test_render.py
+- [X] T010 [P] [US1] Integration test for install (throwaway venv → components at pins + config_targets stamped; unresolved pin/partial failure exits non-zero and names the component, FR-006) in tests/integration/test_install.py
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Implement the render engine (jinja2; write to `config_target`; stamp `# platform-rendered; source-sha256: <hash>; do-not-edit` header) in platform/render.py (depends on T006)
-- [ ] T012 [P] [US1] Create per-component jinja2 templates in platform/templates/ (campaigngenerator.config.yaml.j2, mempalace.yaml.j2, dgxlib.models.yaml.j2, rpg-lib, turbovecdb(-service)) per the config_target paths in the schema contract
-- [ ] T013 [US1] Implement the installer (create/validate venv; install each component non-editable at its pin via pip/uv shell-out in `order.install`; fail-loud naming) in platform/install.py (depends on T006)
-- [ ] T014 [US1] Wire `platform install` in platform/cli.py to install.py + render.py; verify installed + rendered before exit 0 (depends on T011, T012, T013)
-- [ ] T015 [US1] Fill real `pin` (git shas / released versions) + `source` for all six components in platform.yaml (depends on T013)
+- [X] T011 [P] [US1] Implement the render engine (jinja2; write to `config_target`; stamp `# mneme-rendered; source-sha256: <hash>; do-not-edit` header) in mneme/render.py (depends on T006)
+- [X] T012 [P] [US1] Create per-component jinja2 templates in mneme/templates/ (campaigngenerator.config.yaml.j2, mempalace.yaml.j2, dgxlib.models.yaml.j2, rpg-lib, turbovecdb(-service)) per the config_target paths in the schema contract
+- [X] T013 [US1] Implement the installer (create/validate venv; install each component non-editable at its pin via pip/uv shell-out in `order.install`; fail-loud naming) in mneme/install.py (depends on T006)
+- [X] T014 [US1] Wire `mneme install` in mneme/cli.py to install.py + render.py; verify installed + rendered before exit 0 (depends on T011, T012, T013)
+- [X] T015 [US1] Fill real `pin` (git shas / released versions) + `source` for all six components in mneme.yaml (depends on T013)
 
-> Cross-repo constant removal (gated, one repo per task — the actual re-architecture; breaking changes accepted per 2026-06-24 decision). Each reads from its OWN rendered config (Principle VII), not a platform import.
+> Cross-repo constant removal (gated, one repo per task — the actual re-architecture; breaking changes accepted per 2026-06-24 decision). Each reads from its OWN rendered config (Principle VII), not a mneme import.
 
 - [ ] T016 [P] [US1] Replace hardcoded constants in ~/src/CampaignGenerator (extract_facts.py `DEFAULT_ENDPOINT`, prep.py, campaignlib/api/backends.py, config/config.yaml 5etools+rpg-lib) with reads from its rendered config (depends on T012, T014)
 - [ ] T017 [P] [US1] Replace hardcoded infra assumptions in ~/src/dgx / dgxlib (endpoint/venv) with values from the rendered models.yaml (depends on T012, T014)
 - [ ] T018 [P] [US1] Replace hardcoded constants in ~/src/mempalace (backend/device, turbovec endpoint) with reads from its rendered mempalace.yaml (depends on T012, T014)
 - [ ] T019 [P] [US1] Replace hardcoded constants in ~/src/mytools/rpg-lib (`localhost:8000`, lib dir) with reads from its rendered config (depends on T012, T014)
 - [ ] T020 [P] [US1] Replace hardcoded constants in ~/src/turbovecdb(-service) (port `8077`, venv) with reads from its rendered config (depends on T012, T014)
-- [ ] T021 [US1] Update ~/campaigns/gm-assistant skills to reference workspace paths sourced from `platform.yaml` (via CampaignGenerator's rendered config), not hardcoded layout (depends on T014)
+- [ ] T021 [US1] Update ~/campaigns/gm-assistant skills to reference workspace paths sourced from `mneme.yaml` (via CampaignGenerator's rendered config), not hardcoded layout (depends on T014)
 - [ ] T022 [US1] Grep-verify SC-002 across all six repos: the five constants appear only in config/templates, zero in logic (depends on T016, T017, T018, T019, T020, T021)
 
 **Checkpoint**: MVP — reproducible install works; constants externalized.
@@ -97,7 +97,7 @@ and confirm every component is at its pin with a stamped rendered config, and th
 **Goal**: One command reports observed installed versions + per-service reachability + render
 drift, FAILing on any declared-vs-observed contradiction.
 
-**Independent Test**: With the system installed, `platform status` shows observed-vs-pin and
+**Independent Test**: With the system installed, `mneme status` shows observed-vs-pin and
 reachability per service; stop a service or hand-install a wrong version and confirm a FAIL row + exit 1.
 
 ### Tests for User Story 2
@@ -106,9 +106,9 @@ reachability per service; stop a service or hand-install a wrong version and con
 
 ### Implementation for User Story 2
 
-- [ ] T024 [P] [US2] Implement the health/reachability probe (tcp/http per `service.health`; shared by status and up-gating) in platform/probe.py (depends on T006)
-- [ ] T025 [US2] Implement status (observed version via importlib.metadata / `git rev-parse` vs pin; render-drift via stamped hash; reachability via probe; PASS/FAIL rows; exit 1 on any FAIL) in platform/status.py (depends on T011, T024)
-- [ ] T026 [US2] Wire `platform status` in platform/cli.py (table + `--json` rows) (depends on T025)
+- [ ] T024 [P] [US2] Implement the health/reachability probe (tcp/http per `service.health`; shared by status and up-gating) in mneme/probe.py (depends on T006)
+- [ ] T025 [US2] Implement status (observed version via importlib.metadata / `git rev-parse` vs pin; render-drift via stamped hash; reachability via probe; PASS/FAIL rows; exit 1 on any FAIL) in mneme/status.py (depends on T011, T024)
+- [ ] T026 [US2] Wire `mneme status` in mneme/cli.py (table + `--json` rows) (depends on T025)
 
 **Checkpoint**: Status is honest (Principle I); no False Green Dashboard.
 
@@ -119,8 +119,8 @@ reachability per service; stop a service or hand-install a wrong version and con
 **Goal**: One command starts managed services in declared order (gating on health), one stops
 them; the external DGX endpoint is health-checked, not started.
 
-**Independent Test**: From installed-but-stopped, `platform up` starts services in `order.startup`
-each reachable before dependents (DGX gated first); a failing start exits 1 and names it; `platform down` stops them.
+**Independent Test**: From installed-but-stopped, `mneme up` starts services in `order.startup`
+each reachable before dependents (DGX gated first); a failing start exits 1 and names it; `mneme down` stops them.
 
 ### Tests for User Story 4
 
@@ -128,8 +128,8 @@ each reachable before dependents (DGX gated first); a failing start exits 1 and 
 
 ### Implementation for User Story 4
 
-- [ ] T028 [US4] Implement lifecycle (ordered start of managed services as tracked subprocess + PID/log under ~/.platform/run/ — disposable, non-authoritative; health-gate each via probe before dependents; external deps health-checked not started; down stops by tracked PID, rediscoverable by probe) in platform/lifecycle.py (depends on T024)
-- [ ] T029 [US4] Wire `platform up` / `platform down` in platform/cli.py (depends on T028)
+- [ ] T028 [US4] Implement lifecycle (ordered start of managed services as tracked subprocess + PID/log under ~/.mneme/run/ — disposable, non-authoritative; health-gate each via probe before dependents; external deps health-checked not started; down stops by tracked PID, rediscoverable by probe) in mneme/lifecycle.py (depends on T024)
+- [ ] T029 [US4] Wire `mneme up` / `mneme down` in mneme/cli.py (depends on T028)
 
 **Checkpoint**: System comes up/down in declared order; retires `current-setup.md`.
 
@@ -137,10 +137,10 @@ each reachable before dependents (DGX gated first); a failing start exits 1 and 
 
 ## Phase 6: User Story 3 - Change one value, no stale copies (Priority: P3)
 
-**Goal**: Change one `platform.yaml` value, `platform apply` re-renders affected configs and
+**Goal**: Change one `mneme.yaml` value, `mneme apply` re-renders affected configs and
 restarts affected managed services so no component runs on a stale copy (Principle V).
 
-**Independent Test**: Change `machines.dgx.endpoint`, `platform apply`, confirm every derived
+**Independent Test**: Change `machines.dgx.endpoint`, `mneme apply`, confirm every derived
 config regenerated and no `config_target` or running process retains the old value; status shows no drift.
 
 > Depends on US4 (the restart mechanism in lifecycle.py) and US1 (render.py).
@@ -151,7 +151,7 @@ config regenerated and no `config_target` or running process retains the old val
 
 ### Implementation for User Story 3
 
-- [ ] T031 [US3] Implement `platform apply` (re-render all derived configs; compute affected managed services; restart them via lifecycle; verify no config_target/process retains the prior value) in platform/cli.py (reusing render.py + lifecycle.py) (depends on T011, T028)
+- [ ] T031 [US3] Implement `mneme apply` (re-render all derived configs; compute affected managed services; restart them via lifecycle; verify no config_target/process retains the prior value) in mneme/cli.py (reusing render.py + lifecycle.py) (depends on T011, T028)
 
 **Checkpoint**: Coherence guarantee proven — the V-over-VII mechanism (re-render + restart) works.
 
@@ -164,7 +164,7 @@ config regenerated and no `config_target` or running process retains the old val
 - [ ] T032 Complete the SC-005 validation harness — make validation/Dockerfile + docker-compose.yml runnable and add validation/run-validation.sh (the install→up→status→change→apply loop, exit non-zero on any FAIL) (depends on T031)
 - [ ] T033 [P] Run quickstart.md Scenarios 1–4 on host; fix any gaps (depends on T031)
 - [ ] T034 Run quickstart.md Scenario 5 — clean-container acid test (SC-005) via the harness, DGX_MODE=real AND DGX_MODE=stub (assert honest-unreachable) (depends on T032)
-- [ ] T035 [P] Docs: add a `platform` README (platform.yaml + CLI usage) and update PLAN.md status (depends on T031)
+- [ ] T035 [P] Docs: add a `mneme` README (mneme.yaml + CLI usage) and update PLAN.md status (depends on T031)
 
 ---
 
@@ -227,10 +227,22 @@ the prior. The container acid test in T034 is the definitive SC-005 proof.
 
 ### Constitution gates to re-check during implementation
 
-- Every cross-repo edit (T016–T021): component reads its OWN rendered config, never a platform
+- Every cross-repo edit (T016–T021): component reads its OWN rendered config, never a mneme
   import (VII); no new hardcoded constant introduced (II).
 - No task introduces a second authoritative store — no lockfile, no written-back config (V).
-- `status` (T025) reads observed state, never echoes `platform.yaml` (I).
+- `status` (T025) reads observed state, never echoes `mneme.yaml` (I).
+
+---
+
+## Tracked Fixes (discovered during implementation)
+
+- [ ] T036 [US1] Make `~/src/mytools/rpg-lib` pip-installable — add a `pyproject.toml`
+  (packaging metadata) so `mneme install` can install it at a pin like the other components.
+  **Discovered during the T013 smoke test**: `pip install ~/src/mytools/rpg-lib` fails with
+  "Neither 'setup.py' nor 'pyproject.toml' found." Blocks the rpg_lib leg of install and is a
+  prerequisite for T019 (rpg-lib reading its rendered config). Until fixed, rpg_lib install
+  fails loud (correct behavior, but the component can't be installed). Done in the
+  `~/src/platform-refactor/mytools` worktree.
 
 ---
 
@@ -238,6 +250,5 @@ the prior. The container acid test in T034 is the definitive SC-005 proof.
 
 - [P] = different files/repos, no incomplete-task dependency.
 - Commit after each task or logical group; cross-repo edits are gated and reviewed per repo.
-- Two research decisions still flagged ⚠ for ratification (D1 coherence mechanism, D2 DGX
-  external) — implementation proceeds under them unless overridden.
+- D1 (coherence mechanism) and D2 (DGX external) were ratified 2026-06-24.
 - Verify tests fail before implementing.

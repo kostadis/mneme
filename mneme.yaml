@@ -1,0 +1,72 @@
+# platform.yaml — THE single authority for config/wiring (Principle V).
+# Hand-edited. One per deployment. Derived component configs are rendered from this
+# file and are NON-authoritative (never hand-edit a rendered file; run `platform apply`).
+#
+# Pins below are the PRE-REFACTOR baseline (each component's current HEAD as of
+# 2026-06-24). They bump to the post-refactor commits once T016–T021 externalize the
+# hardcoded constants in each component repo.
+
+venv: ~/.venvs/main
+
+machines:
+  dgx:
+    endpoint: http://192.0.2.10:8001/v1
+    default_model: Qwen/Qwen3-Next-80B-A3B-Instruct-FP8
+
+data_roots:                      # referenced only — data-plane is out of scope (001)
+  fivetools: ~/src/5etools-kostadis/data
+  campaigns: ~/campaigns
+
+services:
+  dgx:                           # external dependency — health-checked, never started (D2)
+    url: http://192.0.2.10:8001/v1
+    managed: false
+    health: { type: http, path: /v1/models }
+  turbovecdb:
+    url: http://127.0.0.1:8077
+    port: 8077
+    managed: true
+    health: { type: http, path: /health }
+    start: "turbovecdb-service --port 8077"
+    stop: "pkill -f turbovecdb-service"
+  rpg_lib:
+    url: http://localhost:8000
+    port: 8000
+    managed: true
+    health: { type: http, path: / }
+    start: "python -m rpg_lib.server"
+    stop: "pkill -f rpg_lib.server"
+
+components:                      # the six in-scope units (FR-011)
+  dgxlib:
+    source: { path: ~/src/dgx }
+    pin: 8771104a2586ef6983f903543005c77db88e9de7
+    config_template: dgxlib.models.yaml.j2
+    config_target: ~/src/dgx/models.yaml
+  turbovecdb:
+    source: { path: ~/src/turbovecdb }
+    pin: fea4d804b5bbc744c17afcf3e7a75f6e7c9edb49
+    config_template: turbovecdb.config.yaml.j2
+    config_target: ~/src/turbovecdb/turbovecdb.config.yaml
+  mempalace:
+    source: { path: ~/src/mempalace }
+    pin: 46fcfc2adf50e31f68889edaf8965a7cb2adcfff
+    config_template: mempalace.yaml.j2
+    config_target: ~/.config/mempalace/mempalace.yaml
+  rpg_lib:
+    source: { path: ~/src/mytools/rpg-lib }
+    pin: 5693acbc81c54dba568aa6e5cdf2f5abd6722df3
+    config_template: rpg_lib.config.yaml.j2
+    config_target: ~/src/mytools/rpg-lib/rpg_lib.config.yaml
+  CampaignGenerator:
+    source: { path: ~/src/CampaignGenerator }
+    pin: 09622f6b185b9d9d2af9ece6ee7e38a4759d3d42
+    config_template: campaigngenerator.config.yaml.j2
+    config_target: ~/src/CampaignGenerator/config/config.yaml
+  gm_assistant:                  # reads CampaignGenerator's rendered config (T021); no own template
+    source: { path: ~/campaigns/gm-assistant }
+    pin: fb94fe0390f91fdb1acbf4429fe6a8ffa9990aca
+
+order:
+  install: [dgxlib, turbovecdb, mempalace, rpg_lib, CampaignGenerator, gm_assistant]
+  startup: [dgx, turbovecdb, rpg_lib]   # dgx (external) gated first; managed ones started in order
