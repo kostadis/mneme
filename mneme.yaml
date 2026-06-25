@@ -25,6 +25,7 @@ data_roots:                      # external paths mneme references (not owned; d
 env:                             # exported to every managed service mneme starts (`mneme up`) — env-wiring
   MEMPALACE_BACKEND: turbovec    # mempalace resolves its backend from the environment (process-wide)
   # MEMPALACE_EMBEDDING_DEVICE: auto   # cpu|cuda|coreml|dml|auto — uncomment to pin the embedding device
+  # RPG_LIBRARY_ROOT: ~/path/to/rpg-library   # rpg-lib sidecar/library root (optional; unset → sidecar tools disabled) — set to your value
 
 services:
   dgx:                           # external dependency — health-checked, never started (D2)
@@ -55,11 +56,9 @@ components:                      # six in-scope components (FR-011) + claudelib 
   mempalace:                     # mneme-native internal DB, but ALREADY env-driven — no file render.
     source: { path: ~/src/mempalace }  # wiring via top-level `env:`; stored memories are data-plane (out of scope).
     pin: 46fcfc2adf50e31f68889edaf8965a7cb2adcfff
-  rpg_lib:                       # LIBRARY (library_api) + SERVICE (library_server)
-    source: { path: ~/src/mytools/rpg-lib }
+  rpg_lib:                       # LIBRARY (library_api) + SERVICE (library_server). CLI/env-driven —
+    source: { path: ~/src/mytools/rpg-lib }  # no config file: port via the start cmd, RPG_LIBRARY_ROOT via env.
     pin: f432a8b419455a6fe11de2d98ca25f77d95c47f4
-    config_template: rpg_lib.config.yaml.j2
-    config_target: ~/src/mytools/rpg-lib/rpg_lib.config.yaml
   CampaignGenerator:             # SERVICE (+ many CLI tools); reads mneme wiring from config/wiring.yaml
     source: { path: ~/src/CampaignGenerator }
     pin: 09622f6b185b9d9d2af9ece6ee7e38a4759d3d42

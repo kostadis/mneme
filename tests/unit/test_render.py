@@ -108,12 +108,10 @@ def test_repo_templates_all_render():
     repo_root = pathlib.Path(__file__).resolve().parents[2]
     entity = cfg.load(repo_root / "mneme.yaml")
     rendered = rnd.render_all(entity)
-    # Components that render a wiring/config fragment. dgxlib + claudelib are
-    # SOVEREIGN libraries; turbovecdb is mneme-private storage (embedded, no config);
-    # mempalace is env-driven (top-level `env:`); gm_assistant has no template.
-    assert {d.component for d in rendered} == {
-        "rpg_lib",
-        "CampaignGenerator",
-    }
+    # CampaignGenerator is the only component that needs a rendered config fragment.
+    # Everything else is install-only (sovereign/mneme-private libs: dgxlib, claudelib,
+    # turbovecdb) or CLI/env-driven (mempalace, rpg_lib via top-level `env:`);
+    # gm_assistant has no template.
+    assert {d.component for d in rendered} == {"CampaignGenerator"}
     for d in rendered:
         assert yaml.safe_load(d.content) is not None
