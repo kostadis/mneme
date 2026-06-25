@@ -2,7 +2,7 @@
 
 > Encodes the Kostadis architectural doctrine — distilled from the Kostadis Engine
 > lenses (L1 Tribunal, L2 Anti-Gravity, L3 Lagrange, L4 Value-Bridge) — as the
-> governing principles for `~/src/platform`, the umbrella repo that owns the
+> governing principles for `~/src/mneme`, the umbrella repo that owns the
 > integration / distribution / orchestration plane of the campaign/DGX system.
 >
 > The principles are general (they are how Kostadis judges any system). Each one
@@ -199,7 +199,7 @@ efficiency gap, agility/automation gap — and decide on the business cost, not 
 
 ## Governance
 
-- This constitution supersedes other practices in `~/src/platform`. Where a spec,
+- This constitution supersedes other practices in `~/src/mneme`. Where a spec,
   plan, or generated task conflicts with a principle, the principle wins; the
   conflict is resolved or the deviation is explicitly justified in writing.
 - **Precedence — V over VII when they conflict.** Principle VII's "render into each

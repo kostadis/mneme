@@ -8,7 +8,7 @@
 > read those as `hypostasis` (everything except `mneme up`/`down`).**
 
 > **Status: scaffold stood up; constitution + first spec not yet authored.**
-> Updated 2026-06-24. This is the working plan for `~/src/platform`, the umbrella
+> Updated 2026-06-24. This is the working plan for `~/src/mneme`, the umbrella
 > repo that owns the **integration / distribution / orchestration plane** only.
 > Component repos keep doing their jobs; `mneme` owns how they're declared,
 > installed, wired, and version-pinned.
@@ -17,8 +17,8 @@
 
 What exists on disk:
 
-- `~/src/platform/` — `git init` done, branch `master`, **no commits yet**.
-- Spec Kit scaffold from `specify init` now at the **repo root** `~/src/platform/`
+- `~/src/mneme/` — `git init` done, branch `master`, **no commits yet**.
+- Spec Kit scaffold from `specify init` now at the **repo root** `~/src/mneme/`
   (`.specify/` templates + scripts, `.claude/skills/speckit-*`, stub `CLAUDE.md`).
   The earlier `platform/platform/` nesting was un-nested 2026-06-24; scripts
   resolve the repo root via git, so the move was clean.
@@ -32,7 +32,7 @@ and it is *yours* to author, not the LLM's to invent.
 
 ## Progress checklist
 
-- [x] Decide approach: Spec Kit via umbrella `~/src/platform` (advisory accepted).
+- [x] Decide approach: Spec Kit via umbrella `~/src/mneme` (advisory accepted).
 - [x] `git init` the umbrella repo.
 - [x] `specify init` — scaffold present.
 - [x] Resolve the `platform/platform/` nesting — un-nested to repo root 2026-06-24.
@@ -86,7 +86,7 @@ off the repo's current HEAD. **Implement edits these worktree paths, not `~/src/
 | T020 | `~/src/platform-refactor/turbovecdb` + `.../turbovecdb-service` | turbovecdb-service was untracked → `git init`'d (`8b1161e`) |
 | T021 | `~/src/platform-refactor/campaigns/gm-assistant` | real repo is `~/campaigns` (NOT `~/src/campaigns`) |
 
-The mneme CLI code (T001–T015, T023–T035) is written **in-place at `~/src/platform`** on
+The mneme CLI code (T001–T015, T023–T035) is written **in-place at `~/src/mneme`** on
 the existing `001-reproducible-install` branch — nothing else is blocked there. Each worktree
 is removable with `git -C <base-repo> worktree remove <path>` if a repo's edits are abandoned.
 
@@ -159,9 +159,9 @@ architecture unreviewed.
 
 ## Recommended target architecture
 
-A new umbrella repo `~/src/platform` that owns the **integration plane** only.
+A new umbrella repo `~/src/mneme` that owns the **integration plane** only.
 
-**1. Single source of truth: `hypostasis.yaml`** (lives in `~/src/platform`, the
+**1. Single source of truth: `hypostasis.yaml`** (lives in `~/src/mneme`, the
 one file you hand-edit). Sketch:
 
 ```yaml
@@ -200,7 +200,7 @@ config; pinned versions; reproducible install + a real "is it up?" answer.
 
 ## How Spec Kit drives it (execution path)
 
-In `~/src/platform`:
+In `~/src/mneme`:
 
 1. `git init && specify init` (Claude Code integration) → `.specify/`, slash
    commands. **DONE** (scaffold at repo root).
@@ -265,7 +265,7 @@ When executed, the spec is "done" when:
 
 ## Decisions captured
 
-- Apply Spec Kit via an **umbrella `~/src/platform` project**.
+- Apply Spec Kit via an **umbrella `~/src/mneme` project**.
 - **First spec = reproducible install + unified config** (pains 1–4 above).
 - Component repos untouched until `001` is executed and reviewed.
 - Scaffold stood up 2026-06-24 (`git init` + `specify init`), un-nested to repo

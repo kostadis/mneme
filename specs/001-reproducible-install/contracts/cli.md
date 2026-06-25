@@ -1,5 +1,7 @@
 # Contract — `mneme` CLI
 
+> **⚠️ Naming note (post-implementation).** This 001 design doc predates the split: the tool shipped as **two** commands (same repo). **`hypostasis`** configures the environment (`install`/`apply`/`status`); **`mneme`** is the per-campaign runtime (`up`/`down`). Read "mneme" below as **`hypostasis`** except where it's `mneme up`/`down`. Current model: top-level `README.md`. A full doc refactor is tracked as a GitHub issue.
+
 The CLI is the manager's interface. Every command is **honest** (Principle I): a non-zero
 exit code means the silicon did not confirm success. No command echoes declared state as if
 it were observed.

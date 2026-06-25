@@ -1,5 +1,7 @@
 # Implementation Plan: Reproducible Install & Unified Config
 
+> **⚠️ Naming note (post-implementation).** This 001 design doc predates the split: the tool shipped as **two** commands (same repo). **`hypostasis`** configures the environment (`install`/`apply`/`status`); **`mneme`** is the per-campaign runtime (`up`/`down`). Read "mneme" below as **`hypostasis`** except where it's `mneme up`/`down`. Current model: top-level `README.md`. A full doc refactor is tracked as a GitHub issue.
+
 **Branch**: `001-reproducible-install` | **Date**: 2026-06-24 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `specs/001-reproducible-install/spec.md`
