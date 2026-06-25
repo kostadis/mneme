@@ -163,7 +163,7 @@ config regenerated and no `config_target` or running process retains the old val
 
 - [X] T032 Complete the SC-005 validation harness — make validation/Dockerfile + docker-compose.yml runnable and add validation/run-validation.sh (the install→up→status→change→apply loop, exit non-zero on any FAIL) (depends on T031)
 - [X] T033 [P] Run quickstart.md Scenarios 1–4 on host; fix any gaps (depends on T031)
-- [X] T034 Run quickstart.md Scenario 5 — clean-container acid test (SC-005) via the harness, DGX_MODE=real AND DGX_MODE=stub (assert honest-unreachable) (depends on T032)
+- [X] T034 SC-005 clean-container acid test — **GREEN in a real python:3.11-slim container 2026-06-25** (docker build + docker run): `pip install .` → `hypostasis`+`mneme` on PATH → `run-validation.sh` 6/6 ALL PASS. Reframed to the self-contained tool-reproducibility test (the heavy component install / real DGX is out of a CI container's reach — D2); DGX/rpg-lib honesty is covered by `hypostasis status` reporting them UNREACHABLE.
 - [X] T035 [P] Docs: add a `mneme` README (hypostasis.yaml + CLI usage) and update PLAN.md status (depends on T031)
 
 ---
