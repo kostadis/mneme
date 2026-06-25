@@ -124,12 +124,12 @@ each reachable before dependents (DGX gated first); a failing start exits 1 and 
 
 ### Tests for User Story 4
 
-- [ ] T027 [P] [US4] Integration test for lifecycle (up starts managed services in order, gates external DGX reachability first, failed start → exit 1 names service, FR-014; down stops them) in tests/integration/test_lifecycle.py
+- [X] T027 [P] [US4] Lifecycle tests — `tests/unit/test_lifecycle.py` (7): up gates the substrate, builds the CG launch, fails loud; down invokes CG stop. **Reframed per-campaign** (mneme, not managed-service start).
 
 ### Implementation for User Story 4
 
-- [ ] T028 [US4] Implement lifecycle (ordered start of managed services as tracked subprocess + PID/log under ~/.mneme/run/ — disposable, non-authoritative; health-gate each via probe before dependents; external deps health-checked not started; down stops by tracked PID, rediscoverable by probe) in hypostasis/lifecycle.py (depends on T024)
-- [ ] T029 [US4] Wire `mneme up` / `mneme down` in hypostasis/cli.py (depends on T028)
+- [X] T028 [US4] **Reframed:** there are NO managed services (dgx/rpg-lib external) — the only service is per-campaign CG. Built `mneme/lifecycle.py` (not hypostasis): up = resolve campaign workspace, health-gate substrate, render wiring, export env, start CG via its `start`; down = CG `stop --port`. PID tracking delegated to CG's per-port files (no ~/.mneme/run needed). v2 container-per-campaign = issue #7.
+- [X] T029 [US4] `mneme up <campaign>` / `down <campaign>` wired in **mneme/cli.py** (the new per-campaign `mneme` command — not hypostasis). CLI-arg campaign id; `--dry-run` preview.
 
 **Checkpoint**: System comes up/down in declared order; retires `current-setup.md`.
 
