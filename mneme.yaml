@@ -22,10 +22,9 @@ data_roots:                      # external paths mneme references (not owned; d
   pdf_translators: ~/src/mytools/pdf-translators             # sibling mytools tool (validation)
   rpg_library_db: ~/src/mytools/rpg-lib/rpg_library.db       # rpg-lib's DB (location referenced; contents are data-plane)
 
-env:                             # exported to every managed service mneme starts (`mneme up`) — env-wiring
+env:                             # required process env for mneme-run components (delivery via lifecycle, T028)
   MEMPALACE_BACKEND: turbovec    # mempalace resolves its backend from the environment (process-wide)
   # MEMPALACE_EMBEDDING_DEVICE: auto   # cpu|cuda|coreml|dml|auto — uncomment to pin the embedding device
-  # RPG_LIBRARY_ROOT: ~/path/to/rpg-library   # rpg-lib sidecar/library root (optional; unset → sidecar tools disabled) — set to your value
 
 services:
   dgx:                           # external dependency — health-checked, never started (D2)
@@ -35,30 +34,22 @@ services:
   # NOTE: no turbovecdb service here — the :8077 HTTP layer is llm_wiki's, and really a
   # turbovecdb feature (turbovecdb#4), not a mneme-managed service. mempalace uses turbovec
   # EMBEDDED (connect(path)), so nothing in the mneme set needs the HTTP service.
-  rpg_lib:                       # rpg-lib's library_server (console script `rpg-library`)
-    url: http://localhost:8000
+  rpg_lib:                       # EXTERNAL index service — mneme interacts (CG over HTTP), does NOT run it.
+    url: http://localhost:8000   # health-checked like dgx; not started by mneme. The user/ops runs library_server.
     port: 8000
-    managed: true
+    managed: false
     health: { type: http, path: / }
-    start: "rpg-library --port 8000"
-    stop: "pkill -f rpg-library"
 
-components:                      # six in-scope components (FR-011) + claudelib (shared library dep)
+components:                      # what mneme INSTALLS. rpg-lib + claudelib are external/rpg-lib's — not here (issue #0003).
   dgxlib:                        # SOVEREIGN LIBRARY — driver for the physical DGX (github.com/kostadis/dgx-fun).
     source: { path: ~/src/dgx }  # install-only: mneme does NOT own/render dgxlib's config. Its bundled
     pin: 8771104a2586ef6983f903543005c77db88e9de7  # models.yaml is its own; the endpoint reaches it from callers (machines.dgx).
-  claudelib:                     # LIBRARY (no service / lifecycle); rpg_lib depends on it
-    source: { path: ~/src/mytools/claudelib }
-    pin: f432a8b419455a6fe11de2d98ca25f77d95c47f4
   turbovecdb:                    # mneme-private storage engine (embedded; mempalace sits on it). Install-only —
     source: { path: ~/src/turbovecdb }  # no infra constants, no config to render. The :8077 HTTP service is
     pin: fea4d804b5bbc744c17afcf3e7a75f6e7c9edb49  # a turbovecdb feature, not a mneme component (turbovecdb#4).
   mempalace:                     # mneme-native internal DB, but ALREADY env-driven — no file render.
     source: { path: ~/src/mempalace }  # wiring via top-level `env:`; stored memories are data-plane (out of scope).
     pin: 46fcfc2adf50e31f68889edaf8965a7cb2adcfff
-  rpg_lib:                       # LIBRARY (library_api) + SERVICE (library_server). CLI/env-driven —
-    source: { path: ~/src/mytools/rpg-lib }  # no config file: port via the start cmd, RPG_LIBRARY_ROOT via env.
-    pin: f432a8b419455a6fe11de2d98ca25f77d95c47f4
   CampaignGenerator:             # SERVICE (+ many CLI tools); reads mneme wiring from config/wiring.yaml
     source: { path: ~/src/CampaignGenerator }
     pin: 09622f6b185b9d9d2af9ece6ee7e38a4759d3d42
@@ -69,5 +60,5 @@ components:                      # six in-scope components (FR-011) + claudelib 
     pin: fb94fe0390f91fdb1acbf4429fe6a8ffa9990aca
 
 order:
-  install: [dgxlib, claudelib, turbovecdb, mempalace, rpg_lib, CampaignGenerator, gm_assistant]
-  startup: [dgx, rpg_lib]   # dgx (external) gated first; rpg_lib started after. (turbovecdb has no managed service — turbovecdb#4)
+  install: [dgxlib, turbovecdb, mempalace, CampaignGenerator, gm_assistant]
+  startup: [dgx, rpg_lib]   # both EXTERNAL (managed:false) — mneme health-checks/orders against them, starts neither.

@@ -133,14 +133,14 @@ def test_repo_mneme_yaml_is_valid():
 
     repo_root = pathlib.Path(__file__).resolve().parents[2]
     entity = cfg.load(repo_root / "mneme.yaml")
-    # six in-scope components + claudelib (shared library dep)
-    assert len(entity.components) == 7
+    # what mneme installs: dgxlib, turbovecdb, mempalace, CampaignGenerator, gm_assistant
+    assert len(entity.components) == 5
     assert entity.order.install[0] == "dgxlib"
-    # claudelib is a pure library: installed, no rendered config, no service entry
-    assert "claudelib" in entity.components
-    assert entity.components["claudelib"].config_template is None
-    assert "claudelib" not in entity.services
-    # every order name resolves; every managed service has start/stop (validated on load)
+    # rpg-lib + claudelib are external / rpg-lib's — not installed by mneme (issue #0003)
+    assert "rpg_lib" not in entity.components
+    assert "claudelib" not in entity.components
+    # rpg-lib is interacted-with, not owned: a health-checked external service like dgx
+    assert entity.services["rpg_lib"].managed is False
     assert entity.services["dgx"].managed is False
-    # env-wiring present (mempalace backend)
+    # env present (mempalace backend)
     assert entity.env.get("MEMPALACE_BACKEND") == "turbovec"
