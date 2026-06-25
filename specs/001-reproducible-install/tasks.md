@@ -147,11 +147,11 @@ config regenerated and no `config_target` or running process retains the old val
 
 ### Tests for User Story 3
 
-- [ ] T030 [P] [US3] Integration test for apply (one-value change → re-render affected config_targets with fresh stamp + restart affected managed services; zero stale copies; status reports no drift; SC-004) in tests/integration/test_apply.py
+- [X] T030 [P] [US3] Integration test for apply (one-value change → re-render affected config_targets with fresh stamp + restart affected managed services; zero stale copies; status reports no drift; SC-004) in tests/integration/test_apply.py
 
 ### Implementation for User Story 3
 
-- [ ] T031 [US3] Implement `mneme apply` (re-render all derived configs; compute affected managed services; restart them via lifecycle; verify no config_target/process retains the prior value) in mneme/cli.py (reusing render.py + lifecycle.py) (depends on T011, T028)
+- [X] T031 [US3] Implement `mneme apply` (re-render all derived configs; compute affected managed services; restart them via lifecycle; verify no config_target/process retains the prior value) in mneme/cli.py (reusing render.py + lifecycle.py) (depends on T011, T028)
 
 **Checkpoint**: Coherence guarantee proven — the V-over-VII mechanism (re-render + restart) works.
 

@@ -91,9 +91,48 @@ def _not_yet(command: str, task: str) -> None:
 
 @app.command()
 def apply(config: str = _config_opt, json: bool = _json_opt) -> None:
-    """Re-render derived configs and restart affected managed services (FR-009)."""
-    _load_or_exit(config)
-    _not_yet("apply", "T031")
+    """Re-render derived configs so nothing runs on a stale copy (Principle V)."""
+    entity = _load_or_exit(config)
+
+    try:
+        written = [str(p) for p in rnd.render_and_write_all(entity)]
+    except Exception as e:  # noqa: BLE001 - render failure must fail loud, named
+        typer.echo(f"FAIL apply: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+
+    # Verify no render drift remains (the re-render took).
+    stale = [
+        c for n in entity.order.install
+        if (c := entity.components[n]).config_template
+        and not sts.render_row(entity, c).ok
+    ]
+    # mneme runs no managed services (dgx, rpg_lib are external); any external dep
+    # whose wiring changed must be restarted by its owner (hypostasis, issue #0005).
+    externals = [n for n in entity.order.startup
+                 if (s := entity.services.get(n)) is not None and not s.managed]
+
+    if json:
+        typer.echo(_json.dumps({
+            "rerendered": written,
+            "stale_after": [c.name for c in stale],
+            "external_deps_to_check": externals,
+        }))
+    else:
+        for path in written:
+            typer.echo(f"re-rendered  {path}")
+        if not written:
+            typer.echo("(no derived configs to render)")
+        typer.echo(
+            "note: no managed services to restart — "
+            f"external deps ({', '.join(externals) or 'none'}) are restarted by their "
+            "owner (hypostasis) if their wiring changed."
+        )
+        if stale:
+            typer.echo(f"FAIL: stale after apply: {[c.name for c in stale]}")
+        else:
+            typer.echo("OK: coherent")
+
+    raise typer.Exit(EXIT_RUNTIME if stale else EXIT_OK)
 
 
 @app.command()

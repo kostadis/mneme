@@ -103,6 +103,17 @@ def write_rendered(derived: DerivedConfig) -> Path:
     return derived.target
 
 
+def render_and_write_all(
+    entity: ConfigEntity, templates_dir: Path = TEMPLATES_DIR
+) -> list[Path]:
+    """Re-render every templated component and write each to its target (the `apply` core).
+
+    Re-rendering is the coherence mechanism (Principle V): the on-disk copy is made
+    fresh, so the next consumer reads the current value, never a stale one.
+    """
+    return [write_rendered(d) for d in render_all(entity, templates_dir)]
+
+
 def read_stamp(path: Path) -> str | None:
     """Return the stamped source-sha256 from a rendered file's header, or None."""
     try:
