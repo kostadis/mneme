@@ -47,21 +47,22 @@ class MempalaceRunner:
         except FileNotFoundError:
             return subprocess.CompletedProcess(cmd, 127, stdout="", stderr="mempalace not found")
 
+    @staticmethod
+    def _with_palace(palace: Path | str | None, *sub: str) -> list[str]:
+        """`--palace` is a GLOBAL option — it must come BEFORE the subcommand."""
+        prefix = ["--palace", str(palace)] if palace is not None else []
+        return prefix + list(sub)
+
     def mine(self, path: Path, palace: Path | str | None = None, dry_run: bool = False) -> None:
-        args = ["mine", str(path)]
-        if palace is not None:
-            args += ["--palace", str(palace)]
-        if dry_run:
-            args += ["--dry-run"]
-        out = self._call(args)
+        sub = ["mine", str(path)] + (["--dry-run"] if dry_run else [])
+        out = self._call(self._with_palace(palace, *sub))
         if out.returncode != 0:
             detail = (out.stderr or out.stdout or "").strip()[-300:]
             raise MempalaceError(f"mempalace mine {path} failed (rc {out.returncode}): {detail}")
 
     def status(self, palace: Path | str | None = None) -> bool:
-        """True iff `mempalace status --palace <p>` answers cleanly (the store is openable)."""
-        args = ["status"] + (["--palace", str(palace)] if palace is not None else [])
-        return self._call(args).returncode == 0
+        """True iff `mempalace --palace <p> status` answers cleanly (the store is openable)."""
+        return self._call(self._with_palace(palace, "status")).returncode == 0
 
     def is_stale(self, path: Path) -> bool:
         """Source-vs-index drift via `mempalace sync --dry-run` (D2). True ⇒ stale.

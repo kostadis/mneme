@@ -8,9 +8,16 @@ set -euo pipefail
 EMBEDDER="${EMBEDDER:-onnx}"
 export HOME="$(mktemp -d)"          # throwaway store — never the operator's ~/.mempalace
 export MEMPALACE_BACKEND=turbovec
-ROOT="$(mktemp -d)/campaigns"
+ROOTBASE="$(mktemp -d)"
+ROOT="$ROOTBASE/campaigns"
 CAMP="$ROOT/acidcamp"
 STORE="$HOME/.mempalace/palaces/acidcamp"
+CONFIG=""
+
+# Always delete the temporary mempalace + campaigns + config on exit (a fresh, isolated
+# store per run; nothing persists, nothing touches the operator's real ~/.mempalace).
+cleanup() { rm -rf "$HOME" "$ROOTBASE" "$CONFIG" 2>/dev/null || true; }
+trap cleanup EXIT
 
 echo "== 003 acid test (EMBEDDER=$EMBEDDER, HOME=$HOME) =="
 
@@ -34,39 +41,38 @@ CONFIG="$(mktemp)"
 cat > "$CONFIG" <<YAML
 venv: $HOME/venv
 machines: { dgx: { endpoint: http://localhost:1/v1 } }
-services: {}
+services: { dgx: { url: http://localhost:1/v1, managed: false } }
 components:
   mempalace: { source: { path: $HOME }, pin: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef }
-order: { install: [mempalace], startup: [] }
+order: { install: [mempalace], startup: [dgx] }
 data_roots: { campaigns: $ROOT }
 YAML
-MP="mneme mp --config $CONFIG"
+# `--config` is a per-subcommand option (goes AFTER the subcommand); `--palace` is a
+# GLOBAL mempalace option (goes BEFORE the subcommand).
+CFG=(--config "$CONFIG")
 
 fail() { echo "FAIL: $1"; exit 1; }
 
 echo "-- bringup --"
-$MP bringup acidcamp --no-backup
+mneme mp bringup acidcamp --no-backup "${CFG[@]}"
 [ -f "$STORE/turbovec/mempalace_drawers/store.sqlite3" ] || fail "store not created"
 grep -q '^palace: acidcamp' "$CAMP/mempalace.yaml" || fail "cli_pointer face missing palace:"
 grep -q 'acidcamp' "$HOME/.mempalace/config.json" || fail "global alias not registered"
 
 echo "-- search returns over the sample docs --"
-mempalace search "vault" --palace "$STORE" | grep -qi vault || fail "search returned nothing"
+mempalace --palace "$STORE" search "vault" | grep -qi vault || fail "search returned nothing"
 
 echo "-- backup excludes rebuildable/legacy --"
-$MP backup acidcamp
+mneme mp backup acidcamp "${CFG[@]}"
 BK="$(find "$HOME/.mneme/backups/acidcamp" -name store.sqlite3 | head -1)"
 [ -n "$BK" ] || fail "backup has no bindings"
-find "$HOME/.mneme/backups/acidcamp" -name 'index.tvim' | grep -q . && fail "backup wrongly included index.tvim"
+find "$HOME/.mneme/backups/acidcamp" -name 'index.tvim' | grep -q . && fail "backup wrongly kept index.tvim"
 
 echo "-- restore preserves bindings without re-embed --"
 rm -rf "$STORE"
-$MP restore acidcamp
+mneme mp restore acidcamp "${CFG[@]}"
 [ -f "$STORE/turbovec/mempalace_drawers/store.sqlite3" ] || fail "restore did not bring bindings back"
 
-echo "-- mneme up gate: fails when the store is gone --"
-rm -rf "$STORE"
-if mneme up acidcamp --config "$CONFIG" --dry-run >/dev/null 2>&1; then : ; fi  # dry-run never gates
-mneme up acidcamp --config "$CONFIG" >/dev/null 2>&1 && fail "mneme up should fail with no store" || true
-
+# (The `mneme up` store-health gate is covered by tests/unit/test_mp_up_gate.py — it needs a
+#  full CampaignGenerator component to reach, which is out of scope for a mempalace acid test.)
 echo "PASS: 003 bring-up acid test ($EMBEDDER)"

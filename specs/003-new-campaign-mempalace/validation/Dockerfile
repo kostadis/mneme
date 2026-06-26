@@ -19,15 +19,17 @@ WORKDIR /opt/mneme
 COPY pyproject.toml ./
 COPY hypostasis/ ./hypostasis/
 COPY mneme/ ./mneme/
-COPY specs/003-new-campaign-mempalace/validation/run-validation.sh ./validation/run-validation.sh
 
 # Install mneme + the REAL backend. turbovecdb + mempalace come from the kostadis forks;
 # onnxruntime gives a self-contained local embedder (the ONNX lane needs no network).
 # Pin refs match the versions hypostasis.yaml declares; adjust as those pins move.
 RUN pip install --no-cache-dir . \
-    && pip install --no-cache-dir "git+https://github.com/kostadis/turbovecdb@main" \
-    && pip install --no-cache-dir "git+https://github.com/kostadis/mempalace@kostadis-dev" \
+    && pip install --no-cache-dir "git+https://github.com/kostadis/turbovecdb@fea4d804b5bbc744c17afcf3e7a75f6e7c9edb49" \
+    && pip install --no-cache-dir "git+https://github.com/kostadis/mempalace@46fcfc2adf50e31f68889edaf8965a7cb2adcfff" \
     && pip install --no-cache-dir onnxruntime
+
+# Last (so editing the acid test does not invalidate the pip layer).
+COPY specs/003-new-campaign-mempalace/validation/run-validation.sh ./validation/run-validation.sh
 
 ENV EMBEDDER=onnx
 ENTRYPOINT ["bash", "/opt/mneme/validation/run-validation.sh"]

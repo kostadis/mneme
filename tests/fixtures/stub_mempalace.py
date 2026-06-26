@@ -21,12 +21,26 @@ import sys
 from pathlib import Path
 
 
-def _palace(argv: list[str]) -> str | None:
-    if "--palace" in argv:
-        i = argv.index("--palace")
-        if i + 1 < len(argv):
-            return argv[i + 1]
-    return os.environ.get("MEMPALACE_PALACE_PATH")
+def _parse(argv: list[str]) -> tuple[str | None, list[str], str | None]:
+    """Split `[--palace P] [--version] SUBCMD [subargs]` → (subcommand, subargs, palace).
+
+    `--palace` is a GLOBAL option (before the subcommand), as in the real mempalace CLI."""
+    palace = os.environ.get("MEMPALACE_PALACE_PATH")
+    rest: list[str] = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--palace" and i + 1 < len(argv):
+            palace = argv[i + 1]
+            i += 2
+            continue
+        if a in ("--version", "-h", "--help"):
+            i += 1
+            continue
+        rest.append(a)
+        i += 1
+    sub = rest[0] if rest else None
+    return sub, rest[1:], palace
 
 
 def main() -> int:
@@ -36,12 +50,9 @@ def main() -> int:
         with open(log, "a") as fh:
             fh.write(" ".join(argv) + "\n")
 
-    if not argv:
-        return 0
-    cmd = argv[0]
+    sub, subargs, palace = _parse(argv)
 
-    if cmd == "mine" and "--dry-run" not in argv:
-        palace = _palace(argv)
+    if sub == "mine" and "--dry-run" not in subargs:
         if palace:
             for coll in ("mempalace_drawers", "mempalace_closets"):
                 d = Path(palace) / "turbovec" / coll
@@ -51,12 +62,12 @@ def main() -> int:
             (Path(palace) / "knowledge_graph.sqlite3").write_text("stub-kg\n")
         return 0
 
-    if cmd == "status":
+    if sub == "status":
         print("ok")
         return 0
 
-    if cmd == "sync" and "--dry-run" in argv:
-        target = next((a for a in argv[1:] if not a.startswith("-")), None)
+    if sub == "sync" and "--dry-run" in subargs:
+        target = next((a for a in subargs if not a.startswith("-")), None)
         drift = bool(target) and (Path(target) / ".stub_drift").exists()
         print("DRIFT" if drift else "CLEAN")
         return 0
