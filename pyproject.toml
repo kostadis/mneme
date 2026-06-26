@@ -17,21 +17,23 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
+mcp = ["mcp>=1.2"]                   # the advisory `mneme mp mcp` server (optional)
 
 [project.scripts]
 hypostasis = "hypostasis.cli:app"   # configure the environment (run once)
 mneme = "mneme.cli:app"             # spin up per campaign (run each time)
 
 [tool.setuptools]
-packages = ["hypostasis", "mneme"]
+packages = ["hypostasis", "mneme", "mneme.mempalace", "mneme.mcp"]
 
 [tool.setuptools.package-data]
 hypostasis = ["templates/*.j2"]
+mneme = ["recipes/*.yaml", "recipes/instructions/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-ra"
+addopts = "-ra --import-mode=importlib"
 markers = [
   "slow: tests that create a real venv / install (deselect with -m 'not slow')",
 ]
