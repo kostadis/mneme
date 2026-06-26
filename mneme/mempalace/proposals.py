@@ -1,4 +1,4 @@
-"""Surface mneme-created proposal branches as a to-do list (issue 0007).
+"""Surface mneme-created proposal branches as a to-do list (GH #14).
 
 Read-only git: lists `mneme/*` branches on the campaigns repo's origin and classifies
 each as **pending** (not yet merged into the active checkout → offer the merge) or

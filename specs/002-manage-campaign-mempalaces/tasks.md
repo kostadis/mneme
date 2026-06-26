@@ -148,10 +148,10 @@ Single project, extending the existing `mneme/` package. New code under `mneme/m
 
 ---
 
-## Phase 9: Proposal-aware status (follow-on — issue 0007)
+## Phase 9: Proposal-aware status (follow-on — GH #14)
 
 **Purpose**: Surface mneme-created proposal branches as a git-level to-do list on `status`
-(the observability gap caught by use; the broader constitution gap is recorded as issue 0008).
+(the observability gap caught by use; the broader constitution gap is recorded as GH #11).
 
 - [X] T045 Implement `mneme/mempalace/proposals.py` (read-only git: list `mneme/*` origin branches; classify merged/pending vs HEAD; campaigns touched; degrade to `[]` off-repo)
 - [X] T046 Add a TODO section to `mneme mp status` in `mneme/cli.py` (`--no-proposals` / `--no-fetch`; informational, never changes exit code — FR-021)

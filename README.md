@@ -100,7 +100,7 @@ loads it instead of you pasting docs). Design: `specs/002-manage-campaign-mempal
 | gm-assistant | markdown workspace content | — | — |
 
 The DGX and rpg-lib are **substrate** — hypostasis references and health-checks them but does not
-start them (see `issues/0005`).
+start them (see [#1](https://github.com/kostadis/mneme/issues/1)).
 
 ## Reproducibility acid test (SC-005)
 

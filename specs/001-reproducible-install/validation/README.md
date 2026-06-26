@@ -29,6 +29,6 @@ Exit non-zero on any FAIL (Principle I — a red dashboard exits red).
 
 It does **not** install the heavy components or reach the real DGX/rpg-lib substrate — that needs
 the DGX + the component repos (D2). This proves the **tool**, not a live system. Bringing the real
-substrate up is hypostasis's still-open job ([issues/0005](../../../issues/0005-hypostasis-substrate-layer.md)).
+substrate up is hypostasis's still-open job ([#1](https://github.com/kostadis/mneme/issues/1)).
 Containerizing the components *as the deployment model* is a deliberate future `002`, not this — do
 not let this harness grow into that by momentum.

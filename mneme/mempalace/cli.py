@@ -77,7 +77,7 @@ def status(
     config: str = _config_opt,
 ) -> None:
     """Report observed per-campaign conformance (built / stale / divergent + why) and the
-    git-level to-do list of mneme proposal branches awaiting integration (issue 0007)."""
+    git-level to-do list of mneme proposal branches awaiting integration (GH #14)."""
     from . import conform as _conform
     from . import discover as _discover
     from . import proposals as _proposals
@@ -88,7 +88,7 @@ def status(
         typer.echo(_conform.format_row(row))
 
     # The to-do list is informational — it never changes the exit code (non-adoption
-    # is legitimate, FR-021). Read-only and degrades to nothing off-repo (issue 0007).
+    # is legitimate, FR-021). Read-only and degrades to nothing off-repo (GH #14).
     if not no_proposals:
         try:
             todo = _proposals.list_proposals(_discover.campaigns_root(entity), fetch=not no_fetch)
