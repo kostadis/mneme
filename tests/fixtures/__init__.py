@@ -86,6 +86,19 @@ def _render_full(full: Path) -> None:
     render.write_all(cfg, recipe.load(cfg.recipe_version), full)
 
 
+def make_greenfield_campaign(root: Path, name: str = "stormhaven") -> Path:
+    """A NEW campaign (documents, NO `.mneme/` setup) — the input to bring-up (003).
+
+    Returns the campaign dir. Has a docs/chapters wing-able dir + a root-level doc, so
+    the scaffold picks a real pattern and there is something to index.
+    """
+    camp = root / name
+    (camp / "docs" / "chapters").mkdir(parents=True)
+    (camp / "docs" / "chapters" / "chapter_01.md").write_text("# Chapter 1\nThe vault opens.\n")
+    (camp / "world.md").write_text("# World\nStormhaven stands.\n")
+    return camp
+
+
 def make_campaigns(root: Path) -> Path:
     """Create the fixture campaigns under ``root`` and return ``root``."""
     root.mkdir(parents=True, exist_ok=True)

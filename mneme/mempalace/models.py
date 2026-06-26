@@ -81,6 +81,15 @@ class Disposition:
 
 
 @dataclass(frozen=True)
+class StorePointer:
+    """The campaign's declaration of its dedicated store (003 / FR-013) — the single
+    source from which all store-naming faces render."""
+
+    alias: str
+    path: Path
+
+
+@dataclass(frozen=True)
 class CampaignMempalaceConfig:
     """The single editable authority for one campaign's mempalace (FR-002/016)."""
 
@@ -89,6 +98,7 @@ class CampaignMempalaceConfig:
     wings: tuple[Wing, ...]
     extra_exclusions: tuple[str, ...] = ()
     dispositions: tuple[Disposition, ...] = ()
+    store: StorePointer | None = None  # 003: the dedicated-store pointer (FR-013)
     source_path: Path | None = None
 
     def disposition_for(self, divergence: str) -> Disposition | None:
@@ -207,3 +217,70 @@ class WorkingCopy:
     path: Path
     branch: str
     remote: str = ""
+
+
+# ---------------------------------------------------------------------------
+# 003 — store provisioning, health, backup, bring-up
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DedicatedStore:
+    """The campaign's turbovec store on disk (derived/rebuildable; never authority)."""
+
+    path: Path
+    present: bool
+    bindings_files: tuple[Path, ...] = ()  # turbovec/*/store.sqlite3 + knowledge_graph.sqlite3
+    rebuildable_files: tuple[Path, ...] = ()  # index.tvim (regenerated, no re-embed)
+    legacy_files: tuple[Path, ...] = ()  # chroma.sqlite3 + segments (dead)
+
+
+class StoreState(StrEnum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    MISSING = "missing"
+
+
+@dataclass(frozen=True)
+class StoreHealth:
+    """Observed store health for the `mneme up` gate (D5) + status (IX)."""
+
+    present: bool
+    state: StoreState
+    note: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.state is StoreState.HEALTHY
+
+
+@dataclass(frozen=True)
+class BindingsBackup:
+    """A derived/disposable snapshot of the bindings (FR-011) — never an authority."""
+
+    campaign: str
+    location: Path
+    taken: str = ""  # ISO date, stamped after the run
+    contents: tuple[Path, ...] = ()
+
+
+@dataclass(frozen=True)
+class BringUpStep:
+    name: str  # configure | render_faces | provision | first_mine | backup
+    state: str  # ok | skipped | failed
+    observed: str = ""
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class BringUpReport:
+    campaign: str
+    steps: tuple[BringUpStep, ...]
+    owed: tuple[str, ...] = ()
+
+    @property
+    def ready(self) -> bool:
+        return all(s.state != "failed" for s in self.steps)
+
+    def exit_code(self) -> int:
+        return 0 if self.ready else 1

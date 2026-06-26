@@ -47,12 +47,21 @@ class MempalaceRunner:
         except FileNotFoundError:
             return subprocess.CompletedProcess(cmd, 127, stdout="", stderr="mempalace not found")
 
-    def mine(self, path: Path, dry_run: bool = False) -> None:
-        args = ["mine", str(path)] + (["--dry-run"] if dry_run else [])
+    def mine(self, path: Path, palace: Path | str | None = None, dry_run: bool = False) -> None:
+        args = ["mine", str(path)]
+        if palace is not None:
+            args += ["--palace", str(palace)]
+        if dry_run:
+            args += ["--dry-run"]
         out = self._call(args)
         if out.returncode != 0:
             detail = (out.stderr or out.stdout or "").strip()[-300:]
             raise MempalaceError(f"mempalace mine {path} failed (rc {out.returncode}): {detail}")
+
+    def status(self, palace: Path | str | None = None) -> bool:
+        """True iff `mempalace status --palace <p>` answers cleanly (the store is openable)."""
+        args = ["status"] + (["--palace", str(palace)] if palace is not None else [])
+        return self._call(args).returncode == 0
 
     def is_stale(self, path: Path) -> bool:
         """Source-vs-index drift via `mempalace sync --dry-run` (D2). True ⇒ stale.

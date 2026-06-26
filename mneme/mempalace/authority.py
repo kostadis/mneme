@@ -9,6 +9,7 @@ campaign; mneme reads it and never invents its content (FR-020).
 from __future__ import annotations
 
 import datetime as _dt
+import os
 from pathlib import Path
 
 import yaml
@@ -19,6 +20,7 @@ from .models import (
     CampaignMempalaceConfig,
     Disposition,
     Room,
+    StorePointer,
     Wing,
 )
 
@@ -89,12 +91,25 @@ def _parse(raw: dict, source: Path, problems: list[str]) -> CampaignMempalaceCon
         for d in (raw.get("dispositions") or ())
     )
 
+    store = None
+    sraw = raw.get("store")
+    if isinstance(sraw, dict):
+        alias = _normalize_wing_name(str(sraw.get("alias", campaign))) or campaign
+        praw = sraw.get("path")
+        path = (
+            Path(os.path.expanduser(str(praw)))
+            if praw
+            else Path.home() / ".mempalace" / "palaces" / alias
+        )
+        store = StorePointer(alias=alias, path=path)
+
     return CampaignMempalaceConfig(
         campaign=campaign,
         recipe_version=recipe_version,
         wings=tuple(wings),
         extra_exclusions=tuple(str(x) for x in (raw.get("extra_exclusions") or ())),
         dispositions=dispositions,
+        store=store,
         source_path=source,
     )
 
@@ -152,7 +167,24 @@ def validate(cfg: CampaignMempalaceConfig, raw: dict, campaign_dir: Path) -> lis
         if d.recorded and not _is_iso_date(d.recorded):
             p.append(f"disposition '{d.divergence}': recorded '{d.recorded}' is not an ISO date")
 
+    # Store pointer is optional at load (002-era authorities have none); if present it
+    # must be well-formed. Bring-up enforces its *presence* via require_store (FR-013/016).
+    if cfg.store is not None:
+        if not cfg.store.alias:
+            p.append("store.alias: empty")
+        if not cfg.store.path.is_absolute():
+            p.append(f"store.path '{cfg.store.path}' must resolve to an absolute path")
+
     return p
+
+
+def require_store(cfg: CampaignMempalaceConfig) -> StorePointer:
+    """Bring-up gate (FR-013/016): refuse a wings-but-no-store-pointer authority."""
+    if cfg.store is None:
+        raise AuthorityError(
+            [f"campaign '{cfg.campaign}': no store pointer — bring-up requires one (FR-013/016)"]
+        )
+    return cfg.store
 
 
 def _is_ancestor(maybe_parent: str, child: str) -> bool:
@@ -169,7 +201,10 @@ def to_yaml(cfg: CampaignMempalaceConfig) -> str:
     doc: dict = {
         "campaign": cfg.campaign,
         "recipe_version": cfg.recipe_version,
-        "wings": [
+    }
+    if cfg.store is not None:
+        doc["store"] = {"alias": cfg.store.alias, "path": str(cfg.store.path)}
+    doc["wings"] = [
             {
                 "name": w.name,
                 "source": w.source,
@@ -180,8 +215,7 @@ def to_yaml(cfg: CampaignMempalaceConfig) -> str:
                 ],
             }
             for w in cfg.wings
-        ],
-    }
+        ]
     if cfg.extra_exclusions:
         doc["extra_exclusions"] = list(cfg.extra_exclusions)
     if cfg.dispositions:

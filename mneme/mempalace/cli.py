@@ -283,3 +283,31 @@ def bootstrap(
         typer.echo(f"FAIL bootstrap: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"bootstrapped '{campaign}' on branch: {branch} (merge/pull to take it)")
+
+
+# ── bringup (US1, 003) ────────────────────────────────────────────────────────
+
+
+@app.command()
+def bringup(
+    campaign: str = typer.Argument(..., help="New campaign to bring up (greenfield)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show the steps; provision/mine nothing"),
+    no_backup: bool = typer.Option(False, "--no-backup", help="Skip the bindings backup step"),
+    config: str = _config_opt,
+) -> None:
+    """Bring up a new campaign: configure → render faces → provision → first-mine → back up."""
+    from . import bringup as _bringup
+
+    entity = _load_or_exit(config)
+    report = _bringup.bringup(entity, campaign, do_backup=not no_backup, dry_run=dry_run)
+    for s in report.steps:
+        flag = {"ok": "ok  ", "skipped": "skip", "failed": "FAIL"}.get(s.state, s.state)
+        typer.echo(f"  {flag} {s.name:13} {s.observed or s.note}")
+    for owed in report.owed:
+        typer.echo(f"  TODO {owed}")
+    if dry_run:
+        outcome = "DRY-RUN: nothing changed"
+    else:
+        outcome = f"brought up {campaign}" if report.ready else f"NOT READY: {campaign}"
+    typer.echo(outcome)
+    raise typer.Exit(report.exit_code())

@@ -25,8 +25,8 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 ## Phase 1: Setup
 
-- [ ] T001 Extend the stub `mempalace` in `tests/fixtures/stub_mempalace.py` to honor `--palace <alias|path>`, create a fake `turbovec/<collection>/store.sqlite3` under the resolved palace on `mine`, answer `status --palace`, and record embed/mine calls (so "no re-embed on restore" is assertable)
-- [ ] T002 [P] Add fixtures in `tests/fixtures/`: a **greenfield** campaign (documents, no `.mneme/`) and a temp backups location + a temp `~/.mempalace` (HOME/XDG override) for store/config.json tests
+- [X] T001 Extend the stub `mempalace` in `tests/fixtures/stub_mempalace.py` to honor `--palace <alias|path>`, create a fake `turbovec/<collection>/store.sqlite3` under the resolved palace on `mine`, answer `status --palace`, and record embed/mine calls (so "no re-embed on restore" is assertable)
+- [X] T002 [P] Add fixtures in `tests/fixtures/`: a **greenfield** campaign (documents, no `.mneme/`) and a temp backups location + a temp `~/.mempalace` (HOME/XDG override) for store/config.json tests
 
 ---
 
@@ -36,12 +36,12 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 **⚠️ CRITICAL**: No user-story phase begins until this phase is complete.
 
-- [ ] T003 [P] Add 003 dataclasses to `mneme/mempalace/models.py`: `StorePointer` (+ `store` field on `CampaignMempalaceConfig`), `DedicatedStore`, `StoreHealth` (+state), `BindingsBackup`, `BringUpStep`/`BringUpReport`
-- [ ] T004 Extend `mneme/mempalace/authority.py`: parse/validate the `store:` pointer (alias sanitized, path absolute, exactly one); **refuse a wings-but-no-store-pointer authority** (FR-013/016); serialize `store` in `to_yaml`/`write` (depends on T003)
-- [ ] T005 [P] Extend `mneme/mempalace/runner.py`: `init`, `mine --palace`, `status --palace`, `search --palace` subprocess wrappers (resolve binary from the venv) (depends on T003)
-- [ ] T006 Implement the four faces in `mneme/mempalace/render.py` (all stamped): `cli_pointer` (`mempalace.yaml` `palace:`+wings), `cg_search` (`config.yaml` `mempalace:`), `global_alias` (`~/.mempalace/config.json` `palaces:` — **read-modify-merge-write**, never clobber), `mcp` (`.mcp.json` mempalace server, palace injected, never hardcoded) (depends on T004)
-- [ ] T007 [P] Implement `mneme/mempalace/health.py`: `DedicatedStore` inspection (bindings = `turbovec/*/store.sqlite3`+`knowledge_graph.sqlite3`; rebuildable = `index.tvim`; legacy = `chroma.sqlite3`) + `StoreHealth` (present + turbovec `store_gen`/`tvim` consistency via `runner status`) (depends on T003, T005)
-- [ ] T008 [P] Foundational unit tests in `tests/unit/test_mp_store_foundation.py`: store-pointer load/validate (incl. **refuse missing pointer**); render golden for all four faces incl. **config.json merge-not-clobber**; health classification of a fixture store
+- [X] T003 [P] Add 003 dataclasses to `mneme/mempalace/models.py`: `StorePointer` (+ `store` field on `CampaignMempalaceConfig`), `DedicatedStore`, `StoreHealth` (+state), `BindingsBackup`, `BringUpStep`/`BringUpReport`
+- [X] T004 Extend `mneme/mempalace/authority.py`: parse/validate the `store:` pointer (alias sanitized, path absolute, exactly one); **refuse a wings-but-no-store-pointer authority** (FR-013/016); serialize `store` in `to_yaml`/`write` (depends on T003)
+- [X] T005 [P] Extend `mneme/mempalace/runner.py`: `init`, `mine --palace`, `status --palace`, `search --palace` subprocess wrappers (resolve binary from the venv) (depends on T003)
+- [X] T006 Implement the four faces in `mneme/mempalace/render.py` (all stamped): `cli_pointer` (`mempalace.yaml` `palace:`+wings), `cg_search` (`config.yaml` `mempalace:`), `global_alias` (`~/.mempalace/config.json` `palaces:` — **read-modify-merge-write**, never clobber), `mcp` (`.mcp.json` mempalace server, palace injected, never hardcoded) (depends on T004)
+- [X] T007 [P] Implement `mneme/mempalace/health.py`: `DedicatedStore` inspection (bindings = `turbovec/*/store.sqlite3`+`knowledge_graph.sqlite3`; rebuildable = `index.tvim`; legacy = `chroma.sqlite3`) + `StoreHealth` (present + turbovec `store_gen`/`tvim` consistency via `runner status`) (depends on T003, T005)
+- [X] T008 [P] Foundational unit tests in `tests/unit/test_mp_store_foundation.py`: store-pointer load/validate (incl. **refuse missing pointer**); render golden for all four faces incl. **config.json merge-not-clobber**; health classification of a fixture store
 
 **Checkpoint**: Kernel ready.
 
@@ -53,11 +53,11 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 **Independent Test**: Point bring-up at a new campaign with docs and no `.mneme/`; afterward it has the authority+store pointer, all four faces, a built store, and a green report.
 
-- [ ] T009 [P] [US1] Unit test in `tests/unit/test_mp_bringup.py`: step order (configure→render→provision→first-mine), idempotent re-run is a no-op, interrupted/failed step ⇒ **not-ready** (never reported ready), no-docs ⇒ "nothing to index yet" (not a failure)
-- [ ] T010 [P] [US1] Integration test in `tests/integration/test_mp_bringup.py`: end-to-end bringup over the greenfield fixture (stub `mempalace`) — four faces written, store dir created, report green; **Brick Test** (delete store → re-bringup reproduces from docs+authority) (SC-007); **isolation** (SC-005): a sibling campaign's store + faces are byte-unchanged after this bring-up; assert bring-up writes the **active workspace directly** (creation-time path), distinct from the working-copy path (FR-005, U1)
-- [ ] T011 [US1] Implement `mneme/mempalace/provision.py`: declare the store pointer, render the alias + `palace:` faces, then first `mempalace mine --palace` (sub-scopes-before-root) to **create** the store (depends on T006, T005)
-- [ ] T012 [US1] Implement `mneme/mempalace/bringup.py`: orchestrate configure (bootstrap authority + store pointer) → render four faces → provision/first-mine → emit `BringUpReport`; idempotent; not-ready on partial. The **backup step delegates to `backup.py`** (US3) — reported as "skipped (US3)" until wired (depends on T011)
-- [ ] T013 [US1] Implement `mneme mp bringup CAMPAIGN [--dry-run] [--no-backup]` in `mneme/mempalace/cli.py`: dry-run shows steps+faces; real run executes; prints the report; exit 0 iff no step failed (depends on T012)
+- [X] T009 [P] [US1] Unit test in `tests/unit/test_mp_bringup.py`: step order (configure→render→provision→first-mine), idempotent re-run is a no-op, interrupted/failed step ⇒ **not-ready** (never reported ready), no-docs ⇒ "nothing to index yet" (not a failure)
+- [X] T010 [P] [US1] Integration test in `tests/integration/test_mp_bringup.py`: end-to-end bringup over the greenfield fixture (stub `mempalace`) — four faces written, store dir created, report green; **Brick Test** (delete store → re-bringup reproduces from docs+authority) (SC-007); **isolation** (SC-005): a sibling campaign's store + faces are byte-unchanged after this bring-up; assert bring-up writes the **active workspace directly** (creation-time path), distinct from the working-copy path (FR-005, U1)
+- [X] T011 [US1] Implement `mneme/mempalace/provision.py`: declare the store pointer, render the alias + `palace:` faces, then first `mempalace mine --palace` (sub-scopes-before-root) to **create** the store (depends on T006, T005)
+- [X] T012 [US1] Implement `mneme/mempalace/bringup.py`: orchestrate configure (bootstrap authority + store pointer) → render four faces → provision/first-mine → emit `BringUpReport`; idempotent; not-ready on partial. The **backup step delegates to `backup.py`** (US3) — reported as "skipped (US3)" until wired (depends on T011)
+- [X] T013 [US1] Implement `mneme mp bringup CAMPAIGN [--dry-run] [--no-backup]` in `mneme/mempalace/cli.py`: dry-run shows steps+faces; real run executes; prints the report; exit 0 iff no step failed (depends on T012)
 
 **Checkpoint**: `mneme mp bringup` is a usable MVP (a new campaign becomes configured, provisioned, indexed, searchable).
 
