@@ -13,3 +13,5 @@ Local issue tracker (mneme has no GitHub remote — local-first). One file per i
 | [0006](0006-campaign-creation-must-bootstrap-mempalace.md) | open | campaign creation must produce a mneme-usable mempalace (bootstrap at birth) |
 | [0007](0007-proposal-aware-status.md) | resolved | `mneme mp status` should surface mneme-created proposal branches (a to-do view) |
 | [0008](0008-constitution-observability-gap.md) | open (deferred) | constitution gap: observability is not a named principle |
+| [0009](0009-hypostasis-rpg-lib-lifecycle.md) | open | hypostasis should start/stop rpg-lib (`library_server`), not just health-check it |
+| [0010](0010-hypostasis-mempalace-store-provision-backup.md) | open | hypostasis should provision + back up the per-campaign mempalace data store |
