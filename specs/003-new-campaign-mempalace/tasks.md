@@ -54,7 +54,7 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 **Independent Test**: Point bring-up at a new campaign with docs and no `.mneme/`; afterward it has the authority+store pointer, all four faces, a built store, and a green report.
 
 - [ ] T009 [P] [US1] Unit test in `tests/unit/test_mp_bringup.py`: step order (configure→render→provision→first-mine), idempotent re-run is a no-op, interrupted/failed step ⇒ **not-ready** (never reported ready), no-docs ⇒ "nothing to index yet" (not a failure)
-- [ ] T010 [P] [US1] Integration test in `tests/integration/test_mp_bringup.py`: end-to-end bringup over the greenfield fixture (stub `mempalace`) — four faces written, store dir created, report green; **Brick Test** (delete store → re-bringup reproduces an equivalent index from docs+authority) (SC-007)
+- [ ] T010 [P] [US1] Integration test in `tests/integration/test_mp_bringup.py`: end-to-end bringup over the greenfield fixture (stub `mempalace`) — four faces written, store dir created, report green; **Brick Test** (delete store → re-bringup reproduces from docs+authority) (SC-007); **isolation** (SC-005): a sibling campaign's store + faces are byte-unchanged after this bring-up; assert bring-up writes the **active workspace directly** (creation-time path), distinct from the working-copy path (FR-005, U1)
 - [ ] T011 [US1] Implement `mneme/mempalace/provision.py`: declare the store pointer, render the alias + `palace:` faces, then first `mempalace mine --palace` (sub-scopes-before-root) to **create** the store (depends on T006, T005)
 - [ ] T012 [US1] Implement `mneme/mempalace/bringup.py`: orchestrate configure (bootstrap authority + store pointer) → render four faces → provision/first-mine → emit `BringUpReport`; idempotent; not-ready on partial. The **backup step delegates to `backup.py`** (US3) — reported as "skipped (US3)" until wired (depends on T011)
 - [ ] T013 [US1] Implement `mneme mp bringup CAMPAIGN [--dry-run] [--no-backup]` in `mneme/mempalace/cli.py`: dry-run shows steps+faces; real run executes; prints the report; exit 0 iff no step failed (depends on T012)
@@ -85,7 +85,7 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 **Independent Test**: Back up, delete the store, restore → search works **without re-embedding**; deleted-source entries pruned; from-scratch re-embed only via `regenerate --confirm`.
 
 - [ ] T018 [P] [US3] Unit test in `tests/unit/test_mp_backup.py`: backup set = `store.sqlite3`+`knowledge_graph.sqlite3`, **excludes** `index.tvim`+`chroma.sqlite3`; restore copies back with **0 embed/mine calls** (stub assertion); `regenerate` requires `--confirm` and re-mines
-- [ ] T019 [P] [US3] Integration test in `tests/integration/test_mp_backup.py`: backup → delete store → restore → search works without re-embed; a deleted-source entry is pruned by reconciliation (SC-004)
+- [ ] T019 [P] [US3] Integration test in `tests/integration/test_mp_backup.py`: backup → delete store → restore → search works without re-embed; a deleted-source entry is pruned by reconciliation (SC-004); a sibling campaign's store is byte-unchanged after this campaign's backup/restore (SC-005 isolation)
 - [ ] T020 [US3] Implement `mneme/mempalace/backup.py`: `backup` (copy bindings set to the backups location, exclude rebuildable/legacy, label derived), `restore` (copy back; never re-embed), `regenerate` (explicit re-`mine`) (depends on T007, T005)
 - [ ] T021 [US3] Implement `mneme mp backup|restore|regenerate` in `mneme/mempalace/cli.py`, and **wire the backup step into `bringup.py`** (completing T012's delegated step) (depends on T020, T012)
 
@@ -124,11 +124,11 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 **Purpose**: prove bring-up works against **real** mempalace(kostadis-dev) + turbovecdb end-to-end, in a clean container with a throwaway `$HOME/.mempalace` — so the test never touches the operator's live campaign stores. Self-contained via the **local ONNX embedder** (no LAN/Spark). Separate lane from the hermetic `pytest` suite (Phases 1–7 use the stub). Mirrors `specs/001-reproducible-install/validation/`.
 
-- [ ] T031 [P] Create `specs/003-new-campaign-mempalace/validation/` (Dockerfile + docker-compose.yml + README) mirroring 001: clean `python:3.11-slim`; `pip install .` (mneme) + install `mempalace` (kostadis-dev) + `turbovecdb`; a small sample campaign baked in; `MEMPALACE_BACKEND=turbovec`, throwaway `HOME=/tmp/...` (throwaway store). **Parameterized by `EMBEDDER`** (both modes):
+- [ ] T027 [P] Create `specs/003-new-campaign-mempalace/validation/` (Dockerfile + docker-compose.yml + README) mirroring 001: clean `python:3.11-slim`; `pip install .` (mneme) + install `mempalace` (kostadis-dev) + `turbovecdb`; a small sample campaign baked in; `MEMPALACE_BACKEND=turbovec`, throwaway `HOME=/tmp/...` (throwaway store). **Parameterized by `EMBEDDER`** (both modes):
   - `EMBEDDER=onnx` — install `onnxruntime`, `MEMPALACE_EMBEDDING_PROVIDER=onnx`; **self-contained, no network** (CI/anywhere lane).
-  - `EMBEDDER=qwen` — `MEMPALACE_EMBEDDING_PROVIDER=openai-compat`, `MEMPALACE_EMBEDDING_MODEL`/`MEMPALACE_EMBEDDING_ENDPOINT` pointing at the LAN Qwen (`http://192.168.1.121:8000`); needs network to the substrate (the real production embedder).
+  - `EMBEDDER=qwen` — `MEMPALACE_EMBEDDING_PROVIDER=openai-compat`, `MEMPALACE_EMBEDDING_MODEL`/`MEMPALACE_EMBEDDING_ENDPOINT` pointing at the LAN Qwen (injected via `MEMPALACE_EMBEDDING_ENDPOINT`); needs network to the substrate (the real production embedder).
   - docker-compose exposes both as services (`validate-onnx`, `validate-qwen`).
-- [ ] T032 Author `specs/003-new-campaign-mempalace/validation/run-validation.sh` (takes `EMBEDDER=onnx|qwen`) — the acid test (exits non-zero on any FAIL, Principle I), run the **same assertions in both modes**:
+- [ ] T028 Author `specs/003-new-campaign-mempalace/validation/run-validation.sh` (takes `EMBEDDER=onnx|qwen`) — the acid test (exits non-zero on any FAIL, Principle I), run the **same assertions in both modes**:
   - for `qwen`: **first health-gate the embedding endpoint** (reachable? else exit clearly "substrate not up" — never assume, Principle I);
   - real `mneme mp bringup <sample>` → assert the per-campaign turbovec store is created + a real `mneme mp search`/`status` returns over the sample docs;
   - `mneme mp backup` → verify the backup set excludes `index.tvim`/`chroma.sqlite3`;
@@ -138,17 +138,17 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T033 [P] Update `README.md` with `mneme mp bringup|backup|restore|regenerate`, the `mneme up` store-health gate, and the 003 validation container (alongside the 001 one)
-- [ ] T034 Run all `quickstart.md` scenarios A–F against the stub fixtures (hermetic lane); fix gaps
-- [ ] T035 Run `ruff check hypostasis mneme tests` + full `pytest` (hermetic), then the Docker acid test in **both modes**: `... run --rm validate-onnx` (always) and `... run --rm validate-qwen` (when the LAN Qwen endpoint is up; skips honestly if not); resolve issues
-- [ ] T036 [P] Docs note: cross-reference `research-current-state.md` (turbovec backup target) and note the 002 `is_stale` bug (#22) is tracked separately (003 health uses `health.py`, not `is_stale`)
+- [ ] T029 [P] Update `README.md` with `mneme mp bringup|backup|restore|regenerate`, the `mneme up` store-health gate, and the 003 validation container (alongside the 001 one)
+- [ ] T030 Run all `quickstart.md` scenarios A–F against the stub fixtures (hermetic lane); fix gaps
+- [ ] T031 Run `ruff check hypostasis mneme tests` + full `pytest` (hermetic), then the Docker acid test in **both modes**: `... run --rm validate-onnx` (always) and `... run --rm validate-qwen` (when the LAN Qwen endpoint is up; skips honestly if not); resolve issues
+- [ ] T032 [P] Docs note: cross-reference `research-current-state.md` (turbovec backup target) and note the 002 `is_stale` bug (#22) is tracked separately (003 health uses `health.py`, not `is_stale`)
 
 ---
 
 ## Dependencies & Execution Order
 
 ### Phase order
-- Setup (P1) → Foundational (P2, **blocks all stories**) → US1 (P3) → US2/US3/US5 (P4–6) → US4 (P7) → Polish (P8).
+- Setup (P1) → Foundational (P2, **blocks all stories**) → US1 (P3) → US2/US3/US5 (P4–6) → US4 (P7) → Docker acid test (P8) → Polish (P9).
 
 ### Cross-story dependencies (delivered earlier by priority)
 - **US1 `bringup.py`** has a backup step that **US3 `backup.py`** completes (T021 wires it). US1 ships MVP with backup reported "skipped (US3)".

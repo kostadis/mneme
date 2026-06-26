@@ -120,7 +120,7 @@ Whether the GM searches from the **command line inside the campaign's directory*
 
 - **No documents yet**: a campaign with configuration but no indexable documents → bring-up sets up config + provisions the store, reports "nothing to index yet," and is not a failure.
 - **Pre-existing ad-hoc config**: a campaign that already carries hand-made/fragmented mempalace config is **out of scope** for bring-up — it is handled once by the migration (GH #24), not reconciled here.
-- **Shared store already holds this campaign**: provisioning must not clobber or conflate another campaign's data in a shared store.
+- **Shared global registry**: stores are dedicated per campaign; the only shared artifact is `~/.mempalace/config.json` — rendering MUST merge this campaign's entry, never clobber another's (the rest of a campaign's wiring is its own files).
 - **First mine fails partway**: bring-up leaves a clearly *not-done* state (reported as incomplete), never a half-built index passed off as ready.
 - **Store provisioning fails / backup location unavailable**: the failing step is isolated and reported; bring-up does not claim success.
 - **Re-run after partial failure**: bring-up resumes/repairs idempotently to a complete state.
@@ -141,7 +141,7 @@ Whether the GM searches from the **command line inside the campaign's directory*
 - **FR-006**: After bring-up, the campaign MUST be **immediately observable** in status as built/conformant, with its recipe version recorded; bring-up MUST **report each step's observed outcome** and any owed follow-up (Observability — never a bare success, never silently outside management).
 - **FR-007**: Bring-up MUST treat the index as **derived, non-authoritative** data: the authoritative inputs are the documents + configuration (already version-controlled). The index is rebuildable and MUST NOT be treated as a source of truth.
 - **FR-008**: Bring-up MUST be **idempotent**: re-running on an already-set-up, healthy campaign changes nothing it shouldn't (a no-op or a reported repair), and a partial/interrupted bring-up MUST be safe to resume to a complete state and MUST NOT be reported as ready while incomplete.
-- **FR-009**: Bring-up of one campaign MUST be **isolated**: it MUST NOT require or disturb other campaigns, and where a store is shared it MUST NOT clobber or conflate another campaign's data.
+- **FR-009**: Bring-up of one campaign MUST be **isolated**: it MUST NOT require or disturb other campaigns. Stores are dedicated per campaign (FR-013), so the only shared artifact is the global registry (`~/.mempalace/config.json`) — rendering it MUST **merge** this campaign's entry and never clobber another's.
 - **FR-010**: `mneme up` brings up the campaign **runtime/environment**, not the mempalace. It MUST **health-gate** the campaign's mempalace and **fail** (refuse to start the runtime) if the mempalace is not brought up or not healthy — mirroring how it already gates on the substrate. It MUST NOT itself perform bring-up.
 - **FR-011**: Bring-up MUST **back up the bindings** — the expensive computed embeddings that constitute the index's source of truth — and mark the backup clearly as derived/disposable (not an authority). The backup MUST exclude rebuildable artifacts (the ANN index cache, which regenerates from the bindings without recomputing embeddings) and any dead legacy store files.
 - **FR-012**: A **restore** MUST **preserve the bindings as-is by default** — it MUST NOT re-generate (re-embed) from scratch. The system relies on the store's **own automatic reconciliation** (it prunes entries whose source is gone) so a restored store self-corrects rather than serving stale content; new content is added incrementally by a normal index run, not a full rebuild. **Full re-generation (re-embed from scratch) MUST be a separate, explicit, opt-in operation** (e.g., an embedding-model change) — never the automatic behavior. The system MUST surface, after a restore, that bindings were preserved (and any reconciliation that pruned entries).
@@ -157,7 +157,7 @@ Whether the GM searches from the **command line inside the campaign's directory*
 - **Per-campaign configuration (authority)**: the single in-campaign source of truth for the campaign's index (wings/rooms/exclusions/order + recipe version), written/consolidated at bring-up. (Same entity as feature 002.)
 - **Index store**: the provisioned backing store that holds the campaign's built index. Derived; rebuildable; protected by backup; never an authority.
 - **First index**: the index built over the campaign's documents during bring-up.
-- **Index backup**: a derived, disposable copy of the built index, restorable only under a freshness check.
+- **Bindings backup**: a derived, disposable copy of the **bindings** (the turbovec `store.sqlite3` source-of-truth), **excluding** the rebuildable index cache and dead legacy. Restorable **as-is** (no freshness gate) — correctness comes from the store's auto-reconciliation (it prunes entries whose source is gone), not from a rebuild. Re-embedding from scratch is a separate explicit operation.
 - **Bring-up report**: the per-step observed outcome (configured / provisioned / indexed / backed-up) plus any owed follow-up — the observability surface for the operation.
 
 ## Success Criteria *(mandatory)*
