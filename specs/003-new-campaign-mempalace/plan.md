@@ -64,7 +64,11 @@ dir on `mine`, and answer `status`. Unit: store-pointer authority load/validate,
 render (golden files; config.json **merge** not clobber), backup selects `store.sqlite3`/excludes
 `index.tvim`+`chroma.sqlite3`, restore-preserves-bindings, the up-gate. Integration: end-to-end
 bring-up over a temp campaigns root + fake palaces; directory-context CLI resolution; the per-campaign
-MCP face points at the right palace; Brick Test (delete store → re-bringup reproduces).
+MCP face points at the right palace; Brick Test (delete store → re-bringup reproduces). Plus a **Docker
+acid test** (proof environment, mirroring 001's `validation/`) running a *real* mempalace+turbovecdb
+bring-up against a throwaway `$HOME/.mempalace` — in **two embedder modes**: local **ONNX**
+(self-contained, CI-able) and the **production LAN Qwen** endpoint (gated on reachability) — so the
+real-silicon path is proven both with and without the substrate, without touching the operator's live stores.
 
 **Target Platform**: Linux/WSL2; real campaigns under `~/campaigns/`; embeddings/LLM at the local
 substrate endpoints (must be reachable for a real `mine` — relates to substrate bring-up #1).
