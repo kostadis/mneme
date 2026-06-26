@@ -1,3 +1,21 @@
+<!--
+SYNC IMPACT REPORT — constitution amendment 2026-06-26
+Version: 1.0.0 → 1.1.0  (MINOR — a new principle added)
+Added principle: IX. Observability (State and To-Do are Discoverable, not Remembered)
+Added anti-pattern: Opacity / Tribal State (preamble list + Governance list)
+Modified: Governance — principle-test range "I–VIII" → "I–IX"; "four anti-patterns" → "five"
+Rationale: GH #11 (was local issue 0008). Principle I governs the HONESTY of a chosen
+  report; IX governs its COMPLETENESS/DISCOVERABILITY — a distinct concern, hence a new
+  principle rather than an expansion of I. Worked example: the proposal-aware `mneme mp
+  status` to-do shipped in feature 002 (GH #14).
+Templates / docs checked for sync:
+  ✅ plan-template.md — Constitution Check is generic ("[Gates determined based on
+     constitution file]"); auto-applies IX, no edit needed.
+  ✅ spec-template.md — does not enumerate principles; no change.
+  ✅ tasks-template.md — does not enumerate principles; no change.
+  ✅ CLAUDE.md (project) — points to the constitution, does not enumerate; no change.
+Follow-up: close GH #11 once ratified.
+-->
 # Platform Constitution
 
 > Encodes the Kostadis architectural doctrine — distilled from the Kostadis Engine
@@ -8,7 +26,8 @@
 > The principles are general (they are how Kostadis judges any system). Each one
 > carries an **On this platform** clause that binds it to the concrete work here.
 > Every principle names the doctrine anti-pattern it exists to kill:
-> **Optimistic Lies**, **Infrastructure Proxy**, **Fragmented State**, **Split-Brain**.
+> **Optimistic Lies**, **Infrastructure Proxy**, **Fragmented State**, **Split-Brain**,
+> **Opacity / Tribal State**.
 
 ## Core Principles
 
@@ -171,6 +190,28 @@ rather than engineer around it. Curiosity first, complexity last.
   coupling removes the hard problem instead of solving it. Reach for a new database,
   daemon, or shared library only after showing the simpler coordinate shift fails.
 
+### IX. Observability — State and To-Do are Discoverable, not Remembered
+The state of the system, and the work outstanding against it, MUST be discoverable
+from the system itself — never held in an operator's memory. It is not enough to
+answer honestly when asked (Principle I); the system MUST surface *what to ask*: what
+has drifted, what is pending, what decision is owed. A correct-but-opaque system still
+forces an expensive human back into the loop (cf. *Determinism is Trust*) — a truthful
+answer is worthless to someone who doesn't know the question to ask. Prefer one honest
+"what's true / what's next" view over state scattered across logs, branches, and tribal
+knowledge.
+- **Relation to I (distinct, not redundant):** Principle I governs the *honesty* of a
+  report; IX governs its *completeness and discoverability*. A status can be perfectly
+  truthful (I) yet opaque (violates IX) by omitting outstanding work it never thought to
+  show. Honesty about what you display ≠ surfacing everything that needs attention.
+- **Kills:** Opacity / Tribal State — state that is correct but only knowable by someone
+  who already knows where to look.
+- **On this platform:** `hypostasis status` + `mneme mp status` are the single honest
+  state-and-to-do surface — render/version drift, stale indexes, undispositioned
+  divergences, and **pending proposal branches awaiting integration** are all visible in
+  one place. The proposal-aware status to-do (feature 002, GH #14) is the worked example:
+  honest per-campaign state was not enough; the outstanding *merge* had to be surfaced,
+  not remembered.
+
 ## Architecture is Destiny (why these principles are non-negotiable)
 
 These are not stylistic preferences; they have economic force (the Value-Bridge lens):
@@ -211,9 +252,10 @@ efficiency gap, agility/automation gap — and decide on the business cost, not 
   sanctioned (decision 2026-06-24). Prefer eliminating a derived copy (component reads
   the one authority, or a coherently-regenerated render) over preserving a second
   hand-maintained store, even at the cost of coupling.
-- **Every spec and plan review tests against Principles I–VIII by name**, and against
-  the four anti-patterns (Optimistic Lies, Infrastructure Proxy, Fragmented State,
-  Split-Brain). A design that trips one without written justification does not pass.
+- **Every spec and plan review tests against Principles I–IX by name**, and against
+  the five anti-patterns (Optimistic Lies, Infrastructure Proxy, Fragmented State,
+  Split-Brain, Opacity / Tribal State). A design that trips one without written
+  justification does not pass.
 - The acid test for the first spec (`001-reproducible-install`) is a direct
   application of this constitution: one edited `platform.yaml` — the single
   authoritative store — brings the system up on a fresh venv with no manual path/IP
@@ -228,4 +270,4 @@ efficiency gap, agility/automation gap — and decide on the business cost, not 
   MINOR = a new principle or materially expanded guidance; PATCH = clarifications and
   wording that don't change meaning.
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-24 | **Last Amended**: 2026-06-24
+**Version**: 1.1.0 | **Ratified**: 2026-06-24 | **Last Amended**: 2026-06-26
