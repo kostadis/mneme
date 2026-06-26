@@ -12,6 +12,7 @@ from hypostasis import config as cfg
 from hypostasis.models import ConfigEntity
 
 from . import lifecycle
+from .mempalace.cli import app as mp_app
 
 EXIT_OK = 0
 EXIT_RUNTIME = 1
@@ -22,6 +23,8 @@ app = typer.Typer(
     no_args_is_help=True,
     help="Spin up the campaign runtime (CampaignGenerator) for a specific campaign.",
 )
+
+app.add_typer(mp_app, name="mp", help="Manage per-campaign mempalaces.")
 
 _config_opt = typer.Option(
     str(cfg.default_config_path()), "--config", "-c", help="Path to hypostasis.yaml"

@@ -53,6 +53,39 @@ mneme down out-of-the-abyss --port 5000   # stop that instance
 CG's wiring, **exports `hypostasis.yaml`'s `env:`** into CG's process, and starts CampaignGenerator
 scoped to that campaign on its own port.
 
+## `mneme mp` — manage the per-campaign mempalaces (feature 002)
+
+Each campaign keeps a semantic index ("mempalace") over its adventure docs. `mneme mp`
+manages them all from a **single authority per campaign** that lives *in the campaign*
+(`.mneme/mempalace.yaml`) — wings, room/keyword routing, exclusions, and the recorded
+**dispositions** (why a campaign diverges). The per-wing `mempalace.yaml` + `.mempalaceignore`
+are **stamped, do-not-edit renders** of that authority. mneme owns only the shared **recipe**
+(`mneme/recipes/`); writes go through a private working copy, never your active checkout.
+
+```bash
+mneme mp status [CAMPAIGN]        # honest per-campaign state: built/stale/missing/divergent (+ why)
+mneme mp refresh --all            # (re)mine every campaign from its own wings, correct order
+mneme mp render CAMPAIGN --check  # is the derived config still coherent with the authority?
+mneme mp publish --recipe 2.0.0   # stage a recipe upgrade for all campaigns on a proposal branch
+mneme mp adopt CAMPAIGN           # campaign-side gate: stage the upgrade on a branch...
+mneme mp adopt CAMPAIGN --here --confirm   # ...or write it into your checkout (uncommitted, FR-030)
+mneme mp migrate CAMPAIGN --plan plan.json   # run a human-approved, verbatim migration; then verify
+mneme mp bootstrap CAMPAIGN       # write a starter authority into a campaign that has none
+mneme mp mcp                      # MCP server: status/target/inventory/instructions + confirm-gated adopt
+```
+
+| Concept | Where it lives | Editable? |
+|---|---|---|
+| per-campaign authority (`.mneme/mempalace.yaml`) | in the campaign | ✅ the one place |
+| derived wing `mempalace.yaml` + `.mempalaceignore` | in the campaign | ❌ rendered, stamped |
+| recipe (mechanical + scaffold) | `mneme/recipes/` (mneme-owned) | versioned |
+| dispositions (the recorded "why") | in the campaign authority | ✅ human-authored |
+| mempalace index | `~/.mempalace` (mempalace's store) | — (mneme keeps no copy) |
+
+The mneme-owned **recipe** is the enforceable counterpart of the campaigns repo's prose
+`MEMPALACE_HOWTO.md`; the same method is served on demand by `mneme mp mcp` (so an assistant
+loads it instead of you pasting docs). Design: `specs/002-manage-campaign-mempalaces/`.
+
 ## What hypostasis manages (the component model)
 
 | Component | Kind | hypostasis installs? | renders config? |
