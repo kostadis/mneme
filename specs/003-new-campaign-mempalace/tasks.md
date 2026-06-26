@@ -69,10 +69,10 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 **Independent Test**: Bring up, run status; the campaign shows built/conformant with store + backup dimensions; the report matches disk.
 
-- [ ] T014 [P] [US2] Unit test in `tests/unit/test_mp_store_status.py`: store dimension (built/stale/missing via `health`), backup-present dimension, a brought-up campaign is conformant (not `missing_config`)
-- [ ] T015 [P] [US2] Integration test in `tests/integration/test_mp_store_status.py`: bringup → status shows built/conformant + store/backup state; reported state matches on-disk inspection (SC-002, SC-007 honesty)
-- [ ] T016 [US2] Extend `mneme/mempalace/conform.py`: add a **store** dimension (from `health.py`) and a **backup-present** dimension to the per-campaign report (depends on T007)
-- [ ] T017 [US2] Extend `mneme mp status` in `mneme/mempalace/cli.py` to surface the store + backup state per campaign (depends on T016)
+- [X] T014 [P] [US2] Unit test in `tests/unit/test_mp_store_status.py`: store dimension (built/stale/missing via `health`), backup-present dimension, a brought-up campaign is conformant (not `missing_config`)
+- [X] T015 [P] [US2] Integration test in `tests/integration/test_mp_store_status.py`: bringup → status shows built/conformant + store/backup state; reported state matches on-disk inspection (SC-002, SC-007 honesty)
+- [X] T016 [US2] Extend `mneme/mempalace/conform.py`: add a **store** dimension (from `health.py`) and a **backup-present** dimension to the per-campaign report (depends on T007)
+- [X] T017 [US2] Extend `mneme mp status` in `mneme/mempalace/cli.py` to surface the store + backup state per campaign (depends on T016)
 
 **Checkpoint**: US1 + US2 — bring up and *see* the new campaign honestly.
 
@@ -84,10 +84,10 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 **Independent Test**: Back up, delete the store, restore → search works **without re-embedding**; deleted-source entries pruned; from-scratch re-embed only via `regenerate --confirm`.
 
-- [ ] T018 [P] [US3] Unit test in `tests/unit/test_mp_backup.py`: backup set = `store.sqlite3`+`knowledge_graph.sqlite3`, **excludes** `index.tvim`+`chroma.sqlite3`; restore copies back with **0 embed/mine calls** (stub assertion); `regenerate` requires `--confirm` and re-mines
-- [ ] T019 [P] [US3] Integration test in `tests/integration/test_mp_backup.py`: backup → delete store → restore → search works without re-embed; a deleted-source entry is pruned by reconciliation (SC-004); a sibling campaign's store is byte-unchanged after this campaign's backup/restore (SC-005 isolation)
-- [ ] T020 [US3] Implement `mneme/mempalace/backup.py`: `backup` (copy bindings set to the backups location, exclude rebuildable/legacy, label derived), `restore` (copy back; never re-embed), `regenerate` (explicit re-`mine`) (depends on T007, T005)
-- [ ] T021 [US3] Implement `mneme mp backup|restore|regenerate` in `mneme/mempalace/cli.py`, and **wire the backup step into `bringup.py`** (completing T012's delegated step) (depends on T020, T012)
+- [X] T018 [P] [US3] Unit test in `tests/unit/test_mp_backup.py`: backup set = `store.sqlite3`+`knowledge_graph.sqlite3`, **excludes** `index.tvim`+`chroma.sqlite3`; restore copies back with **0 embed/mine calls** (stub assertion); `regenerate` requires `--confirm` and re-mines
+- [X] T019 [P] [US3] Integration test in `tests/integration/test_mp_backup.py`: backup → delete store → restore → search works without re-embed; a deleted-source entry is pruned by reconciliation (SC-004); a sibling campaign's store is byte-unchanged after this campaign's backup/restore (SC-005 isolation)
+- [X] T020 [US3] Implement `mneme/mempalace/backup.py`: `backup` (copy bindings set to the backups location, exclude rebuildable/legacy, label derived), `restore` (copy back; never re-embed), `regenerate` (explicit re-`mine`) (depends on T007, T005)
+- [X] T021 [US3] Implement `mneme mp backup|restore|regenerate` in `mneme/mempalace/cli.py`, and **wire the backup step into `bringup.py`** (completing T012's delegated step) (depends on T020, T012)
 
 **Checkpoint**: US1–US3 — bring up, observe, and protect the bindings.
 
@@ -99,8 +99,8 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 **Independent Test**: From each campaign dir the CLI resolves to that store; the `.mcp.json` mempalace face targets the same store; a campaign with the `palace:` face removed is flagged.
 
-- [ ] T022 [P] [US5] Integration test in `tests/integration/test_mp_right_store.py`: run the stub `mempalace` from inside the campaign dir → resolves to the campaign store via the rendered `palace:` face; the `.mcp.json` mcp face names the same store; removing the `palace:` face is flagged (the #21 wrong-store bug)
-- [ ] T023 [US5] Extend `mneme/mempalace/conform.py` / `mneme mp status`: assert the `cli_pointer` face and the `.mcp.json` mcp face resolve to the **same** store; flag any wrong-store / missing-pointer (SC-008) (depends on T016, T006)
+- [X] T022 [P] [US5] Integration test in `tests/integration/test_mp_right_store.py`: run the stub `mempalace` from inside the campaign dir → resolves to the campaign store via the rendered `palace:` face; the `.mcp.json` mcp face names the same store; removing the `palace:` face is flagged (the #21 wrong-store bug)
+- [X] T023 [US5] Extend `mneme/mempalace/conform.py` / `mneme mp status`: assert the `cli_pointer` face and the `.mcp.json` mcp face resolve to the **same** store; flag any wrong-store / missing-pointer (SC-008) (depends on T016, T006)
 
 **Checkpoint**: US1–US3 + US5 — search is pinned to the right store everywhere.
 
@@ -112,9 +112,9 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 **Independent Test**: Re-run bringup = no-op; `mneme up` on a campaign with a missing/unhealthy store fails with "not brought up", and passes when healthy.
 
-- [ ] T024 [P] [US4] Unit test in `tests/unit/test_mp_up_gate.py`: `lifecycle.up` fails when the store is missing/unhealthy, passes when healthy, and **never** brings the store up
-- [ ] T025 [US4] Add the store-health gate to `mneme/lifecycle.py` `up()` (uses `health.py`) — fail (exit 1) with a "mempalace not brought up — run `mneme mp bringup`" message before starting the runtime (depends on T007)
-- [ ] T026 [P] [US4] Integration test in `tests/integration/test_mp_idempotent.py`: re-running `mp bringup` on a healthy campaign is a no-op/reported repair; an interrupted bringup is reported not-ready (exercises T012)
+- [X] T024 [P] [US4] Unit test in `tests/unit/test_mp_up_gate.py`: `lifecycle.up` fails when the store is missing/unhealthy, passes when healthy, and **never** brings the store up
+- [X] T025 [US4] Add the store-health gate to `mneme/lifecycle.py` `up()` (uses `health.py`) — fail (exit 1) with a "mempalace not brought up — run `mneme mp bringup`" message before starting the runtime (depends on T007)
+- [X] T026 [P] [US4] Integration test in `tests/integration/test_mp_idempotent.py`: re-running `mp bringup` on a healthy campaign is a no-op/reported repair; an interrupted bringup is reported not-ready (exercises T012)
 
 **Checkpoint**: All stories independently functional.
 
@@ -124,11 +124,11 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 **Purpose**: prove bring-up works against **real** mempalace(kostadis-dev) + turbovecdb end-to-end, in a clean container with a throwaway `$HOME/.mempalace` — so the test never touches the operator's live campaign stores. Self-contained via the **local ONNX embedder** (no LAN/Spark). Separate lane from the hermetic `pytest` suite (Phases 1–7 use the stub). Mirrors `specs/001-reproducible-install/validation/`.
 
-- [ ] T027 [P] Create `specs/003-new-campaign-mempalace/validation/` (Dockerfile + docker-compose.yml + README) mirroring 001: clean `python:3.11-slim`; `pip install .` (mneme) + install `mempalace` (kostadis-dev) + `turbovecdb`; a small sample campaign baked in; `MEMPALACE_BACKEND=turbovec`, throwaway `HOME=/tmp/...` (throwaway store). **Parameterized by `EMBEDDER`** (both modes):
+- [X] T027 [P] Create `specs/003-new-campaign-mempalace/validation/` (Dockerfile + docker-compose.yml + README) mirroring 001: clean `python:3.11-slim`; `pip install .` (mneme) + install `mempalace` (kostadis-dev) + `turbovecdb`; a small sample campaign baked in; `MEMPALACE_BACKEND=turbovec`, throwaway `HOME=/tmp/...` (throwaway store). **Parameterized by `EMBEDDER`** (both modes):
   - `EMBEDDER=onnx` — install `onnxruntime`, `MEMPALACE_EMBEDDING_PROVIDER=onnx`; **self-contained, no network** (CI/anywhere lane).
   - `EMBEDDER=qwen` — `MEMPALACE_EMBEDDING_PROVIDER=openai-compat`, `MEMPALACE_EMBEDDING_MODEL`/`MEMPALACE_EMBEDDING_ENDPOINT` pointing at the LAN Qwen (injected via `MEMPALACE_EMBEDDING_ENDPOINT`); needs network to the substrate (the real production embedder).
   - docker-compose exposes both as services (`validate-onnx`, `validate-qwen`).
-- [ ] T028 Author `specs/003-new-campaign-mempalace/validation/run-validation.sh` (takes `EMBEDDER=onnx|qwen`) — the acid test (exits non-zero on any FAIL, Principle I), run the **same assertions in both modes**:
+- [X] T028 Author `specs/003-new-campaign-mempalace/validation/run-validation.sh` (takes `EMBEDDER=onnx|qwen`) — the acid test (exits non-zero on any FAIL, Principle I), run the **same assertions in both modes**:
   - for `qwen`: **first health-gate the embedding endpoint** (reachable? else exit clearly "substrate not up" — never assume, Principle I);
   - real `mneme mp bringup <sample>` → assert the per-campaign turbovec store is created + a real `mneme mp search`/`status` returns over the sample docs;
   - `mneme mp backup` → verify the backup set excludes `index.tvim`/`chroma.sqlite3`;
@@ -138,10 +138,10 @@ Extends the feature-002 `mneme/mempalace/` package and the `mneme mp` CLI group;
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T029 [P] Update `README.md` with `mneme mp bringup|backup|restore|regenerate`, the `mneme up` store-health gate, and the 003 validation container (alongside the 001 one)
-- [ ] T030 Run all `quickstart.md` scenarios A–F against the stub fixtures (hermetic lane); fix gaps
-- [ ] T031 Run `ruff check hypostasis mneme tests` + full `pytest` (hermetic), then the Docker acid test in **both modes**: `... run --rm validate-onnx` (always) and `... run --rm validate-qwen` (when the LAN Qwen endpoint is up; skips honestly if not); resolve issues
-- [ ] T032 [P] Docs note: cross-reference `research-current-state.md` (turbovec backup target) and note the 002 `is_stale` bug (#22) is tracked separately (003 health uses `health.py`, not `is_stale`)
+- [X] T029 [P] Update `README.md` with `mneme mp bringup|backup|restore|regenerate`, the `mneme up` store-health gate, and the 003 validation container (alongside the 001 one)
+- [X] T030 Run all `quickstart.md` scenarios A–F against the stub fixtures (hermetic lane); fix gaps
+- [X] T031 Run `ruff check hypostasis mneme tests` + full `pytest` (hermetic), then the Docker acid test in **both modes**: `... run --rm validate-onnx` (always) and `... run --rm validate-qwen` (when the LAN Qwen endpoint is up; skips honestly if not); resolve issues
+- [X] T032 [P] Docs note: cross-reference `research-current-state.md` (turbovec backup target) and note the 002 `is_stale` bug (#22) is tracked separately (003 health uses `health.py`, not `is_stale`)
 
 ---
 

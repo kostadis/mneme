@@ -311,3 +311,60 @@ def bringup(
         outcome = f"brought up {campaign}" if report.ready else f"NOT READY: {campaign}"
     typer.echo(outcome)
     raise typer.Exit(report.exit_code())
+
+
+# ── backup / restore / regenerate (US3, 003) ─────────────────────────────────
+
+
+@app.command()
+def backup(
+    campaign: str = typer.Argument(..., help="Campaign whose bindings to back up"),
+    config: str = _config_opt,
+) -> None:
+    """Snapshot the bindings (store.sqlite3 + knowledge graph), excluding rebuildable/legacy."""
+    from . import backup as _backup
+
+    entity = _load_or_exit(config)
+    try:
+        b = _backup.backup(entity, campaign)
+    except Exception as e:  # noqa: BLE001 - report any failure and exit non-zero
+        typer.echo(f"FAIL backup: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    typer.echo(f"backed up {campaign} bindings → {b.location} ({len(b.contents)} files)")
+
+
+@app.command()
+def restore(
+    campaign: str = typer.Argument(..., help="Campaign to restore bindings into"),
+    from_: str = typer.Option(None, "--from", help="A specific backup dir (default: latest)"),
+    config: str = _config_opt,
+) -> None:
+    """Restore the bindings as-is — never re-embeds; turbovecdb rebuilds the index + auto-prunes."""
+    from pathlib import Path
+
+    from . import backup as _backup
+
+    entity = _load_or_exit(config)
+    try:
+        restored = _backup.restore(entity, campaign, from_backup=Path(from_) if from_ else None)
+    except _backup.BackupError as e:
+        typer.echo(f"FAIL restore: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    typer.echo(f"restored {len(restored)} binding files for {campaign} (no re-embed)")
+
+
+@app.command()
+def regenerate(
+    campaign: str = typer.Argument(..., help="Campaign to re-embed from scratch"),
+    confirm: bool = typer.Option(False, "--confirm", help="Required — re-embedding is expensive"),
+    config: str = _config_opt,
+) -> None:
+    """Re-embed from scratch (the ONLY re-embed path): clears the store and first-mines."""
+    from . import backup as _backup
+
+    if not confirm:
+        typer.echo("regenerate re-embeds the whole campaign (expensive). Re-run with --confirm.")
+        raise typer.Exit(EXIT_OK)
+    entity = _load_or_exit(config)
+    store, mined = _backup.regenerate(entity, campaign)
+    typer.echo(f"regenerated {campaign} → {store} (mined: {', '.join(mined) or 'nothing'})")

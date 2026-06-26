@@ -49,9 +49,10 @@ mneme down out-of-the-abyss --port 5000   # stop that instance
 ```
 
 `mneme up <campaign>` resolves the campaign workspace (`data_roots.campaigns/<campaign>`),
-**health-gates** the shared substrate (won't start on a dead DGX/rpg-lib — Principle I), refreshes
-CG's wiring, **exports `hypostasis.yaml`'s `env:`** into CG's process, and starts CampaignGenerator
-scoped to that campaign on its own port.
+**health-gates** the shared substrate (won't start on a dead DGX/rpg-lib — Principle I) **and the
+campaign's mempalace store** (fails if it isn't brought up — run `mneme mp bringup` first; 003 never
+brings the store up from `up`), refreshes CG's wiring, **exports `hypostasis.yaml`'s `env:`** into
+CG's process, and starts CampaignGenerator scoped to that campaign on its own port.
 
 ## `mneme mp` — manage the per-campaign mempalaces (feature 002)
 
@@ -63,7 +64,11 @@ are **stamped, do-not-edit renders** of that authority. mneme owns only the shar
 (`mneme/recipes/`); writes go through a private working copy, never your active checkout.
 
 ```bash
-mneme mp status [CAMPAIGN]        # honest per-campaign state: built/stale/missing/divergent (+ why)
+mneme mp bringup CAMPAIGN         # NEW campaign → configure + provision + first-mine + back up (003)
+mneme mp backup CAMPAIGN          # snapshot the bindings (store.sqlite3); restore preserves them
+mneme mp restore CAMPAIGN         # bring bindings back WITHOUT re-embedding (turbovecdb auto-prunes)
+mneme mp regenerate CAMPAIGN --confirm   # the ONLY re-embed-from-scratch path (e.g. model change)
+mneme mp status [CAMPAIGN]        # per-campaign state incl. store/backup/faces dims (+ why)
 mneme mp refresh --all            # (re)mine every campaign from its own wings, correct order
 mneme mp render CAMPAIGN --check  # is the derived config still coherent with the authority?
 mneme mp publish --recipe 2.0.0   # stage a recipe upgrade for all campaigns on a proposal branch
@@ -111,6 +116,15 @@ docker compose -f specs/001-reproducible-install/validation/docker-compose.yml r
 
 In a clean environment it proves: both commands install, `status` runs honestly, `apply` renders
 with no stale copy (SC-004), and `mneme up --dry-run` previews the launch incl. env-delivery.
+
+The **003 bring-up acid test** is a separate proof environment (real mempalace + turbovecdb, two
+embedder lanes — with and without the Qwen substrate), against a throwaway `$HOME/.mempalace`:
+
+```bash
+docker compose -f specs/003-new-campaign-mempalace/validation/docker-compose.yml run --rm validate-onnx
+MEMPALACE_EMBEDDING_ENDPOINT=http://<embed-host>:<port> \
+  docker compose -f specs/003-new-campaign-mempalace/validation/docker-compose.yml run --rm validate-qwen
+```
 
 ## Development
 

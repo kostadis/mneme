@@ -83,8 +83,49 @@ def _recipe_row(cfg: CampaignMempalaceConfig, recipe: Recipe) -> ConformanceRow:
     )
 
 
+def _store_backup_rows(ref, cfg, entity, runner) -> list[ConformanceRow]:
+    """003: per-campaign store + backup dimensions (Principle IX), only when the
+    authority carries a store pointer and we have the entity (skipped for check_dir)."""
+    from pathlib import Path
+
+    from . import backup as _backup
+    from . import health as _health
+    from .models import StoreState
+
+    if entity is None or cfg.store is None:
+        return []
+    rows: list[ConformanceRow] = []
+    h = _health.health(cfg.store.path, runner=runner)
+    if h.state is StoreState.HEALTHY:
+        rows.append(ConformanceRow(ref.name, "store", State.BUILT, note="store healthy"))
+    elif h.state is StoreState.DEGRADED:
+        rows.append(ConformanceRow(ref.name, "store", State.STALE_RENDER, note=h.note))
+    else:  # missing — not a hard fail; it's a to-do (run bringup)
+        rows.append(
+            ConformanceRow(
+                ref.name, "store", State.MISSING_CONFIG, note="not provisioned — `mneme mp bringup`"
+            )
+        )
+    b = _backup.latest_backup(entity, ref.name)
+    rows.append(
+        ConformanceRow(
+            ref.name, "backup", State.CONFORMANT, note=f"backup: {b.name}" if b else "no backup"
+        )
+    )
+    # US5/SC-008: the store-naming faces (CLI pointer + MCP) must agree on the store.
+    config_json = Path.home() / ".mempalace" / "config.json"
+    mism = _render.faces_coherent(cfg, ref.path, config_json)
+    if mism:
+        rows.append(ConformanceRow(ref.name, "faces", State.STALE_RENDER, note="; ".join(mism)))
+    else:
+        rows.append(
+            ConformanceRow(ref.name, "faces", State.CONFORMANT, note="right store everywhere")
+        )
+    return rows
+
+
 def _campaign_rows(
-    ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner
+    ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None
 ) -> list[ConformanceRow]:
     if not ref.has_authority:
         return [
@@ -126,6 +167,7 @@ def _campaign_rows(
             note="documents changed since last index" if stale else "index up to date",
         )
     )
+    rows.extend(_store_backup_rows(ref, cfg, entity, runner))
     return rows
 
 
@@ -162,7 +204,7 @@ def report(
     refs = [_discover.find(entity, campaign)] if campaign else _discover.discover(entity)
     rows: list[ConformanceRow] = []
     for ref in refs:
-        rows.extend(_campaign_rows(ref, recipe, runner))
+        rows.extend(_campaign_rows(ref, recipe, runner, entity))
     return ConformanceReport(rows=tuple(rows))
 
 

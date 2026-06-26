@@ -1,0 +1,28 @@
+# 003 mempalace bring-up acid test — PROOF ENVIRONMENT, not a deployment target.
+# Two embedder lanes (the feature is validated WITH and WITHOUT the Qwen substrate):
+#   docker compose -f specs/003-new-campaign-mempalace/validation/docker-compose.yml run --rm validate-onnx
+#   docker compose -f specs/003-new-campaign-mempalace/validation/docker-compose.yml run --rm validate-qwen
+# Each exits non-zero on any FAIL (Principle I). Both use a throwaway $HOME/.mempalace.
+
+services:
+  validate-onnx:
+    build:
+      context: ../../../          # repo root: hypostasis/ + mneme/ + pyproject.toml
+      dockerfile: specs/003-new-campaign-mempalace/validation/Dockerfile
+    environment:
+      EMBEDDER: onnx              # local ONNX embedder — self-contained, no network/substrate
+
+  validate-qwen:
+    build:
+      context: ../../../
+      dockerfile: specs/003-new-campaign-mempalace/validation/Dockerfile
+    environment:
+      EMBEDDER: qwen
+      # The real production embedder. Injected, never hardcoded in logic (Principle II).
+      # Provide the host/port at run time (the substrate must be reachable):
+      #   MEMPALACE_EMBEDDING_ENDPOINT=http://<embed-host>:<port> docker compose ... run --rm validate-qwen
+      MEMPALACE_EMBEDDING_PROVIDER: openai-compat
+      MEMPALACE_EMBEDDING_ENDPOINT: ${MEMPALACE_EMBEDDING_ENDPOINT:-}
+      MEMPALACE_EMBEDDING_MODEL: ${MEMPALACE_EMBEDDING_MODEL:-}
+    # The Qwen lane needs to reach the LAN substrate; use host networking on Linux.
+    network_mode: host

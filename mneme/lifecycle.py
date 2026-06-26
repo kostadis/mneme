@@ -66,6 +66,26 @@ def unreachable_deps(entity: ConfigEntity, prober: Prober = _probe.reachable) ->
     ]
 
 
+def mempalace_not_ready(cdir: Path) -> str | None:
+    """`mneme up` store-health gate (003, FR-010). Returns None if the campaign's mempalace
+    store is brought up and healthy — OR if the campaign declares no store pointer yet (a
+    pre-003 campaign is not gated). Otherwise a reason string. mneme up FAILS on a reason;
+    it never brings the store up itself."""
+    from .mempalace import authority as _a
+    from .mempalace import health as _h
+
+    if not _a.has_authority(cdir):
+        return None  # not a 003-managed campaign — nothing to gate
+    try:
+        cfg = _a.load(cdir)
+    except _a.AuthorityError:
+        return None
+    if cfg.store is None:
+        return None
+    sh = _h.health(cfg.store.path)
+    return None if sh.ok else sh.note
+
+
 @dataclass
 class UpResult:
     campaign: str
@@ -102,6 +122,7 @@ def up(
     runner: Runner = _run,
     render: bool = True,
     dry_run: bool = False,
+    store_gate: Callable[[Path], str | None] = mempalace_not_ready,
 ) -> UpResult:
     cdir = _campaign_dir(entity, campaign, campaign_dir)
     deps = [n for n in entity.order.startup if entity.services.get(n) is not None]
@@ -119,6 +140,15 @@ def up(
         raise LifecycleError(
             f"substrate not ready — unreachable: {', '.join(down)}. "
             "The DGX/rpg-lib substrate must be up before a campaign starts."
+        )
+
+    # Gate the campaign's mempalace store (003, FR-010): mneme up runs the runtime, but
+    # refuses to start against a not-brought-up store — it never brings it up itself.
+    reason = store_gate(cdir)
+    if reason:
+        raise LifecycleError(
+            f"mempalace not brought up for '{campaign}': {reason} "
+            f"— run `mneme mp bringup {campaign}`"
         )
     if render:
         _render.render_and_write_all(entity)
