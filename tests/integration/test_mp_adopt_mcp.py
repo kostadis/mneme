@@ -10,7 +10,7 @@ from tests.fixtures import entity_for, make_campaigns
 def _behind(root):
     """Put `full` one version behind so adopt has a real change to apply."""
     auth = root / "full" / ".mneme" / "mempalace.yaml"
-    auth.write_text(auth.read_text().replace('recipe_version: "1.0.0"', 'recipe_version: "0.9.0"'))
+    auth.write_text(auth.read_text().replace('recipe_version: "2.0.0"', 'recipe_version: "0.9.0"'))
     return auth
 
 
@@ -21,7 +21,7 @@ def test_preview_writes_nothing(tmp_path):
 
     res = server.adopt(entity_for(root), "full", confirm=False)
     assert res["action"] == "preview"
-    assert any("0.9.0" in c and "1.0.0" in c for c in res["diff"]["changed"])
+    assert any("0.9.0" in c and "2.0.0" in c for c in res["diff"]["changed"])
     assert auth.read_text() == before  # nothing written on preview
 
 
@@ -36,7 +36,7 @@ def test_confirm_writes_only_mneme_files_into_active_checkout(tmp_path):
     assert ".mneme/mempalace.yaml" in res["written"]
     # the authority was upgraded in place
     auth_text = (root / "full" / ".mneme" / "mempalace.yaml").read_text()
-    assert "recipe_version: 1.0.0" in auth_text or 'recipe_version: "1.0.0"' in auth_text
+    assert "recipe_version: 2.0.0" in auth_text or 'recipe_version: "2.0.0"' in auth_text
     # campaign CONTENT is untouched — only mneme-managed files were written (FR-030)
     assert content.read_text() == content_before
 

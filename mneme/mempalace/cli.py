@@ -368,3 +368,59 @@ def regenerate(
     entity = _load_or_exit(config)
     store, mined = _backup.regenerate(entity, campaign)
     typer.echo(f"regenerated {campaign} → {store} (mined: {', '.join(mined) or 'nothing'})")
+
+
+# ── faces (H1, GH #24) ────────────────────────────────────────────────────────
+
+
+@app.command()
+def faces(
+    campaign: str = typer.Argument(..., help="Existing campaign to re-render all 4 faces for"),
+    config: str = _config_opt,
+) -> None:
+    """Re-render the four faces (cli/cg_search/global_alias/mcp) from an existing authority."""
+    from . import bringup as _bringup
+    from .authority import AuthorityError
+
+    entity = _load_or_exit(config)
+    try:
+        written = _bringup.render_existing_faces(entity, campaign)
+    except AuthorityError as e:
+        typer.echo(f"FAIL faces: {'; '.join(e.problems)}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    for w in written:
+        typer.echo(f"rendered {w}")
+
+
+# ── drop-legacy (H2, GH #24) ──────────────────────────────────────────────────
+
+
+@app.command(name="drop-legacy")
+def drop_legacy(
+    campaign: str = typer.Argument(..., help="Campaign whose store's chroma legacy to remove"),
+    confirm: bool = typer.Option(False, "--confirm", help="Required — deletes the legacy files"),
+    config: str = _config_opt,
+) -> None:
+    """Remove the dead chroma legacy (sqlite + segments + marker) from a campaign's store."""
+    from . import authority as _authority
+    from . import discover as _discover
+    from . import health as _health
+
+    entity = _load_or_exit(config)
+    ref = _discover.find(entity, campaign)
+    if not _authority.has_authority(ref.path):
+        typer.echo(f"{campaign}: no authority — bootstrap/bringup first", err=True)
+        raise typer.Exit(EXIT_RUNTIME)
+    store = _authority.require_store(_authority.load(ref.path))
+    found = _health.inspect(store.path).legacy_files
+    if not found:
+        typer.echo(f"{campaign}: no chroma legacy at {store.path}")
+        raise typer.Exit(EXIT_OK)
+    if not confirm:
+        typer.echo(f"{campaign}: would remove {len(found)} legacy item(s) from {store.path}:")
+        for p in found:
+            typer.echo(f"  - {p.name}")
+        typer.echo("Re-run with --confirm to delete.")
+        raise typer.Exit(EXIT_OK)
+    removed = _health.drop_legacy(store.path)
+    typer.echo(f"dropped {len(removed)} legacy item(s) from {store.path}")

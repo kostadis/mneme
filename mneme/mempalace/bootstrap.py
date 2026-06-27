@@ -19,11 +19,52 @@ from . import authority as _authority
 from . import discover as _discover
 from . import recipe as _recipe
 from . import render as _render
-from .models import CampaignMempalaceConfig, Recipe, Room, Wing
+from .models import CampaignMempalaceConfig, Recipe, Room, StorePointer, Wing
+
+
+def _trust_for(wing_name: str, recipe: Recipe) -> str:
+    """Trust for a consolidated wing, from the recipe's scaffold role for that name
+    (narrative→authoritative, chronicle→accelerator, …). Unknown names → reference."""
+    for p in recipe.scaffold:
+        for t in p.wings:
+            if t.name == wing_name:
+                return t.trust
+    return "reference"
+
+
+def _default_store(campaign: str) -> StorePointer:
+    alias = _authority._normalize_wing_name(campaign) or campaign
+    return StorePointer(alias=alias, path=Path.home() / ".mempalace" / "palaces" / alias)
+
+
+def _folded_exclusions(campaign_dir: Path, wings: list[Wing], recipe: Recipe) -> tuple[str, ...]:
+    """Fold campaign-specific globs from existing .mempalaceignore files into extra_exclusions.
+    Drops recipe baseline items and wing-source double-mine guards (render regenerates those)."""
+    baseline = {b.rstrip("/") for b in recipe.mechanical.baseline_exclusions}
+    wing_srcs = {w.source.rstrip("/") for w in wings if w.source not in (".", "")}
+    extras: list[str] = []
+    for ig in sorted(campaign_dir.rglob(".mempalaceignore")):
+        for raw in ig.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            key = line.rstrip("/")
+            if key in baseline or key in wing_srcs or line in extras:
+                continue
+            extras.append(line)
+    return tuple(extras)
 
 
 def choose_pattern(campaign_dir: Path, recipe: Recipe):
-    """Pick the scaffold pattern that fits the campaign's existing layout."""
+    """Pick the scaffold pattern to draw wing templates from.
+
+    v2+: the `standard` (6-wing) model is the template — `starter_config` filters it to the
+    source dirs that actually exist, so each campaign gets the subset of the 6 it has on disk
+    ("wire what exists"). v1 (no `standard`) keeps the old fits-the-layout selection.
+    """
+    by_id = {p.id: p for p in recipe.scaffold}
+    if "standard" in by_id:
+        return by_id["standard"]
     have_chapters = (campaign_dir / "docs" / "chapters").is_dir()
     have_distill = (campaign_dir / "docs" / "distill_extractions").is_dir()
     if have_chapters and have_distill:
@@ -32,10 +73,7 @@ def choose_pattern(campaign_dir: Path, recipe: Recipe):
         want = "two_wing"
     else:
         want = "single_wing"
-    for p in recipe.scaffold:
-        if p.id == want:
-            return p
-    return recipe.scaffold[-1] if recipe.scaffold else None
+    return by_id.get(want) or (recipe.scaffold[-1] if recipe.scaffold else None)
 
 
 def starter_config(campaign: str, campaign_dir: Path, recipe: Recipe) -> CampaignMempalaceConfig:
@@ -52,7 +90,10 @@ def starter_config(campaign: str, campaign_dir: Path, recipe: Recipe) -> Campaig
     if not wings:
         wings = [Wing(name=campaign, source=".", trust="reference", rooms=())]
     return CampaignMempalaceConfig(
-        campaign=campaign, recipe_version=recipe.version, wings=tuple(wings)
+        campaign=campaign,
+        recipe_version=recipe.version,
+        wings=tuple(wings),
+        store=_default_store(campaign),
     )
 
 
@@ -75,13 +116,18 @@ def consolidate_config(
             )
             for r in (doc.get("rooms") or ())
         )
+        name = str(doc.get("wing", rel))
         wings.append(
-            Wing(name=str(doc.get("wing", rel)), source=rel, trust="reference", rooms=rooms)
+            Wing(name=name, source=rel, trust=_trust_for(name, recipe), rooms=rooms)
         )
     if not wings:
         return starter_config(campaign, campaign_dir, recipe)
     return CampaignMempalaceConfig(
-        campaign=campaign, recipe_version=recipe.version, wings=tuple(wings)
+        campaign=campaign,
+        recipe_version=recipe.version,
+        wings=tuple(wings),
+        extra_exclusions=_folded_exclusions(campaign_dir, wings, recipe),
+        store=_default_store(campaign),
     )
 
 

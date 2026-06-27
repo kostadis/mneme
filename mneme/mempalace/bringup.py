@@ -96,6 +96,25 @@ def bringup(
     return BringUpReport(campaign, tuple(steps))
 
 
+def render_existing_faces(
+    entity: ConfigEntity,
+    campaign: str,
+    *,
+    recipe=None,
+    config_json: Path | None = None,
+) -> list[Path]:
+    """H1 (GH #24): re-render ALL four faces for an EXISTING campaign from its authority —
+    no bootstrap, no mining. Used by convergence to wire the store-naming faces (cli pointer,
+    cg_search, global alias, MCP) onto a campaign that already has a `.mneme/mempalace.yaml`."""
+    rec = recipe or _recipe.current()
+    config_json = config_json or default_config_json()
+    ref = _discover.find(entity, campaign)
+    if not _authority.has_authority(ref.path):
+        raise _authority.AuthorityError([f"{campaign}: no authority — bootstrap/bringup first"])
+    cfg = _authority.load(ref.path)
+    return _render.render_faces(cfg, rec, ref.path, config_json)
+
+
 def _backup_step(entity: ConfigEntity, campaign: str, campaign_dir: Path) -> BringUpStep:
     try:
         from . import backup as _backup  # US3

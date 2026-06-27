@@ -32,7 +32,7 @@ def campaigns_repo(tmp_path):
     make_campaigns(active)
     # put `full` one version behind so publish has a real change to propose
     auth = active / "full" / ".mneme" / "mempalace.yaml"
-    auth.write_text(auth.read_text().replace('recipe_version: "1.0.0"', 'recipe_version: "0.9.0"'))
+    auth.write_text(auth.read_text().replace('recipe_version: "2.0.0"', 'recipe_version: "0.9.0"'))
     _git_ok("-C", str(active), "add", "-A")
     _git_ok("-C", str(active), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "init")
     _git_ok("-C", str(active), "push", "-u", "origin", "main")
@@ -46,7 +46,7 @@ def test_publish_pushes_branch_and_leaves_active_checkout_untouched(campaigns_re
 
     branch, plans = publish.publish(entity_for(active), state_dir=tmp_path / "work")
 
-    assert branch == "mneme/recipe-1.0.0"
+    assert branch == "mneme/recipe-2.0.0"
     # the proposal branch exists on the remote
     assert _git("-C", str(remote), "rev-parse", "--verify", branch).returncode == 0
     # SC-009: the active checkout is byte-for-byte unchanged by mneme
@@ -54,5 +54,5 @@ def test_publish_pushes_branch_and_leaves_active_checkout_untouched(campaigns_re
     assert _git("-C", str(active), "rev-parse", "HEAD").stdout == before_head
     # the working copy carries the upgraded authority
     work_auth = (tmp_path / "work" / "full" / ".mneme" / "mempalace.yaml").read_text()
-    assert 'recipe_version: 1.0.0' in work_auth or 'recipe_version: "1.0.0"' in work_auth
+    assert 'recipe_version: 2.0.0' in work_auth or 'recipe_version: "2.0.0"' in work_auth
     assert any(p.campaign == "full" for p in plans)

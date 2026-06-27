@@ -37,7 +37,7 @@ def entity_for(campaigns_root: Path) -> ConfigEntity:
 
 FULL_AUTHORITY = """\
 campaign: full
-recipe_version: "1.0.0"
+recipe_version: "2.0.0"
 wings:
   - name: narrative
     source: docs/chapters

@@ -16,16 +16,20 @@ def _write_authority(campaign_dir, body):
 # ── recipe ────────────────────────────────────────────────────────────────────
 
 
-def test_recipe_current_loads_v1():
+def test_recipe_current_loads_v2_standard():
     rec = recipe.current()
-    assert rec.version == "1.0.0"
-    assert "summaries/" in rec.mechanical.baseline_exclusions
+    assert rec.version == "2.0.0"  # v2 is the new standard (GH #24)
+    # notes/ and summaries/ are WINGS in v2, no longer baseline exclusions
+    assert "summaries/" not in rec.mechanical.baseline_exclusions
+    assert "notes/" not in rec.mechanical.baseline_exclusions
     assert rec.mechanical.tunnel_rooms == ("npcs", "world")
-    assert any(p.id == "three_wing" for p in rec.scaffold)
+    assert rec.scaffold[0].id == "standard"  # the 6-wing model is preferred
+    assert any(p.id == "three_wing" for p in rec.scaffold)  # fallbacks kept
 
 
 def test_recipe_load_by_major():
-    assert recipe.load("1.2.3").version == "1.0.0"  # major 1 → v1 file
+    assert recipe.load("1.2.3").version == "1.0.0"  # major 1 → v1 file (preserved)
+    assert recipe.load("2.1.0").version == "2.0.0"  # major 2 → v2 file
     with pytest.raises(recipe.RecipeError):
         recipe.load("9.0.0")
 
@@ -102,7 +106,7 @@ def test_render_produces_stamped_wings_and_ignore(tmp_path):
     assert ".mempalaceignore" in arts
 
     ignore = arts[".mempalaceignore"].content
-    assert "summaries/" in ignore  # recipe baseline
+    assert "logs/" in ignore  # recipe baseline (v2; summaries/ is a wing now, not excluded)
     assert "scratch/" in ignore  # extra_exclusions
     assert "docs/chapters/" in ignore  # double-mine guard for non-root wing
     assert "docs/distill_extractions/" in ignore

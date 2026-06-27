@@ -17,7 +17,7 @@ def test_target_config_is_retrievable_without_hand_assembly(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
     tc = server.target_config(entity_for(root), "full")
     assert tc["campaign"] == "full"
-    assert tc["recipe_version"] == "1.0.0"
+    assert tc["recipe_version"] == "2.0.0"
     assert {w["name"] for w in tc["recommended"]["wings"]} == {"narrative", "chronicle", "full"}
 
 

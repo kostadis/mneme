@@ -44,7 +44,7 @@ def test_missing_config_is_reported_not_failed(tmp_path):
 def test_version_behind_is_pending_upgrade(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
     auth = root / "full" / ".mneme" / "mempalace.yaml"
-    auth.write_text(auth.read_text().replace('recipe_version: "1.0.0"', 'recipe_version: "0.9.0"'))
+    auth.write_text(auth.read_text().replace('recipe_version: "2.0.0"', 'recipe_version: "0.9.0"'))
     report = conform.report(entity_for(root), campaign="full", runner=runner_clean())
     recipe_row = next(r for r in report.for_campaign("full") if r.dimension == "recipe")
     assert recipe_row.state == State.DIVERGENT_PENDING
@@ -56,7 +56,7 @@ def test_undispositioned_scaffold_is_a_failure(tmp_path):
     # Replace full's wings with a non-standard single wing + no disposition for it.
     auth = root / "full" / ".mneme" / "mempalace.yaml"
     auth.write_text(
-        'campaign: full\nrecipe_version: "1.0.0"\n'
+        'campaign: full\nrecipe_version: "2.0.0"\n'
         "wings:\n  - {name: weird, source: '.', trust: reference, rooms: []}\n"
     )
     report = conform.report(entity_for(root), campaign="full", runner=runner_clean())
@@ -70,7 +70,7 @@ def test_deliberate_disposition_clears_the_failure(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
     auth = root / "full" / ".mneme" / "mempalace.yaml"
     auth.write_text(
-        'campaign: full\nrecipe_version: "1.0.0"\n'
+        'campaign: full\nrecipe_version: "2.0.0"\n'
         "wings:\n  - {name: weird, source: '.', trust: reference, rooms: []}\n"
         "dispositions:\n  - {divergence: scaffold.nomatch, kind: deliberate, "
         "rationale: 'single-wing on purpose', recorded: '2026-06-25'}\n"
