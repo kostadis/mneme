@@ -15,11 +15,17 @@ mechanical:
     - voice/
     - examples/
     - .claude/
+    - .mneme/            # mneme's own palace metadata (owner.yaml, mempalace.yaml) — never content
+    - .mcp.json          # GH #28 — rendered mcp face (MCP server config), not content
     - MEMPALACE.md
     - "*.sh"
     - config.yaml
-    - ui_config.yaml
+    - ui_config.yaml     # legacy name (kept in case it resurfaces)
+    - ui_state.yaml      # GH #28 — the REAL CG UI/session-state file, rewritten every run
     - entities.json
+    - refs.yaml          # GH #28 — rpg-lib reference index, not narrative content
+    - refs.local.yaml    # GH #28 — local rpg-lib reference overrides
+    - .dedup_state.json  # GH #28 — dossier-merge bookkeeping (matches at any depth, e.g. docs/npcs/)
   mining_order: subscopes_before_root
   tunnel_rooms: [npcs, world]
   hazards:
