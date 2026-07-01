@@ -73,3 +73,33 @@ def test_find_ambiguous_across_trees_errors(tmp_path):
         discover.find(entity_for_trees(t1, t2), "toee")
     msg = str(ei.value)
     assert "ambiguous" in msg and str(t1) in msg and str(t2) in msg
+
+
+def test_ref_for_dir_builds_ref_from_path(tmp_path):
+    # GH #27 — --dir resolves an explicit workspace; tree = parent.
+    t1 = tmp_path / "t1"
+    camp = make_simple_campaign(t1, "toee")
+    ref = discover.ref_for_dir(entity_for_trees(t1), camp)
+    assert ref.name == "toee" and ref.path == camp and ref.tree == t1
+
+
+def test_ref_for_dir_missing_errors(tmp_path):
+    with pytest.raises(discover.DiscoveryError):
+        discover.ref_for_dir(entity_for_trees(tmp_path), tmp_path / "nope")
+
+
+def test_resolve_dir_wins_over_ambiguous_name(tmp_path):
+    # GH #27 — --dir bypasses the ambiguity guard: name in both trees, but --dir picks one.
+    t1, t2 = tmp_path / "t1", tmp_path / "t2"
+    a = make_simple_campaign(t1, "toee")
+    make_simple_campaign(t2, "toee")
+    e = entity_for_trees(t1, t2)
+    with pytest.raises(discover.DiscoveryError):
+        discover.resolve(e, "toee")  # ambiguous by name
+    assert discover.resolve(e, "toee", a).path == a  # --dir resolves it
+
+
+def test_resolve_name_when_no_dir(tmp_path):
+    t1 = tmp_path / "t1"
+    make_simple_campaign(t1, "alpha")
+    assert discover.resolve(entity_for_trees(t1), "alpha").name == "alpha"

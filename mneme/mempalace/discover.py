@@ -104,3 +104,24 @@ def find(entity: ConfigEntity, campaign: str) -> CampaignRef:
             "Remove the duplicate or pass an explicit --dir path."
         )
     return owned[0]
+
+
+def ref_for_dir(entity: ConfigEntity, campaign_dir) -> CampaignRef:
+    """Build a CampaignRef for an explicit campaign workspace path (the ``--dir`` override).
+
+    Bypasses tree discovery and the ambiguity guard — the caller names the exact workspace
+    (GH #27). The tree is taken as the parent dir; ownership is classified as usual."""
+    p = Path(campaign_dir).expanduser()
+    if not p.is_dir():
+        raise DiscoveryError(f"campaign workspace not found: {p}")
+    return _ref_for(p, p.parent, entity.mneme_identity)
+
+
+def resolve(entity: ConfigEntity, campaign: str | None, campaign_dir=None) -> CampaignRef:
+    """Resolve one campaign to a ref — an explicit ``--dir`` path wins over the name lookup.
+
+    Lets `mneme mp` commands act on a specific workspace even when the name is ambiguous
+    across declared trees (GH #27)."""
+    if campaign_dir:
+        return ref_for_dir(entity, campaign_dir)
+    return find(entity, campaign)

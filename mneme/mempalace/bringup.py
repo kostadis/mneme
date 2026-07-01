@@ -54,11 +54,12 @@ def bringup(
     config_json: Path | None = None,
     do_backup: bool = True,
     dry_run: bool = False,
+    campaign_dir: str | None = None,
 ) -> BringUpReport:
     rec = recipe or _recipe.current()
     runner = runner or MempalaceRunner.for_venv(_venv(entity))
     config_json = config_json or default_config_json()
-    ref = _discover.find(entity, campaign)
+    ref = _discover.resolve(entity, campaign, campaign_dir)
     steps: list[BringUpStep] = []
     cfg = _plan_config(campaign, ref.path, rec)  # in-memory; no write yet
 
@@ -102,13 +103,14 @@ def render_existing_faces(
     *,
     recipe=None,
     config_json: Path | None = None,
+    campaign_dir: str | None = None,
 ) -> list[Path]:
     """H1 (GH #24): re-render ALL four faces for an EXISTING campaign from its authority —
     no bootstrap, no mining. Used by convergence to wire the store-naming faces (cli pointer,
     cg_search, global alias, MCP) onto a campaign that already has a `.mneme/mempalace.yaml`."""
     rec = recipe or _recipe.current()
     config_json = config_json or default_config_json()
-    ref = _discover.find(entity, campaign)
+    ref = _discover.resolve(entity, campaign, campaign_dir)
     if not _authority.has_authority(ref.path):
         raise _authority.AuthorityError([f"{campaign}: no authority — bootstrap/bringup first"])
     cfg = _authority.load(ref.path)

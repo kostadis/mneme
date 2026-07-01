@@ -224,11 +224,15 @@ def report(
     entity: ConfigEntity,
     campaign: str | None = None,
     *,
+    campaign_dir: str | None = None,
     runner: MempalaceRunner | None = None,
 ) -> ConformanceReport:
     recipe = _recipe.current()
     runner = runner or MempalaceRunner.for_venv(_venv(entity))
-    refs = [_discover.find(entity, campaign)] if campaign else _discover.discover(entity)
+    if campaign or campaign_dir:
+        refs = [_discover.resolve(entity, campaign, campaign_dir)]
+    else:
+        refs = _discover.discover(entity)
     rows: list[ConformanceRow] = []
     for ref in refs:
         rows.extend(_campaign_rows(ref, recipe, runner, entity))

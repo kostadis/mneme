@@ -35,8 +35,8 @@ def backups_root(entity: ConfigEntity) -> Path:
     return root if root else Path.home() / ".mneme" / "backups"
 
 
-def _store_path(entity: ConfigEntity, campaign: str) -> Path:
-    ref = _discover.find(entity, campaign)
+def _store_path(entity: ConfigEntity, campaign: str, campaign_dir: str | None = None) -> Path:
+    ref = _discover.resolve(entity, campaign, campaign_dir)
     cfg = _authority.load(ref.path)
     return _authority.require_store(cfg).path
 
@@ -53,9 +53,11 @@ def has_backup(entity: ConfigEntity, campaign: str) -> bool:
     return latest_backup(entity, campaign) is not None
 
 
-def backup(entity: ConfigEntity, campaign: str, *, stamp: str | None = None) -> BindingsBackup:
+def backup(
+    entity: ConfigEntity, campaign: str, *, stamp: str | None = None, campaign_dir: str | None = None
+) -> BindingsBackup:
     """Snapshot the bindings to `<backups>/<campaign>/<stamp>/`, preserving layout."""
-    store = _store_path(entity, campaign)
+    store = _store_path(entity, campaign, campaign_dir)
     ds = _health.inspect(store)
     if not ds.present:
         raise BackupError(f"{campaign}: no store to back up at {store}")
@@ -73,13 +75,19 @@ def backup(entity: ConfigEntity, campaign: str, *, stamp: str | None = None) -> 
     return BindingsBackup(campaign=campaign, location=dest, taken=stamp, contents=tuple(contents))
 
 
-def restore(entity: ConfigEntity, campaign: str, *, from_backup: Path | None = None) -> list[Path]:
+def restore(
+    entity: ConfigEntity,
+    campaign: str,
+    *,
+    from_backup: Path | None = None,
+    campaign_dir: str | None = None,
+) -> list[Path]:
     """Copy the bindings back into the store — NEVER re-embeds. turbovecdb rebuilds the
     index from the restored bindings and prunes removed entries on next open (FR-012)."""
     src = Path(from_backup) if from_backup else latest_backup(entity, campaign)
     if src is None or not (src / MARKER).is_file():
         raise BackupError(f"{campaign}: no backup to restore from")
-    store = _store_path(entity, campaign)
+    store = _store_path(entity, campaign, campaign_dir)
     store.mkdir(parents=True, exist_ok=True)
     restored: list[Path] = []
     for f in src.rglob("*"):
@@ -94,10 +102,14 @@ def restore(entity: ConfigEntity, campaign: str, *, from_backup: Path | None = N
 
 
 def regenerate(
-    entity: ConfigEntity, campaign: str, *, runner: MempalaceRunner | None = None
+    entity: ConfigEntity,
+    campaign: str,
+    *,
+    runner: MempalaceRunner | None = None,
+    campaign_dir: str | None = None,
 ) -> tuple[Path, list[str]]:
     """The ONLY re-embed path (FR-012): clear the store and first-mine from scratch."""
-    ref = _discover.find(entity, campaign)
+    ref = _discover.resolve(entity, campaign, campaign_dir)
     cfg = _authority.load(ref.path)
     store = _authority.require_store(cfg).path
     if store.is_dir():

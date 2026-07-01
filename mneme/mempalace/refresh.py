@@ -59,12 +59,16 @@ def refresh(
     entity: ConfigEntity,
     campaign: str | None = None,
     *,
+    campaign_dir: str | None = None,
     dry_run: bool = False,
     runner: MempalaceRunner | None = None,
 ) -> list[RefreshResult]:
-    """Refresh one campaign (``campaign`` set) or all (``campaign`` None)."""
+    """Refresh one campaign (``campaign``/``campaign_dir`` set) or all (both None)."""
     runner = runner or MempalaceRunner.for_venv(_venv(entity))
-    refs = [_discover.find(entity, campaign)] if campaign else _discover.discover(entity)
+    if campaign or campaign_dir:
+        refs = [_discover.resolve(entity, campaign, campaign_dir)]
+    else:
+        refs = _discover.discover(entity)
     return [_refresh_one(ref, runner, dry_run) for ref in refs]
 
 
