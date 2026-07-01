@@ -13,6 +13,7 @@ import datetime as _dt
 import shutil
 from pathlib import Path
 
+from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
 
 from . import authority as _authority
@@ -30,8 +31,8 @@ class BackupError(Exception):
 
 
 def backups_root(entity: ConfigEntity) -> Path:
-    root = entity.data_roots.get("backups")
-    return Path(root) if root else Path.home() / ".mneme" / "backups"
+    root = _config.single_root(entity, "backups")
+    return root if root else Path.home() / ".mneme" / "backups"
 
 
 def _store_path(entity: ConfigEntity, campaign: str) -> Path:

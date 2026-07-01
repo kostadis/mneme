@@ -42,13 +42,13 @@ def _campaign_dir(entity: ConfigEntity, campaign: str, override: str | None = No
         if not cdir.is_dir():
             raise LifecycleError(f"campaign workspace not found: {cdir}")
         return cdir
-    root = entity.data_roots.get("campaigns")
-    if root is None:
-        raise LifecycleError("hypostasis.yaml has no data_roots.campaigns (or pass --dir)")
-    cdir = Path(root) / campaign
-    if not cdir.is_dir():
-        raise LifecycleError(f"campaign workspace not found: {cdir} (or pass --dir)")
-    return cdir
+    # 005 — resolve the NAME across all declared trees (never guess on ambiguity).
+    from mneme.mempalace import discover as _discover
+
+    try:
+        return _discover.find(entity, campaign).path
+    except _discover.DiscoveryError as e:
+        raise LifecycleError(f"{e} (or pass --dir)") from e
 
 
 def _cg_source(entity: ConfigEntity) -> Path:

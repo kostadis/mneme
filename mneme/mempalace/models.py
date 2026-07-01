@@ -134,6 +134,11 @@ class State(StrEnum):
     DIVERGENT_UNDISPOSITIONED = "divergent_undispositioned"
     STALE_RENDER = "stale_render"
     CONFORMANT = "conformant"
+    # 005 — campaign↔mneme membership (informational/to-do, not FAIL states)
+    OWNED = "owned"
+    FOREIGN = "foreign"
+    UNINTEGRATED = "unintegrated"
+    UNVERIFIABLE = "unverifiable"
 
 
 # States that count as a genuine FAIL (non-zero exit). A deliberate, recorded

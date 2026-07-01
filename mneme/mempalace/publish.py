@@ -19,7 +19,7 @@ from . import recipe as _recipe
 from . import render as _render
 from . import target as _target
 from . import workcopy as _workcopy
-from .discover import campaigns_root
+from .discover import campaigns_roots
 from .models import TargetConfig
 
 
@@ -65,13 +65,32 @@ def _apply_to_workcopy(wc: _workcopy.WorkingCopy, campaign: str, rec) -> None:
     _render.write_all(upgraded, rec, camp_dir)
 
 
-def _clone_workcopy(entity: ConfigEntity, state_dir: Path | None, runner) -> _workcopy.WorkingCopy:
+def _campaigns_tree(entity: ConfigEntity, root: Path | None = None) -> Path:
+    """Resolve the single tree a workcopy operation targets (005, FR-009).
+
+    An explicit ``root`` (e.g. a campaign's own tree) wins. Otherwise, with one declared
+    tree, use it (unchanged behavior); with several, refuse rather than guess — publish/
+    adopt are per-tree, so the caller must say which."""
+    if root is not None:
+        return Path(root)
+    roots = campaigns_roots(entity)
+    if len(roots) > 1:
+        raise _workcopy.WorkingCopyError(
+            "multiple campaigns trees declared — publish/adopt target one tree at a time; "
+            f"declared: {', '.join(str(r) for r in roots)}"
+        )
+    return roots[0]
+
+
+def _clone_workcopy(
+    entity: ConfigEntity, state_dir: Path | None, runner, root: Path | None = None
+) -> _workcopy.WorkingCopy:
     git_runner = runner or _workcopy._run_git
-    root = campaigns_root(entity)
-    remote = _workcopy.origin_url(root, runner=git_runner)
+    tree = _campaigns_tree(entity, root)
+    remote = _workcopy.origin_url(tree, runner=git_runner)
     if not remote:
         raise _workcopy.WorkingCopyError(
-            f"campaigns root {root} has no git origin — cannot publish through version control"
+            f"campaigns tree {tree} has no git origin — cannot publish through version control"
         )
     dest = state_dir or _workcopy.default_state_dir()
     return _workcopy.WorkingCopy.clone(remote, dest, runner=git_runner)
@@ -107,7 +126,8 @@ def adopt(
 ) -> str:
     """Manual per-campaign gate: stage the upgrade for ONE campaign on its own branch."""
     rec = _recipe.current()
-    wc = _clone_workcopy(entity, state_dir, git_runner)
+    ref = _discover.find(entity, campaign)  # 005 — adopt targets the campaign's own tree
+    wc = _clone_workcopy(entity, state_dir, git_runner, root=ref.tree)
     branch = f"mneme/adopt-{campaign}-{rec.version}"
     wc.checkout_branch(branch)
     _apply_to_workcopy(wc, campaign, rec)

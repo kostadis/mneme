@@ -9,6 +9,7 @@ CLI maps to exit code 2 — before any side effect.
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 
 import yaml
@@ -18,6 +19,7 @@ from .models import (
     ConfigEntity,
     Health,
     Machine,
+    MnemeIdentity,
     Order,
     Service,
     Source,
@@ -45,6 +47,35 @@ class ConfigError(Exception):
 
 def _expand(value: str) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(str(value))))
+
+
+def _normalize_roots(value) -> tuple[Path, ...]:
+    """A data_roots value is one-or-more paths (005). Scalar → 1-tuple (backward
+    compatible), list → N-tuple; every element is ~/env expanded."""
+    items = value if isinstance(value, list) else [value]
+    return tuple(_expand(v) for v in items)
+
+
+def _is_within(child: Path, parent: Path) -> bool:
+    """True if ``child`` is ``parent`` or nested under it (path-prefix, 005)."""
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def single_root(entity, key: str) -> Path | None:
+    """Return the sole root for a single-valued data_roots key (e.g. ``backups``).
+
+    Returns None if the key is absent. Raises ConfigError if the key was declared with
+    more than one path — those keys are not multi-root (only ``campaigns`` is, 005)."""
+    roots = entity.data_roots.get(key)
+    if not roots:
+        return None
+    if len(roots) > 1:
+        raise ConfigError([f"data_roots.{key}: expects a single path, got {len(roots)}"])
+    return roots[0]
 
 
 def default_config_path() -> Path:
@@ -130,7 +161,15 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
         startup=tuple(o.get("startup") or ()),
     )
 
-    data_roots = {k: _expand(v) for k, v in (raw.get("data_roots") or {}).items()}
+    data_roots = {k: _normalize_roots(v) for k, v in (raw.get("data_roots") or {}).items()}
+
+    # 005 — the logical fleet identity (optional; minted lazily by ensure_mneme_identity).
+    mneme_block = raw.get("mneme") or {}
+    mneme_identity = (
+        MnemeIdentity(id=str(mneme_block.get("id") or ""), label=mneme_block.get("label"))
+        if mneme_block
+        else None
+    )
 
     # Process environment exported to managed services on `up` (env-wiring, e.g.
     # MEMPALACE_BACKEND). Values must be scalars — they become env var strings.
@@ -151,6 +190,7 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
         order=order,
         data_roots=data_roots,
         env=env,
+        mneme_identity=mneme_identity,
         source_path=path,
     )
 
@@ -231,9 +271,24 @@ def validate(entity: ConfigEntity, raw: dict) -> list[str]:
     for name, c in entity.components.items():
         if c.config_target and not c.config_target.is_absolute():
             p.append(f"component '{name}': config_target must be an absolute path")
-    for k, v in entity.data_roots.items():
-        if not v.is_absolute():
-            p.append(f"data_roots.{k}: must be an absolute path")
+    for k, roots in entity.data_roots.items():
+        for r in roots:
+            if not r.is_absolute():
+                p.append(f"data_roots.{k}: '{r}' must resolve to an absolute path")
+
+    # 005 — the campaigns trees must not overlap/nest, or a campaign is discovered twice.
+    camp = entity.data_roots.get("campaigns") or ()
+    for i, a in enumerate(camp):
+        for b in camp[i + 1 :]:
+            if a == b or _is_within(a, b) or _is_within(b, a):
+                p.append(
+                    f"data_roots.campaigns: trees '{a}' and '{b}' overlap or nest "
+                    "(declared trees must be disjoint)"
+                )
+
+    # 005 — if a mneme: block is declared, its id must be non-empty (FR-012).
+    if "mneme" in raw and not (raw.get("mneme") or {}).get("id"):
+        p.append("mneme.id: required when a mneme: block is present")
 
     return p
 
@@ -255,3 +310,22 @@ def load(path: str | Path) -> ConfigEntity:
     if problems:
         raise ConfigError(problems)
     return entity
+
+
+def ensure_mneme_identity(config_path: str | Path, *, label: str | None = None) -> MnemeIdentity:
+    """Return the mneme identity, minting one if absent (005, FR-012).
+
+    A fresh ``uuid4`` is generated and the ``mneme:`` block is **appended** to the file
+    (existing content/comments preserved — never a full rewrite), honoring "the human owns
+    hypostasis.yaml". Idempotent: once an id exists it is returned unchanged."""
+    config_path = Path(config_path)
+    entity = load(config_path)
+    if entity.mneme_identity and entity.mneme_identity.id:
+        return entity.mneme_identity
+    new = MnemeIdentity(id=str(uuid.uuid4()), label=label)
+    block = f"\nmneme:\n  id: {new.id}\n"
+    if new.label:
+        block += f"  label: {new.label}\n"
+    text = config_path.read_text()
+    config_path.write_text(text.rstrip("\n") + "\n" + block)
+    return new

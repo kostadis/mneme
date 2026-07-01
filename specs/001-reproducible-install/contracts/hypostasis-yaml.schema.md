@@ -63,3 +63,13 @@ order:
 - **No installed-version field** — observed live by `status`, never stored (Principle I/V).
 - **No lockfile pointer** — pins are already exact in this one file (Principle V).
 - **No data-plane contents** — only `data_roots` *locations* are referenced.
+
+## Amended by feature 005 (multi-root + identity)
+See `specs/005-multi-root-campaigns/contracts/hypostasis-additions.schema.md` for the full delta.
+- A `data_roots` value MAY be **one-or-more paths**: a scalar (1 tree, backward compatible) or a
+  list. `data_roots.campaigns` may name several trees; single-valued keys must contain exactly one.
+  Each element must be absolute; declared `campaigns` trees must not overlap/nest.
+- A top-level **`mneme:`** block (optional) carries the logical fleet identity — `id` (generated
+  uuid4, host-independent, authoritative for ownership) and optional `label`. Minted lazily and
+  appended to the file if absent; if the block is present, `id` must be non-empty. Not a second
+  authority — it is identity belonging to the config entity.

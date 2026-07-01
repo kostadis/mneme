@@ -127,6 +127,49 @@ def test_env_nonscalar_value_rejected(tmp_path):
     assert_problem(tmp_path, raw, "must be a scalar")
 
 
+def test_data_roots_scalar_normalizes_to_one_tuple(tmp_path):
+    # 005 — the pre-feature scalar shape stays valid and becomes a 1-tuple (FR-002).
+    raw = valid_raw(tmp_path)
+    raw["data_roots"]["campaigns"] = str(tmp_path / "camp")
+    e = load_raw(tmp_path, raw)
+    assert e.data_roots["campaigns"] == (tmp_path / "camp",)
+
+
+def test_data_roots_list_normalizes_to_n_tuple(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["data_roots"]["campaigns"] = [str(tmp_path / "a"), str(tmp_path / "b")]
+    e = load_raw(tmp_path, raw)
+    assert e.data_roots["campaigns"] == (tmp_path / "a", tmp_path / "b")
+
+
+def test_data_roots_relative_element_rejected(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["data_roots"]["campaigns"] = [str(tmp_path / "a"), "relative/tree"]
+    assert_problem(tmp_path, raw, "must resolve to an absolute path")
+
+
+def test_data_roots_overlapping_trees_rejected(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["data_roots"]["campaigns"] = [str(tmp_path / "a"), str(tmp_path / "a" / "nested")]
+    assert_problem(tmp_path, raw, "overlap or nest")
+
+
+def test_single_root_returns_sole_or_none(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["data_roots"]["backups"] = str(tmp_path / "b")
+    e = load_raw(tmp_path, raw)
+    assert cfg.single_root(e, "backups") == tmp_path / "b"
+    assert cfg.single_root(e, "absent") is None
+
+
+def test_single_root_rejects_multiple(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["data_roots"]["backups"] = [str(tmp_path / "x"), str(tmp_path / "y")]
+    e = load_raw(tmp_path, raw)
+    with pytest.raises(cfg.ConfigError):
+        cfg.single_root(e, "backups")
+
+
 def test_default_config_path_uses_xdg(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     assert cfg.default_config_path() == tmp_path / "hypostasis" / "hypostasis.yaml"

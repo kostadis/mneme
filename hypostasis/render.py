@@ -44,7 +44,17 @@ def component_context(entity: ConfigEntity, comp: Component) -> dict:
             n: {"url": s.url, "port": s.port, "managed": s.managed}
             for n, s in entity.services.items()
         },
-        "data_roots": {k: str(v) for k, v in entity.data_roots.items()},
+        # Single-valued roots render as a scalar (templates consume them that way); a
+        # multi-tree root (e.g. campaigns, 005) renders as a list.
+        "data_roots": {
+            k: (str(roots[0]) if len(roots) == 1 else [str(r) for r in roots])
+            for k, roots in entity.data_roots.items()
+        },
+        "mneme": (
+            {"id": entity.mneme_identity.id, "label": entity.mneme_identity.label}
+            if entity.mneme_identity
+            else None
+        ),
     }
 
 

@@ -14,9 +14,15 @@ machines:
     endpoint: http://192.0.2.10:8001/v1
     default_model: Qwen/Qwen3-Next-80B-A3B-Instruct-FP8
 
+# mneme:                         # the logical fleet identity (005). Minted automatically on the first
+#   id: <uuid4>                  # `mneme integrate`/`up` if absent — host-independent owner identity,
+#   label: kostadis-main         # stamped into each campaign's .mneme/owner.yaml. label is informational.
+
 data_roots:                      # external paths mneme references (not owned; data-plane contents stay out of scope)
   fivetools: ~/src/5etools-kostadis/data
-  campaigns: ~/campaigns
+  campaigns:                     # one-or-more trees (005); a scalar is still valid (a single tree)
+    - ~/campaigns                # the campaigns monorepo
+    - ~/toee                     # a standalone tree (its own remote / sparse checkout) → campaign ~/toee/toee
   homebrew: ~/src/homebrew-private
   fivetools_mcp_index: ~/src/5etools-kostadis/mcp/index.js   # 5etools MCP entry point
   pdf_translators: ~/src/mytools/pdf-translators             # sibling mytools tool (validation)

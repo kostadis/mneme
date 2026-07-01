@@ -91,11 +91,16 @@ def status(
     # is legitimate, FR-021). Read-only and degrades to nothing off-repo (GH #14).
     if not no_proposals:
         try:
-            todo = _proposals.list_proposals(_discover.campaigns_root(entity), fetch=not no_fetch)
-            for line in _proposals.format_todo(todo):
-                typer.echo(line)
+            trees = _discover.campaigns_roots(entity)
         except _discover.DiscoveryError:
-            pass
+            trees = ()
+        for tree in trees:  # 005 — proposals are per-tree (FR-009); each degrades on its own
+            try:
+                todo = _proposals.list_proposals(tree, fetch=not no_fetch)
+                for line in _proposals.format_todo(todo):
+                    typer.echo(line)
+            except _discover.DiscoveryError:
+                pass
 
     raise typer.Exit(report.exit_code(strict=strict))
 

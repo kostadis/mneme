@@ -13,6 +13,7 @@ from hypostasis.models import ConfigEntity
 
 from . import authority as _authority
 from . import discover as _discover
+from . import ownership as _ownership
 from . import recipe as _recipe
 from . import render as _render
 from .authority import AuthorityError
@@ -124,6 +125,30 @@ def _store_backup_rows(ref, cfg, entity, runner) -> list[ConformanceRow]:
     return rows
 
 
+def _membership_row(ref: CampaignRef, entity=None) -> ConformanceRow:
+    """005 — report the campaign's ownership vs this mneme (Principle IX). Read-only."""
+    identity = entity.mneme_identity if entity is not None else None
+    state = _ownership.classify(ref.path, identity)
+    if state is _ownership.OwnerState.OWNED:
+        return ConformanceRow(ref.name, "owner", State.OWNED, note="owned by this mneme")
+    if state is _ownership.OwnerState.FOREIGN:
+        owner = _ownership.read_owner(ref.path)
+        fid = owner.mneme_id if owner else "?"
+        return ConformanceRow(
+            ref.name, "owner", State.FOREIGN, observed=fid,
+            note=f"owned by a different mneme ({fid}) — decide before managing",
+        )
+    if state is _ownership.OwnerState.UNVERIFIABLE:
+        return ConformanceRow(
+            ref.name, "owner", State.UNVERIFIABLE,
+            note="mneme identity not yet minted (run `mneme integrate` to mint)",
+        )
+    return ConformanceRow(
+        ref.name, "owner", State.UNINTEGRATED,
+        note="discovered, not integrated (run `mneme integrate`)",
+    )
+
+
 def _campaign_rows(
     ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None
 ) -> list[ConformanceRow]:
@@ -132,7 +157,8 @@ def _campaign_rows(
             ConformanceRow(
                 ref.name, "recipe", State.MISSING_CONFIG,
                 note="no .mneme/mempalace.yaml — skipped (run `mneme mp bootstrap`)",
-            )
+            ),
+            _membership_row(ref, entity),
         ]
     try:
         cfg = _authority.load(ref.path)
@@ -168,6 +194,7 @@ def _campaign_rows(
         )
     )
     rows.extend(_store_backup_rows(ref, cfg, entity, runner))
+    rows.append(_membership_row(ref, entity))
     return rows
 
 

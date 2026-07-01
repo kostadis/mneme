@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hypostasis.models import ConfigEntity, Machine, Order
+from hypostasis.models import ConfigEntity, Machine, MnemeIdentity, Order
 
 STUB = Path(__file__).parent / "stub_mempalace.py"
 
@@ -34,6 +34,28 @@ def entity_for(campaigns_root: Path) -> ConfigEntity:
         order=Order(install=(), startup=()),
         data_roots={"campaigns": campaigns_root},
     )
+
+
+def entity_for_trees(*campaign_trees: Path, identity: MnemeIdentity | None = None) -> ConfigEntity:
+    """A ConfigEntity declaring one-or-more campaign trees (005), optionally with a
+    minted mneme identity."""
+    return ConfigEntity(
+        venv=Path("."),
+        machines={"dgx": Machine("http://dgx:8001/v1")},
+        services={},
+        components={},
+        order=Order(install=(), startup=()),
+        data_roots={"campaigns": [str(t) for t in campaign_trees]},
+        mneme_identity=identity,
+    )
+
+
+def make_simple_campaign(tree: Path, name: str) -> Path:
+    """Create ``tree/name`` as a minimal campaign dir (a single doc) and return it."""
+    camp = tree / name
+    camp.mkdir(parents=True, exist_ok=True)
+    (camp / "world.md").write_text(f"# {name}\n")
+    return camp
 
 FULL_AUTHORITY = """\
 campaign: full
