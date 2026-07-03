@@ -107,6 +107,7 @@ def regenerate(
     *,
     runner: MempalaceRunner | None = None,
     campaign_dir: str | None = None,
+    verbose: bool = False,
 ) -> tuple[Path, list[str]]:
     """The ONLY re-embed path (FR-012): clear the store and first-mine from scratch."""
     ref = _discover.resolve(entity, campaign, campaign_dir)
@@ -114,7 +115,7 @@ def regenerate(
     store = _authority.require_store(cfg).path
     if store.is_dir():
         shutil.rmtree(store)
-    runner = runner or MempalaceRunner.for_venv(_venv(entity))
+    runner = runner or MempalaceRunner.for_venv(_venv(entity), stream=verbose)
     return _provision.first_mine(cfg, ref.path, runner)
 
 

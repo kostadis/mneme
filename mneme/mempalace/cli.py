@@ -31,6 +31,12 @@ _dir_opt = typer.Option(
     None, "--dir", "-d", help="Explicit campaign workspace path (overrides the name lookup)"
 )
 
+# Principle IX (Observability) — stream `mempalace mine` progress live instead of
+# swallowing it, so a slow first-mine is distinguishable from a hang.
+_verbose_opt = typer.Option(
+    False, "--verbose", "-v", help="Stream mempalace subprocess output (per-file mine progress)"
+)
+
 
 def _load_or_exit(config_path: str) -> ConfigEntity:
     try:
@@ -54,6 +60,7 @@ def refresh(
     campaign_dir: str = _dir_opt,
     all_: bool = typer.Option(False, "--all", help="Refresh every discovered campaign"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show the per-wing mine plan"),
+    verbose: bool = _verbose_opt,
     config: str = _config_opt,
 ) -> None:
     """(Re)build campaign indexes from each campaign's own wing configuration."""
@@ -70,6 +77,7 @@ def refresh(
             campaign=None if all_ else campaign,
             campaign_dir=None if all_ else campaign_dir,
             dry_run=dry_run,
+            verbose=verbose,
         )
     except _discover.DiscoveryError as e:
         typer.echo(f"FAIL refresh: {e}", err=True)
@@ -326,6 +334,7 @@ def bringup(
     campaign_dir: str = _dir_opt,
     dry_run: bool = typer.Option(False, "--dry-run", help="Show the steps; provision/mine nothing"),
     no_backup: bool = typer.Option(False, "--no-backup", help="Skip the bindings backup step"),
+    verbose: bool = _verbose_opt,
     config: str = _config_opt,
 ) -> None:
     """Bring up a new campaign: configure → render faces → provision → first-mine → back up."""
@@ -335,7 +344,12 @@ def bringup(
     entity = _load_or_exit(config)
     try:
         report = _bringup.bringup(
-            entity, campaign, do_backup=not no_backup, dry_run=dry_run, campaign_dir=campaign_dir
+            entity,
+            campaign,
+            do_backup=not no_backup,
+            dry_run=dry_run,
+            campaign_dir=campaign_dir,
+            verbose=verbose,
         )
     except _discover.DiscoveryError as e:
         typer.echo(f"FAIL bringup: {e}", err=True)
@@ -402,6 +416,7 @@ def regenerate(
     campaign: str = typer.Argument(..., help="Campaign to re-embed from scratch"),
     campaign_dir: str = _dir_opt,
     confirm: bool = typer.Option(False, "--confirm", help="Required — re-embedding is expensive"),
+    verbose: bool = _verbose_opt,
     config: str = _config_opt,
 ) -> None:
     """Re-embed from scratch (the ONLY re-embed path): clears the store and first-mines."""
@@ -413,7 +428,9 @@ def regenerate(
         raise typer.Exit(EXIT_OK)
     entity = _load_or_exit(config)
     try:
-        store, mined = _backup.regenerate(entity, campaign, campaign_dir=campaign_dir)
+        store, mined = _backup.regenerate(
+            entity, campaign, campaign_dir=campaign_dir, verbose=verbose
+        )
     except _discover.DiscoveryError as e:
         typer.echo(f"FAIL regenerate: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
