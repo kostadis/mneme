@@ -15,11 +15,11 @@ installed in the target venv. See [contracts/cli.md](./contracts/cli.md) for com
 ```
 hypostasis install
 ```
-**Expect**: exit 0; venv created; all six components installed at their pins; every
+**Expect**: exit 0; venv created; all four components installed at their pins; every
 `config_target` written with a `source-sha256` stamp.
 **Verify (SC-002)** — the hardcoded constants are gone from logic:
 ```
-grep -rn "192.0.2.10\|5etools-kostadis/data\|localhost:8000\|8077\|.venvs/main" \
+grep -rn "192.0.2.10\|5etools-kostadis/data\|localhost:8000\|.venvs/main" \
   ~/src/CampaignGenerator
 ```
 **Expect**: matches only in rendered config files / templates, **none** in component logic.
@@ -95,7 +95,7 @@ docker compose run --rm validate    # clean container
    (`MEMPALACE_BACKEND`).
 
 **Scope (honest)**: this proves the tool installs and its authority→render→status loop works
-in isolation — it does **not** install the six real components or reach the real DGX/rpg-lib
+in isolation — it does **not** install the four real components or reach the real DGX/rpg-lib
 substrate (that needs the DGX + the component repos; still open, see
 [GitHub issue #1](https://github.com/kostadis/mneme/issues/1)). See `validation/README.md`
 for the full scope statement.

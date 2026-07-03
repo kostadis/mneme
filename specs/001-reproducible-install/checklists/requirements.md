@@ -43,3 +43,7 @@
   per-campaign CampaignGenerator lifecycle via `mneme up`/`down`, not managed local services.
   See spec.md's FR-012 and README.md for the current model. This checklist is left as
   originally checked (historical QA gate, not re-run).
+- **Post-implementation note**: "FR-011 all six" (lines 16, 34 above) reflects the original
+  2026-06-24 clarification; the shipped install scope narrowed to **four** components
+  (dgxlib, turbovecdb, mempalace, CampaignGenerator). See spec.md's FR-011 and tasks.md
+  T017–T022 for why rpg-lib, gm-assistant, and turbovecdb-service ended up out of scope.

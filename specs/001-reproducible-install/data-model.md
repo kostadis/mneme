@@ -17,7 +17,7 @@ The single source of write authority (Principle V). Hand-edited. Top-level field
 | `data_roots` | map<name, path> | Paths to external data (referenced, not owned). |
 | `env` | map<name, scalar> | Optional. Process env exported into the per-campaign process on `mneme up` (env-wiring for env-driven components, e.g. `MEMPALACE_BACKEND`). Values must be scalars. |
 | `services` | map<name, Service> | Managed or externally-checked services. |
-| `components` | map<name, Component> | The six installable units. |
+| `components` | map<name, Component> | The four installable units (dgxlib, turbovecdb, mempalace, CampaignGenerator) — narrowed from the originally-scoped six during implementation; see spec.md FR-011. |
 | `order.install` | list<component-name> | Required. Acyclic; every name must exist in `components`. |
 | `order.startup` | list<service-name> | Required. Acyclic; every name must exist in `services`. |
 
