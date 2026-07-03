@@ -62,9 +62,10 @@ def refresh(
     campaign_dir: str | None = None,
     dry_run: bool = False,
     runner: MempalaceRunner | None = None,
+    verbose: bool = False,
 ) -> list[RefreshResult]:
     """Refresh one campaign (``campaign``/``campaign_dir`` set) or all (both None)."""
-    runner = runner or MempalaceRunner.for_venv(_venv(entity))
+    runner = runner or MempalaceRunner.for_venv(_venv(entity), stream=verbose)
     if campaign or campaign_dir:
         refs = [_discover.resolve(entity, campaign, campaign_dir)]
     else:

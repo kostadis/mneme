@@ -7,6 +7,7 @@ configured venv (`<venv>/bin/mempalace`) and overridable for tests.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -20,6 +21,22 @@ class MempalaceError(Exception):
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def _run_stream(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Streaming runner: do NOT capture — let the child's stdout/stderr inherit our
+    terminal so the user sees `mempalace mine` progress live (Principle IX, Observability).
+
+    Force the child unbuffered (``PYTHONUNBUFFERED``) so per-file lines appear *during*
+    the mine, not flushed in a lump at the end — CPython block-buffers `print()` when its
+    stdout is a pipe rather than a tty (e.g. run from another tool). The returned
+    stdout/stderr are empty: the output already went to the terminal, so callers that key
+    an error message off the captured tail (see :meth:`MempalaceRunner.mine`) get a generic
+    "see output above" note in this mode.
+    """
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    proc = subprocess.run(cmd, env=env)
+    return subprocess.CompletedProcess(cmd, proc.returncode, stdout="", stderr="")
 
 
 def resolve_binary(venv: Path | None) -> str:
@@ -37,7 +54,14 @@ class MempalaceRunner:
         self.runner = runner
 
     @classmethod
-    def for_venv(cls, venv: Path | None, runner: Runner = _run) -> MempalaceRunner:
+    def for_venv(
+        cls, venv: Path | None, runner: Runner | None = None, *, stream: bool = False
+    ) -> MempalaceRunner:
+        """Build a runner for ``<venv>/bin/mempalace``. ``stream=True`` opts into the
+        non-capturing runner so subprocess progress (e.g. `mempalace mine`) is shown live
+        (``-v``/``--verbose`` on the CLI); the default captures for quiet, parseable output."""
+        if runner is None:
+            runner = _run_stream if stream else _run
         return cls(resolve_binary(venv), runner)
 
     def _call(self, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -57,7 +81,7 @@ class MempalaceRunner:
         sub = ["mine", str(path)] + (["--dry-run"] if dry_run else [])
         out = self._call(self._with_palace(palace, *sub))
         if out.returncode != 0:
-            detail = (out.stderr or out.stdout or "").strip()[-300:]
+            detail = (out.stderr or out.stdout or "").strip()[-300:] or "see output above"
             raise MempalaceError(f"mempalace mine {path} failed (rc {out.returncode}): {detail}")
 
     def status(self, palace: Path | str | None = None) -> bool:

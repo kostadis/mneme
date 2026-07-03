@@ -55,9 +55,10 @@ def bringup(
     do_backup: bool = True,
     dry_run: bool = False,
     campaign_dir: str | None = None,
+    verbose: bool = False,
 ) -> BringUpReport:
     rec = recipe or _recipe.current()
-    runner = runner or MempalaceRunner.for_venv(_venv(entity))
+    runner = runner or MempalaceRunner.for_venv(_venv(entity), stream=verbose)
     config_json = config_json or default_config_json()
     ref = _discover.resolve(entity, campaign, campaign_dir)
     steps: list[BringUpStep] = []
@@ -125,7 +126,10 @@ def _backup_step(entity: ConfigEntity, campaign: str, campaign_dir: Path) -> Bri
     if not hasattr(_backup, "backup"):
         return BringUpStep("backup", "skipped", note="backup not yet wired (US3)")
     try:
-        b = _backup.backup(entity, campaign)
+        # Pass the already-resolved workspace path (GH #27) — otherwise backup re-resolves
+        # `campaign` by name, forcing a full fleet-wide discover() crawl across every tree
+        # (very slow on big monorepo roots), which looks like a hang after first-mine.
+        b = _backup.backup(entity, campaign, campaign_dir=str(campaign_dir))
         return BringUpStep("backup", "ok", observed=str(b.location))
     except Exception as e:  # noqa: BLE001 - report, don't crash bring-up
         return BringUpStep("backup", "failed", note=str(e))
