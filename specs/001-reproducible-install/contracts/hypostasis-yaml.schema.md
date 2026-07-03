@@ -20,36 +20,34 @@ services:
     url: http://192.0.2.10:8001/v1
     managed: false
     health: { type: http, path: /v1/models }
-  turbovecdb:
-    url: http://127.0.0.1:8077
-    port: 8077
-    managed: true
-    health: { type: http, path: /health }
-    start: "turbovecdb-service --port 8077"
-    stop:  "pkill -f turbovecdb-service"
-  rpg_lib:
+  rpg_lib:                               # also external — hypostasis has no start/stop for it yet
     url: http://localhost:8000
     port: 8000
-    managed: true
-    start: "python -m rpg_lib.server"
-    stop:  "pkill -f rpg_lib.server"
+    managed: false
+    health: { type: http, path: / }
+# NOTE: no turbovecdb service here — turbovecdb is mneme-private storage used EMBEDDED
+# (mempalace connects to it directly, not over HTTP); the :8077 HTTP layer belongs to a
+# different consumer entirely and was dropped from scope (see tasks.md T020).
 
-components:                              # the six in-scope units (FR-011)
+components:                              # what hypostasis installs (rpg-lib is external — see services above)
   dgxlib:           { source: { path: ~/src/dgx },               pin: <git-sha-or-tag>,
                       config_template: dgxlib.models.yaml.j2,     config_target: ~/src/dgx/models.yaml }
   turbovecdb:       { source: { pypi: turbovecdb },              pin: <ver> }
   mempalace:        { source: { pypi: mempalace },               pin: 3.3.5,
                       config_template: mempalace.yaml.j2,         config_target: ~/.config/mempalace/mempalace.yaml }
-  rpg_lib:          { source: { path: ~/src/mytools/rpg-lib },   pin: <git-sha> }
   CampaignGenerator:{ source: { path: ~/src/CampaignGenerator }, pin: <git-sha>,
-                      config_template: campaigngenerator.config.yaml.j2,
-                      config_target: ~/src/CampaignGenerator/config/config.yaml }
-  gm_assistant:     { source: { path: ~/campaigns/gm-assistant }, pin: <git-sha> }
+                      config_template: campaigngenerator.wiring.yaml.j2,
+                      config_target: ~/src/CampaignGenerator/config/wiring.yaml }
+# NOTE: gm-assistant is NOT a component — it's markdown content shipped with the campaigns
+# workspace, not pip-installable (see tasks.md T021).
 
 order:
-  install: [dgxlib, turbovecdb, mempalace, rpg_lib, CampaignGenerator, gm_assistant]
-  startup: [dgx, turbovecdb, rpg_lib]    # dgx (external) gated first; managed ones started in order
+  install: [dgxlib, turbovecdb, mempalace, CampaignGenerator]
+  startup: [dgx, rpg_lib]                # both external — health-checked, gated first, never started
 ```
+
+*This is the illustrative shape (field names + invariants); `hypostasis.example.yaml` at the
+repo root is the current worked reference if the two ever drift.*
 
 ## Invariants (validated before any side effect)
 1. `pin` is an exact version or git ref — **no ranges, no editable installs**.

@@ -114,13 +114,17 @@ reachability per service; stop a service or hand-install a wrong version and con
 
 ---
 
-## Phase 5: User Story 4 - Bring the system up/down in dependency order (Priority: P2)
+## Phase 5: User Story 4 - Launch/stop a campaign's runtime (Priority: P2)
 
-**Goal**: One command starts managed services in declared order (gating on health), one stops
-them; the external DGX endpoint is health-checked, not started.
+**Goal**: `mneme up <campaign>` health-gates the substrate (DGX endpoint, rpg-lib — external,
+health-checked only) and the campaign's mempalace store, then starts that campaign's
+CampaignGenerator instance; `mneme down <campaign>` stops it. **Reframed during implementation
+(T028)**: there is no local managed-service dependency order to enforce — the only process
+either tool starts/stops is the per-campaign CampaignGenerator instance.
 
-**Independent Test**: From installed-but-stopped, `mneme up` starts services in `order.startup`
-each reachable before dependents (DGX gated first); a failing start exits 1 and names it; `mneme down` stops them.
+**Independent Test**: From an installed environment, `mneme up <campaign>` health-gates the
+substrate + mempalace store and starts that campaign's CampaignGenerator instance, reachable on
+its port; a failing gate/start exits 1 and names it; `mneme down <campaign>` stops that instance.
 
 ### Tests for User Story 4
 
@@ -138,20 +142,24 @@ each reachable before dependents (DGX gated first); a failing start exits 1 and 
 ## Phase 6: User Story 3 - Change one value, no stale copies (Priority: P3)
 
 **Goal**: Change one `hypostasis.yaml` value, `hypostasis apply` re-renders affected configs and
-restarts affected managed services so no component runs on a stale copy (Principle V).
+stamps them with a fresh source hash so no component runs on a stale copy (Principle V).
+**Note**: the shipped guarantee is regenerate + hash-stamp, not restart — there is no local
+managed service for `apply` to restart (DGX/rpg-lib are external substrate); `mneme`'s
+per-campaign CampaignGenerator instance is started fresh by `mneme up <campaign>`, not
+restarted in place.
 
 **Independent Test**: Change `machines.dgx.endpoint`, `hypostasis apply`, confirm every derived
-config regenerated and no `config_target` or running process retains the old value; status shows no drift.
+config regenerated and no `config_target` retains the old value; status shows no drift.
 
-> Depends on US4 (the restart mechanism in lifecycle.py) and US1 (render.py).
+> Depends on US1 (render.py).
 
 ### Tests for User Story 3
 
-- [X] T030 [P] [US3] Integration test for apply (one-value change → re-render affected config_targets with fresh stamp + restart affected managed services; zero stale copies; status reports no drift; SC-004) in tests/integration/test_apply.py
+- [X] T030 [P] [US3] Integration test for apply (one-value change → re-render affected config_targets with fresh stamp + restart affected managed services; zero stale copies; status reports no drift; SC-004) in tests/integration/test_apply.py. **Reframed:** no managed services to restart (see T028/T031) — the shipped test verifies re-render + fresh stamp only.
 
 ### Implementation for User Story 3
 
-- [X] T031 [US3] Implement `hypostasis apply` (re-render all derived configs; compute affected managed services; restart them via lifecycle; verify no config_target/process retains the prior value) in hypostasis/cli.py (reusing render.py + lifecycle.py) (depends on T011, T028)
+- [X] T031 [US3] Implement `hypostasis apply` (re-render all derived configs; compute affected managed services; restart them via lifecycle; verify no config_target/process retains the prior value) in hypostasis/cli.py (reusing render.py + lifecycle.py) (depends on T011, T028). **Reframed:** shipped `apply()` restarts nothing — it explicitly notes "no per-campaign service to restart here (that's mneme)"; the guarantee is re-render + fresh stamp, verified by `status`.
 
 **Checkpoint**: Coherence guarantee proven — the V-over-VII mechanism (re-render + restart) works.
 
