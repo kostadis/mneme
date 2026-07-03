@@ -67,6 +67,10 @@ and it is *yours* to author, not the LLM's to invent.
       restart managed services + source-hash drift-FAIL in `status`; no component self-validation
       (V-over-VII; accepted limitation: covers mneme-managed services, out-of-band caught
       reactively). D2 = DGX is an external dependency, health-checked not started.
+      **(2026-07-03: D2 generalized into constitution v1.2.0, Principle II "the anonymization
+      boundary" clause — reference-only is now the rule for *any* already-anonymized / OS-owned
+      substrate, not just the DGX. Corollary: rpg-lib, being hypostasis's own anonymization seam,
+      is OWNED/started, not referenced — GH #1.)**
 - [ ] `/speckit.implement` — gated task by task (T016–T021 edit the *other* repos in
       worktrees under `~/src/platform-refactor/`; that cross-repo editing is the actual
       re-architecture).

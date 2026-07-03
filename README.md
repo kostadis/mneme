@@ -14,7 +14,7 @@ discipline" into a configured, honestly-reported, reproducible system.
 - **`mneme`** is spun up for a specific campaign — it runs on the environment hypostasis prepared.
 
 The doctrine behind it lives in `.specify/memory/constitution.md`; the design in
-`specs/001-reproducible-install/`; open questions in `issues/`.
+`specs/001-reproducible-install/`; open questions in [GitHub Issues](https://github.com/kostadis/mneme/issues).
 
 ## Install
 

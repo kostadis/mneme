@@ -1,4 +1,4 @@
-"""Issue 0007 unit tests: graceful degradation + TODO formatting."""
+"""GH #14 unit tests: graceful degradation + TODO formatting."""
 
 from __future__ import annotations
 

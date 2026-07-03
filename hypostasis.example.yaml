@@ -40,13 +40,13 @@ services:
   # NOTE: no turbovecdb service here — the :8077 HTTP layer is llm_wiki's, and really a
   # turbovecdb feature (turbovecdb#4), not a mneme-managed service. mempalace uses turbovec
   # EMBEDDED (connect(path)), so nothing in the mneme set needs the HTTP service.
-  rpg_lib:                       # EXTERNAL index service — mneme interacts (CG over HTTP), does NOT run it.
-    url: http://localhost:8000   # health-checked like dgx; not started by mneme. The user/ops runs library_server.
-    port: 8000
-    managed: false
-    health: { type: http, path: / }
+  rpg_lib:                       # TTRPG index service — anonymizes my PDF corpus into "the index endpoint"
+    url: http://localhost:8000   # so mneme never learns the physical library's location (constitution II —
+    port: 8000                   # the anonymization boundary). DECIDED (GH #1): hypostasis OWNS this seam, so
+    managed: false               # the TARGET is `managed: true` with start/stop. Still `false` today — honest to
+    health: { type: http, path: / }  # current reality: no start/stop script + no `hypostasis up/down` yet (own Spec-Kit feature).
 
-components:                      # what mneme INSTALLS. rpg-lib + claudelib are external/rpg-lib's — not here (issue #0003).
+components:                      # what mneme INSTALLS. rpg-lib + claudelib are external/rpg-lib's — not here (GH #9).
   dgxlib:                        # SOVEREIGN LIBRARY — driver for the physical DGX (github.com/kostadis/dgx-fun).
     source: { path: ~/src/dgx }  # install-only: mneme does NOT own/render dgxlib's config. Its bundled
     pin: 8771104a2586ef6983f903543005c77db88e9de7  # models.yaml is its own; the endpoint reaches it from callers (machines.dgx).
@@ -63,8 +63,9 @@ components:                      # what mneme INSTALLS. rpg-lib + claudelib are 
     config_target: ~/src/CampaignGenerator/config/wiring.yaml
   # NOTE: gm-assistant is NOT a component — it's pure-markdown Claude Code skills that ship
   # with the campaigns workspace (data_roots.campaigns: ~/campaigns/gm-assistant). Not
-  # pip-installable; self-contained per its own README. (path bug tracked in issue #0004)
+  # pip-installable; self-contained per its own README. (path bug tracked in GH #10)
 
 order:
   install: [dgxlib, turbovecdb, mempalace, CampaignGenerator]
-  startup: [dgx, rpg_lib]   # both EXTERNAL (managed:false) — mneme health-checks/orders against them, starts neither.
+  startup: [dgx, rpg_lib]   # dgx: REFERENCE-only (fungible compute, self-anonymized) — health-check, never start.
+                            # rpg_lib: health-checked today; DECIDED to become hypostasis-OWNED/started (GH #1, const. II).
