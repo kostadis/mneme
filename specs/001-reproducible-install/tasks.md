@@ -58,12 +58,15 @@ Cross-repo edits target `~/src/CampaignGenerator`, `~/src/dgx`, `~/src/mempalace
 
 ## Phase 3: User Story 1 - Reproducible install from one source of truth (Priority: P1) 🎯 MVP
 
-**Goal**: From one edited `hypostasis.yaml`, one command installs all six components at pins
-and renders each component's native config; components read config, not hardcoded constants.
+**Goal**: From one edited `hypostasis.yaml`, one command installs the four in-scope components
+at pins and renders each one's native config; components read config, not hardcoded constants.
+**Narrowed during implementation** (T017–T022): rpg-lib and gm-assistant turned out not to
+need pip-installing (external service / markdown content), so the real install set is four,
+not the originally-scoped six.
 
 **Independent Test**: On a fresh venv, with only `hypostasis.yaml` edited, run `hypostasis install`
 and confirm every component is at its pin with a stamped rendered config, and the grep test
-(SC-002) finds the five constants only in config/templates, never in logic.
+(SC-002) finds the four constants only in config/templates, never in logic.
 
 ### Tests for User Story 1
 
@@ -86,7 +89,7 @@ and confirm every component is at its pin with a stamped rendered config, and th
 - [X] T019 [P] [US1] rpg-lib (library_api lib + library_server SERVICE) is already CLI/env-driven — port/host/db are CLI args (mneme passes `--port 8000` via the start cmd), the lib dir is `RPG_LIBRARY_ROOT` env. **No hardcoded constants, no rpg-lib code edits.** Removed the dead config_template/target (nothing read rpg_lib.config.yaml) + template; env-wired RPG_LIBRARY_ROOT (commented — set to your value). rpg_lib is an EXTERNAL index service (mneme interacts over HTTP, does NOT own/run it) → services.rpg_lib managed:false (health-checked like dgx); rpg-lib + claudelib removed from components/install (no mneme component imports them). query_rpg_lib's direct library access is a bug → GH #9. (2026-06-24)
 - [X] T020 [P] [US1] turbovecdb is mneme-private storage (embedded; mempalace sits on it via connect(path)), **zero hardcoded infra constants** → install-only (removed its config_template/target + template). **turbovecdb-service is NOT mneme's**: the :8077 HTTP layer is llm_wiki's (real consumer: llm_wiki dedup prototype) and really a turbovecdb feature — filed turbovecdb#4. Dropped services.turbovecdb + its startup entry. Both turbovecdb worktrees retired (no edits). (2026-06-24)
 - [X] T021 [US1] gm-assistant is **pure-markdown Claude Code skills** (14 .md, 0 .py) that ship with the campaigns workspace — NOT a pip-installable component, and skill prose can't read config. **Reframed 2026-06-24 (option A):** removed gm_assistant from components/install (it's workspace content under data_roots.campaigns). No code-constant work. Found a path bug (skills say ~/src/campaigns, live in ~/campaigns) → GH #10. campaigns worktree retired.
-- [X] T022 [US1] **SC-002 verified 2026-06-24.** CampaignGenerator is the only repo where mneme externalized constants — its *.py logic is clean (zero hardcoded infra literals; only docstring/help examples remain, by decision). The 5 constants live in the single authority (hypostasis.yaml) + CG's wiring template. The other components needed no constant removal: sovereign/private libs keep their own (dgxlib's endpoint = dgx-fun's, etc.), mempalace/rpg-lib are env/CLI-driven, gm-assistant is markdown.
+- [X] T022 [US1] **SC-002 verified 2026-06-24.** CampaignGenerator is the only repo where mneme externalized constants — its *.py logic is clean (zero hardcoded infra literals; only docstring/help examples remain, by decision). The 5 constants live in the single authority (hypostasis.yaml) + CG's wiring template. The other components needed no constant removal: sovereign/private libs keep their own (dgxlib's endpoint = dgx-fun's, etc.), mempalace/rpg-lib are env/CLI-driven, gm-assistant is markdown. **(Reframed: the real count is 4 — turbovecdb-service's :8077 was dropped from scope by T020 above and was never actually sourced from hypostasis.yaml; the wiring template only renders dgx_endpoint, dgx_model, rpg_library_url, and the data_roots paths.)**
 
 **Checkpoint**: MVP — reproducible install works; constants externalized.
 

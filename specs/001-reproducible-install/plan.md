@@ -92,7 +92,7 @@ deployments, occasionally reproduced on a second machine.
 | Principle | Gate | This plan |
 |---|---|---|
 | I — Silicon Truth | `status` reports observed, never declared | ✅ `status` reads installed version from the venv + live reachability; render drift detected by hash. Install fails loudly on partial/unverified result. |
-| II — Sovereign Identity / no Infra Proxy | no hardcoded IP/port/path in component logic | ✅ All five constants move to `hypostasis.yaml`; implement replaces them with reads from each component's rendered config. |
+| II — Sovereign Identity / no Infra Proxy | no hardcoded IP/port/path in component logic | ✅ All four constants move to `hypostasis.yaml`; implement replaces them with reads from each component's rendered config. |
 | III — Intrinsic State / no Horcruxes | no orphaned/hand-synced side state | ✅ One authority; derived configs are regenerated, never hand-edited; no parallel truth. |
 | IV — Manager is a Transient Viewer | delete `hypostasis`, components still run; reinstall reconstructs | ✅ Components run from their own rendered config without `hypostasis` present; `install` reconstructs wiring from `hypostasis.yaml`. No irreplaceable state in the manager. |
 | V — One Entity, One DB / no stale copies | single authority; coherent caches | ✅ `hypostasis.yaml` is the sole authority; `apply` re-renders + hash-stamps every derived config so drift is detected, not silently tolerated. **No lockfile** (would be a 2nd authority). |

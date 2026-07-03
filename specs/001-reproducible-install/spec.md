@@ -6,7 +6,7 @@
 
 **Created**: 2026-06-24
 
-**Status**: Draft — clarifications resolved 2026-06-24 (scope: all six components; `mneme` owns the per-campaign runtime lifecycle)
+**Status**: Draft — clarifications resolved 2026-06-24 (scope: four components, see FR-011; `mneme` owns the per-campaign runtime lifecycle)
 
 **Input**: Re-architect the integration plane of the campaign/DGX system so the
 whole thing installs reproducibly from one source of truth, eliminating the
@@ -19,7 +19,7 @@ than a question a tool can answer.
 The ~6 components (dgxlib, mempalace, turbovecdb + service, CampaignGenerator,
 rpg-lib, gm-assistant) each work in isolation. The pain is entirely in the
 integration plane: infrastructure identity is hardcoded into component logic
-(`192.0.2.10:8001`, `~/src/5etools-kostadis/data`, `localhost:8000`, port `8077`,
+(`192.0.2.10:8001`, `~/src/5etools-kostadis/data`, `localhost:8000`,
 `~/.venvs/main`); there is no system-level config (each tool keeps its own
 hand-maintained file + env vars); versions are unpinned and editable-installs let a
 `git checkout` in one repo silently change another's behavior; and "is it up?" is
@@ -57,7 +57,7 @@ touching any component's own config or source.
    edits required.
 2. **Given** a working install, **When** the operator greps the component repos for the
    previously-hardcoded constants (`192.0.2.10`, `5etools-kostadis/data`,
-   `localhost:8000`, `8077`, `.venvs/main`), **Then** matches appear only in
+   `localhost:8000`, `.venvs/main`), **Then** matches appear only in
    config/templates sourced from `hypostasis.yaml`, never in component logic.
 3. **Given** an install run where a component source or pinned version cannot be
    resolved, **When** the install proceeds, **Then** it fails loudly and names the
@@ -175,9 +175,9 @@ and confirm it stops.
   and component version pins. No second hand-maintained store of this config may exist.
 - **FR-002**: All previously-hardcoded infrastructure constants MUST be sourced from
   `hypostasis.yaml` and MUST NOT appear in component logic. At minimum: the DGX endpoint and
-  default model, the 5etools data root, the rpg-lib URL and directory, the
-  turbovecdb-service URL/port, and the venv location. (turbovecdb-service was dropped from
-  managed scope during implementation — see the FR-011 note.)
+  default model, the 5etools data root, the rpg-lib URL and directory, and the venv location.
+  (A turbovecdb-service URL/port was originally in this list too, but turbovecdb-service was
+  dropped entirely from hypostasis/mneme's scope during implementation — see FR-011.)
 - **FR-003**: A single install action MUST, from `hypostasis.yaml`: create/validate the venv;
   install each in-scope component at its pinned version in declared dependency order; and
   populate each component's own native config/env from `hypostasis.yaml`.
@@ -204,13 +204,17 @@ and confirm it stops.
   behavior, not the implementation.)*
 - **FR-010**: Status MUST detect and report a derived config that has drifted from
   `hypostasis.yaml` (e.g. changed but not re-rendered), rather than silently tolerating it.
-- **FR-011** *(resolved 2026-06-24)*: The in-scope component set for this feature is **all
-  six**: dgxlib, mempalace, turbovecdb (+ turbovecdb-service), CampaignGenerator, rpg-lib,
-  and gm-assistant. 001 delivers one reproducible install of the whole system, not a slice.
-  *(Component-install scope as originally clarified; the actual install/service surface
-  drifted during implementation — turbovecdb-service and gm-assistant dropped, rpg-lib became
-  install-external — see tasks.md T017–T022. That drift is a separate follow-up from this
-  issue's hypostasis/mneme naming fix.)*
+- **FR-011** *(resolved 2026-06-24; scope narrowed during implementation — see tasks.md
+  T017–T022)*: The in-scope component set `hypostasis install` manages is **four**: dgxlib,
+  turbovecdb, mempalace, and CampaignGenerator. rpg-lib and gm-assistant are explicitly out —
+  rpg-lib is an external index service `hypostasis`/`mneme` only health-checks
+  (`services.rpg_lib`, `managed: false`; GH #1 tracks whether hypostasis should own its
+  start/stop later), and gm-assistant is markdown workspace content shipped with the
+  campaigns tree, not a pip-installable unit. turbovecdb-service (the separate :8077 HTTP
+  layer) was dropped entirely — it belongs to a different consumer (turbovecdb#4), not
+  hypostasis/mneme; the turbovecdb *library* is still installed, used embedded by mempalace.
+  001 delivers one reproducible install of this four-component core, not the whole
+  six-tool ecosystem.
 - **FR-012** *(resolved 2026-06-24; reframed per-campaign during implementation — see
   tasks.md T028)*: `mneme` MUST own the lifecycle of the per-campaign runtime.
   `mneme up <campaign>` MUST health-gate the campaign against the shared substrate (the DGX
@@ -254,7 +258,7 @@ and confirm it stops.
 
 - **SC-001**: From a single edited `hypostasis.yaml` on a fresh venv, one install command brings
   the in-scope system up with **zero** manual path/IP/port edits elsewhere.
-- **SC-002**: Grep of the in-scope component repos for the five hardcoded constants returns
+- **SC-002**: Grep of the in-scope component repos for the four hardcoded constants returns
   **zero** matches in logic (only config/template references sourced from `hypostasis.yaml`).
 - **SC-003**: One status command reports observed installed version + reachability for **every**
   in-scope component/service, and reports any declared-vs-observed drift as a failure.
@@ -309,6 +313,12 @@ config; reinstall reconstructs from `hypostasis.yaml`"; render-into-native-confi
   external dependencies `hypostasis`/`mneme` health-check, never start — reframed from the
   original all-services-in-order design during implementation; see tasks.md T028 and
   README.md.)
+
+### Post-implementation
+- **FR-011 — component scope** → narrowed from the originally-clarified six to the **four**
+  `hypostasis` actually installs (dgxlib, turbovecdb, mempalace, CampaignGenerator). See the
+  updated FR-011 above and tasks.md T017–T022 for why rpg-lib, gm-assistant, and
+  turbovecdb-service ended up out of scope.
 
 No open clarifications remain. One item is intentionally deferred to `/speckit.plan` (HOW, not a
 spec gap): FR-009's cache-coherence *mechanism* (re-render-on-apply / restart / source-hash check).
