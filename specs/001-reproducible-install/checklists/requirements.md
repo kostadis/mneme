@@ -38,3 +38,8 @@
   gap — the requirement fixes the guaranteed behavior.
 - One sub-question carried into `/speckit.plan`: whether any DGX-side process (separate hardware)
   is in `mneme`'s lifecycle scope or treated purely as an external dependency.
+- **Post-implementation note**: "mneme owns service lifecycle" (line 16 above) reflects the
+  FR-012 language as originally clarified 2026-06-24; the shipped scope is narrower —
+  per-campaign CampaignGenerator lifecycle via `mneme up`/`down`, not managed local services.
+  See spec.md's FR-012 and README.md for the current model. This checklist is left as
+  originally checked (historical QA gate, not re-run).

@@ -45,6 +45,13 @@ the manager-side guarantee is insufficient.
 - *No restart, rely on file re-render only* — leaves long-running processes on stale in-memory
   config. Rejected (this is exactly the failure the principle forbids).
 
+**Post-implementation caveat**: in the shipped system there is no local managed service for
+`apply` to restart — the DGX endpoint and rpg-lib are external substrate `hypostasis` never
+starts, and the one process either tool runs (the per-campaign CampaignGenerator instance) is
+started fresh by `mneme up <campaign>`, not restarted in place by `hypostasis apply`. The
+guarantee that shipped is regenerate + source-hash stamp, with drift caught by `status` — see
+`hypostasis/cli.py`'s `apply()` and README.md.
+
 ---
 
 ## D2 — DGX-side process scope ✅ RATIFIED 2026-06-24
@@ -128,15 +135,29 @@ discipline, Principle I/IV). Must be acyclic (Principle VI); validation rejects 
 **Alternatives**: Infer order from import graph (brittle, hidden magic; rejected — declared is
 honest and reviewable).
 
+**Post-implementation note**: the startup DAG above was the original design; the shipped
+`order.startup` covers only external health-checks (`dgx`, `rpg_lib`) — see
+`hypostasis.example.yaml` for the current shape.
+
 ---
 
 ## D7 — Service lifecycle implementation (up/down)
 
-**Decision**: `mneme up` starts each managed local service as a tracked subprocess (record
-PID + log path under a `mneme`-owned runtime dir, e.g. `~/.mneme/run/`), in declared
-order, health-checking each before starting dependents. `mneme down` stops them by tracked
-PID. The runtime/PID dir is **disposable bookkeeping, not authoritative state** (Principle IV —
-on loss, `status` rediscovers liveness by probing; it is not a second source of truth).
+> **Superseded during implementation — see tasks.md T028.** The scope of `up`/`down` was
+> reframed from "start every managed local service" to "launch one campaign's
+> CampaignGenerator instance": there turned out to be no local managed service to track
+> (rpg-lib and the DGX endpoint are external substrate, health-checked only; turbovecdb-service
+> was dropped from scope entirely — T020). The `~/.mneme/run/` PID-tracking design described
+> below was never built; PID tracking is delegated to CampaignGenerator's own per-port files.
+> This entry is kept for the historical record of the originally-ratified decision; see
+> README.md and tasks.md T028/T029 for what shipped.
+
+**Decision** (as originally ratified, now superseded): `mneme up` starts each managed local
+service as a tracked subprocess (record PID + log path under a `mneme`-owned runtime dir, e.g.
+`~/.mneme/run/`), in declared order, health-checking each before starting dependents.
+`mneme down` stops them by tracked PID. The runtime/PID dir is **disposable bookkeeping, not
+authoritative state** (Principle IV — on loss, `status` rediscovers liveness by probing; it is
+not a second source of truth).
 
 **Rationale**: Subprocess+PID is the lowest-friction lifecycle that works in WSL2 without
 requiring systemd. Keeping the PID dir non-authoritative avoids a Principle V trap.
@@ -198,6 +219,14 @@ component **sources at their pins**; `hypostasis install` does the rest.
 still "reproducible install on a venv." Containerizing all six components *as the deployment
 model* is a different, larger feature (a future `002`) — it must be decided deliberately, not
 absorbed into 001 by momentum.
+
+**Post-implementation note**: the harness that shipped (`validation/run-validation.sh` +
+`docker-compose.yml`) is narrower than this decision's original ambition — it validates the
+tool's authority→render→status→apply loop from a **self-contained sample authority** (a
+throwaway `hypostasis.yaml` pointing at a dummy DGX/rpg-lib and one component), not a real
+install of all six components against canonical ports `8000`/`8077`. Reaching the real
+substrate is still open — see `validation/README.md`'s "Scope (honest)" section and
+[GitHub issue #1](https://github.com/kostadis/mneme/issues/1).
 
 **Alternatives considered**: worktree/second-venv on the same host (good for *source* isolation
 but shares the host's env and ports — weaker fresh-environment proof; kept as a complementary

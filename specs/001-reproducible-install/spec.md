@@ -1,12 +1,12 @@
 # Feature Specification: Reproducible Install & Unified Config
 
-> **⚠️ Naming note (post-implementation).** This 001 design doc predates the split: the tool shipped as **two** commands (same repo). **`hypostasis`** configures the environment (`install`/`apply`/`status`); **`mneme`** is the per-campaign runtime (`up`/`down`). Read "mneme" below as **`hypostasis`** except where it's `mneme up`/`down`. Current model: top-level `README.md`. A full doc refactor is tracked as a GitHub issue.
+*Reflects the shipped two-command split — `hypostasis` (environment config: install/apply/status) and `mneme` (per-campaign runtime: up/down). See `README.md` for the current command reference.*
 
 **Feature Branch**: `001-reproducible-install`
 
 **Created**: 2026-06-24
 
-**Status**: Draft — clarifications resolved 2026-06-24 (scope: all six components; `mneme` owns service lifecycle)
+**Status**: Draft — clarifications resolved 2026-06-24 (scope: all six components; `mneme` owns the per-campaign runtime lifecycle)
 
 **Input**: Re-architect the integration plane of the campaign/DGX system so the
 whole thing installs reproducibly from one source of truth, eliminating the
@@ -117,28 +117,38 @@ confirm every component now uses the new endpoint and none reads the old one.
 
 ---
 
-### User Story 4 - Bring the system up and down in dependency order (Priority: P2)
+### User Story 4 - Launch and stop a campaign's runtime (Priority: P2)
 
-After install, the operator runs one command to bring the system **up** — `mneme`
-starts every service in declared dependency order — and one command to bring it **down**.
-The undocumented "what must be running, and in what order" knowledge in `current-setup.md`
-becomes a declared, tool-enforced order.
+After `hypostasis install`/`apply` has configured the environment, the operator runs
+`mneme up <campaign>` to launch that campaign's CampaignGenerator instance: `mneme`
+health-gates the shared substrate (the DGX endpoint and rpg-lib — both external, never
+started by `mneme`) and the campaign's mempalace store, exports `hypostasis.yaml`'s `env:`
+into the process, and starts CampaignGenerator scoped to that campaign on its own port.
+`mneme down <campaign>` stops that campaign's instance. There is no cross-service
+managed-dependency startup order to enforce here — the only process either tool starts/stops
+is the per-campaign CampaignGenerator instance.
 
-**Why this priority**: Install (P1) produces an installed system; this makes it a *running*
-system without operator-held startup choreography. It directly retires the "implicit venv +
-startup order" pain. Builds on P1 (there must be installed components to start).
+**Why this priority**: Install (P1) produces an installed environment; this makes a given
+campaign's runtime *running* without operator-held startup choreography. It directly retires
+the "implicit venv + startup order" pain. Builds on P1 (the environment must be installed
+before a campaign can be launched on it).
 
-**Independent Test**: From an installed-but-stopped system, run bring-up and confirm all
-services come up in order and pass reachability; run bring-down and confirm they stop.
+**Independent Test**: With the environment installed via `hypostasis install`, run
+`mneme up <campaign>` for a given campaign and confirm the substrate/mempalace health gate
+passes and CampaignGenerator starts and is reachable on its port; run `mneme down <campaign>`
+and confirm it stops.
 
 **Acceptance Scenarios**:
 
-1. **Given** an installed system, **When** the operator runs bring-up, **Then** services start
-   in the declared dependency order and each is confirmed reachable before dependents start.
-2. **Given** a service that fails to start, **When** bring-up runs, **Then** it reports the
-   failure and names the service, rather than reporting the system up.
-3. **Given** a running system, **When** the operator runs bring-down, **Then** the services
-   `mneme` manages are stopped.
+1. **Given** a hypostasis-configured environment, **When** the operator runs
+   `mneme up <campaign>`, **Then** `mneme` health-gates the substrate and the campaign's
+   mempalace store, exports env, and starts that campaign's CampaignGenerator instance,
+   confirmed reachable on its port.
+2. **Given** the substrate (DGX endpoint, rpg-lib) or the campaign's mempalace store is not
+   healthy, **When** `mneme up <campaign>` runs, **Then** it refuses to start and names what's
+   unhealthy, rather than reporting the campaign up.
+3. **Given** a running campaign instance, **When** the operator runs `mneme down <campaign>`,
+   **Then** that campaign's CampaignGenerator instance is stopped.
 
 ---
 
@@ -166,7 +176,8 @@ services come up in order and pass reachability; run bring-down and confirm they
 - **FR-002**: All previously-hardcoded infrastructure constants MUST be sourced from
   `hypostasis.yaml` and MUST NOT appear in component logic. At minimum: the DGX endpoint and
   default model, the 5etools data root, the rpg-lib URL and directory, the
-  turbovecdb-service URL/port, and the venv location.
+  turbovecdb-service URL/port, and the venv location. (turbovecdb-service was dropped from
+  managed scope during implementation — see the FR-011 note.)
 - **FR-003**: A single install action MUST, from `hypostasis.yaml`: create/validate the venv;
   install each in-scope component at its pinned version in declared dependency order; and
   populate each component's own native config/env from `hypostasis.yaml`.
@@ -196,17 +207,25 @@ services come up in order and pass reachability; run bring-down and confirm they
 - **FR-011** *(resolved 2026-06-24)*: The in-scope component set for this feature is **all
   six**: dgxlib, mempalace, turbovecdb (+ turbovecdb-service), CampaignGenerator, rpg-lib,
   and gm-assistant. 001 delivers one reproducible install of the whole system, not a slice.
-- **FR-012** *(resolved 2026-06-24)*: `mneme` MUST own service **lifecycle**. A single
-  bring-up action MUST start the system's services (rpg-lib server, turbovecdb-service, and
-  any other declared service) in declared dependency order, and a bring-down action MUST stop
-  them. The dependency/startup order is declared in `hypostasis.yaml`, not held as operator
-  tribal knowledge. (The DGX endpoint, if it runs on separate hardware, MAY be a depended-upon
-  external service that `mneme` reachability-checks rather than starts — see Assumptions.)
-- **FR-013**: After install + bring-up from a filled-in `hypostasis.yaml`, the system MUST reach
-  a running state with **no** manual service-start steps outside `mneme`.
-- **FR-014**: Bring-up MUST be ordering-correct and honest: a service whose dependency is not
-  yet healthy MUST NOT be reported as up, and a failure to start MUST be reported loudly
-  (Principle I — no False Green Dashboard), naming the service that failed.
+  *(Component-install scope as originally clarified; the actual install/service surface
+  drifted during implementation — turbovecdb-service and gm-assistant dropped, rpg-lib became
+  install-external — see tasks.md T017–T022. That drift is a separate follow-up from this
+  issue's hypostasis/mneme naming fix.)*
+- **FR-012** *(resolved 2026-06-24; reframed per-campaign during implementation — see
+  tasks.md T028)*: `mneme` MUST own the lifecycle of the per-campaign runtime.
+  `mneme up <campaign>` MUST health-gate the campaign against the shared substrate (the DGX
+  endpoint and rpg-lib — both external, health-checked only, never started by `mneme`) and the
+  campaign's mempalace store, then start that campaign's CampaignGenerator instance;
+  `mneme down <campaign>` MUST stop it. `mneme` does not start, stop, or order any shared
+  service — there is no local managed-service dependency chain in the shipped system.
+  Environment-level install/config-render is `hypostasis install`/`apply`'s job, not `mneme`'s.
+- **FR-013**: After `hypostasis install`/`apply` and `mneme up <campaign>`, that campaign's
+  CampaignGenerator instance MUST be running and reachable with **no** manual service-start
+  steps outside `hypostasis`/`mneme`.
+- **FR-014**: `mneme up <campaign>` MUST be honest: if the substrate (DGX endpoint, rpg-lib)
+  or the campaign's mempalace store is not healthy, the campaign MUST NOT be reported as up,
+  and a failure to start MUST be reported loudly (Principle I — no False Green Dashboard),
+  naming what failed.
 
 ### Key Entities
 
@@ -216,9 +235,11 @@ services come up in order and pass reachability; run bring-down and confirm they
 - **Component** — an installable unit (a repo or package) with a name, a source, a pinned
   version, a place in the dependency order, and a native config/env that the installer
   populates from the config entity.
-- **Service** — a running endpoint a component exposes or depends on (DGX endpoint, rpg-lib,
-  turbovecdb-service) that `mneme` starts/stops (per FR-012) and status reachability-checks.
-  Carries a declared place in the startup dependency order.
+- **Service** — a running endpoint a component exposes or depends on. In the shipped system
+  every declared service (DGX endpoint, rpg-lib) is external substrate: `hypostasis status`
+  reachability-checks it, but neither `hypostasis` nor `mneme` starts or stops it. The only
+  process either tool starts/stops is `mneme`'s per-campaign CampaignGenerator instance — it
+  is not itself declared as a `Service` entity in `hypostasis.yaml`.
 - **Derived config** — a non-authoritative, regenerated-from-`hypostasis.yaml` copy of a
   component's native config. Never hand-edited; kept coherent with the authority.
 - **Out-of-scope (named to bound the feature): data-plane entities** — mempalace's vector
@@ -242,9 +263,9 @@ services come up in order and pass reachability; run bring-down and confirm they
   value (verified by status showing no drift and no component reaching the old endpoint).
 - **SC-005**: Reproducibility — the same `hypostasis.yaml` produces an equivalent working system
   on a second venv/machine, demonstrated at least once.
-- **SC-006**: From an installed system, one bring-up command starts **all** of the system's
-  managed services in correct dependency order and they pass reachability; one bring-down
-  command stops them — with **zero** manual service-start steps outside `mneme`.
+- **SC-006**: From a hypostasis-configured environment, `mneme up <campaign>` health-gates the
+  substrate and starts that campaign's CampaignGenerator instance, reachable on its port, with
+  **zero** manual steps outside `mneme`; `mneme down <campaign>` stops it.
 
 ## Assumptions
 
@@ -257,10 +278,13 @@ services come up in order and pass reachability; run bring-down and confirm they
   the 2026-06-24 decision — components are not held immutable.
 - The venv model (`~/.venvs/main`) remains the runtime; its *location* becomes a `hypostasis.yaml`
   value rather than a hardcoded assumption.
-- `mneme` owns the lifecycle of services it can start locally (rpg-lib server,
-  turbovecdb-service). The DGX endpoint, when it runs on separate hardware (`192.0.2.10`), is
-  treated as an external dependency `mneme` reachability-checks and orders against, not a
-  process it starts — confirm during `/speckit.plan` whether any DGX-side process is in scope.
+- `mneme` owns the lifecycle of the per-campaign CampaignGenerator instance only. Neither the
+  DGX endpoint (`192.0.2.10`, separate hardware) nor rpg-lib is started by `mneme` or
+  `hypostasis` — both are external substrate, reachability-checked only. turbovecdb (the
+  library) is still installed as a component; its separate HTTP service layer
+  (`turbovecdb-service`, :8077) was dropped from the managed-services scope during
+  implementation — it belongs to a different consumer, not mneme (see tasks.md T020 and the
+  FR-011 note above). mempalace uses turbovecdb embedded, not over HTTP.
 - Spec Kit drives the build (`/speckit.plan` → `/speckit.tasks` → `/speckit.implement`); the
   cross-repo edits that implement FR-002/FR-004 are gated task by task.
 
@@ -269,7 +293,7 @@ services come up in order and pass reachability; run bring-down and confirm they
 This feature is the first application of the constitution; each principle has a concrete hook
 here: single authority + no stale copies (**V**) is `hypostasis.yaml` + coherent renders;
 no Infrastructure Proxy (**II**) is FR-002; observed-not-declared status (**I**) is FR-007/008;
-manager-is-a-transient-viewer (**IV**) is "delete mneme, components still run from rendered
+manager-is-a-transient-viewer (**IV**) is "delete hypostasis, components still run from rendered
 config; reinstall reconstructs from `hypostasis.yaml`"; render-into-native-config for low coupling
 (**VII**) is the default mechanism, subordinate to V per the V-over-VII precedence rule.
 
@@ -279,10 +303,12 @@ config; reinstall reconstructs from `hypostasis.yaml`"; render-into-native-confi
 - **FR-011 — component scope of 001** → **All six components** (dgxlib, mempalace,
   turbovecdb(+service), CampaignGenerator, rpg-lib, gm-assistant). One reproducible install of
   the whole system, not a vertical slice.
-- **FR-012 — service lifecycle** → **`mneme` owns lifecycle**: `up` starts services in
-  declared dependency order, `down` stops them; order lives in `hypostasis.yaml`. (DGX endpoint
-  on separate hardware is an external dependency to order/health-check, not start — confirm in
-  `/speckit.plan`.)
+- **FR-012 — service lifecycle** → **`mneme` owns the per-campaign runtime lifecycle**:
+  `mneme up <campaign>` health-gates substrate + mempalace, then starts that campaign's
+  CampaignGenerator instance; `mneme down <campaign>` stops it. (DGX endpoint and rpg-lib are
+  external dependencies `hypostasis`/`mneme` health-check, never start — reframed from the
+  original all-services-in-order design during implementation; see tasks.md T028 and
+  README.md.)
 
 No open clarifications remain. One item is intentionally deferred to `/speckit.plan` (HOW, not a
 spec gap): FR-009's cache-coherence *mechanism* (re-render-on-apply / restart / source-hash check).

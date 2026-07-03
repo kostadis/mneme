@@ -1,6 +1,6 @@
-# mneme.yaml — THE single authority for config/wiring (Principle V).
+# hypostasis.yaml — THE single authority for config/wiring (Principle V).
 # Hand-edited. One per deployment. Derived component configs are rendered from this
-# file and are NON-authoritative (never hand-edit a rendered file; run `mneme apply`).
+# file and are NON-authoritative (never hand-edit a rendered file; run `hypostasis apply`).
 #
 # Pins are the pre-refactor baseline (each unit's HEAD as of 2026-06-24), EXCEPT
 # claudelib + rpg_lib, which are at the T036 commit f432a8b on the mytools
