@@ -189,10 +189,10 @@ def test_repo_hypostasis_yaml_is_valid():
     repo_root = pathlib.Path(__file__).resolve().parents[2]
     entity = cfg.load(repo_root / "hypostasis.example.yaml")
     # what hypostasis installs: dgxlib, turbovecdb, mempalace, CampaignGenerator
-    # (rpg-lib/claudelib external #0003; gm-assistant is workspace content, not a component)
+    # (rpg-lib/claudelib external GH #9; gm-assistant is workspace content, not a component)
     assert len(entity.components) == 4
     assert entity.order.install[0] == "dgxlib"
-    # rpg-lib + claudelib are external / rpg-lib's — not installed by hypostasis (issue #0003)
+    # rpg-lib + claudelib are external / rpg-lib's — not installed by hypostasis (GH #9)
     assert "rpg_lib" not in entity.components
     assert "claudelib" not in entity.components
     # rpg-lib is interacted-with, not owned: a health-checked external service like dgx

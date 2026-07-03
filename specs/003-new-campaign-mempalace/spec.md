@@ -6,15 +6,15 @@
 
 **Status**: Draft
 
-**Input**: User description: "mempalace bring up for a new campaign - see issues in github" (GitHub #4 — configure the per-campaign mempalace, incl. the migrated 0006 "campaign creation must produce a mneme-usable mempalace"; GitHub #12 — provision + back up the per-campaign mempalace data store)
+**Input**: User description: "mempalace bring up for a new campaign - see issues in github" (GitHub #4 — configure the per-campaign mempalace, incl. the "campaign creation must produce a mneme-usable mempalace" concern; GitHub #12 — provision + back up the per-campaign mempalace data store)
 
 ## Context & Problem
 
-Feature 002 gave `mneme` the ability to **manage** an *existing* campaign's mempalace: a single authority in the campaign, stamped derived config, honest status, refresh, publish/adopt/migrate. But it assumes the campaign already has a mempalace set up. A **brand-new campaign** — one that has documents but has never been through bring-up — is born with nothing: no authority, no provisioned index store, no built index, no backup. `mneme mp status` reports it `missing_config` and it falls silently outside management — the "inconsistent by accident" problem 002 exists to kill, reintroduced at creation time (GitHub #4 / 0006).
+Feature 002 gave `mneme` the ability to **manage** an *existing* campaign's mempalace: a single authority in the campaign, stamped derived config, honest status, refresh, publish/adopt/migrate. But it assumes the campaign already has a mempalace set up. A **brand-new campaign** — one that has documents but has never been through bring-up — is born with nothing: no authority, no provisioned index store, no built index, no backup. `mneme mp status` reports it `missing_config` and it falls silently outside management — the "inconsistent by accident" problem 002 exists to kill, reintroduced at creation time (GitHub #4).
 
 There are two planes to stand up, and today nothing owns the end-to-end:
 
-- **Config plane** (mneme's job, #4 / 0006): a per-campaign authority `.mneme/mempalace.yaml` chosen from the recipe scaffold, with the derived wing config rendered and stamped — so the campaign is conformant and manageable from birth.
+- **Config plane** (mneme's job, #4): a per-campaign authority `.mneme/mempalace.yaml` chosen from the recipe scaffold, with the derived wing config rendered and stamped — so the campaign is conformant and manageable from birth.
 - **Data plane** (hypostasis's job, #12): the index **store** provisioned for the campaign, the **first mine** run to build the index, and — because that index is expensive to regenerate — **backup** so the work is protected.
 
 This feature is the **bring-up**: one operation that takes a new campaign from "just has documents" to "configured, provisioned, indexed, observable, and protected" — correctly sequenced, idempotent, and honest about what it did and what (if anything) is still owed.

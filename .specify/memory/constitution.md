@@ -1,20 +1,33 @@
 <!--
-SYNC IMPACT REPORT — constitution amendment 2026-06-26
-Version: 1.0.0 → 1.1.0  (MINOR — a new principle added)
-Added principle: IX. Observability (State and To-Do are Discoverable, not Remembered)
-Added anti-pattern: Opacity / Tribal State (preamble list + Governance list)
-Modified: Governance — principle-test range "I–VIII" → "I–IX"; "four anti-patterns" → "five"
-Rationale: GH #11 (was local issue 0008). Principle I governs the HONESTY of a chosen
-  report; IX governs its COMPLETENESS/DISCOVERABILITY — a distinct concern, hence a new
-  principle rather than an expansion of I. Worked example: the proposal-aware `mneme mp
-  status` to-do shipped in feature 002 (GH #14).
+SYNC IMPACT REPORT — constitution amendment 2026-07-03
+Version: 1.1.0 → 1.2.0  (MINOR — materially expanded guidance under an existing principle)
+Modified: Principle II (Sovereign Identity) — added a second "On this platform" clause,
+  "the anonymization boundary", defining what hypostasis OWNS (installs + runs, lifecycle
+  incl. start/stop) vs merely REFERENCES (health-checks). No principle added/removed/renumbered;
+  the five anti-patterns are unchanged.
+Rationale: GH #1. hypostasis owns the seam that gives a TTRPG-specific named-physical resource a
+  stable, location-independent identity (rpg-lib anonymizes "my PDF library at a path on a machine"
+  into "the index endpoint" — mneme never learns the physical coordinate). This is Principle II
+  proper (identity belongs to the object, not the host; anti-Infrastructure-Proxy), so it expands
+  II rather than adding a principle. Onboarding test: "could you swap this and mneme wouldn't care?"
+  Swap the DGX GPU → mneme is oblivious (fungible compute, already anonymized elsewhere) → REFERENCE.
+  Lose rpg-lib's corpus → mneme is wounded (irreplaceable, hypostasis-provided seam) → OWN.
+  Resolves GH #1: rpg-lib is a managed service (start/stop), not merely health-checked; the DGX
+  stays reference-only (generalizes D2 from DGX-specific to the swap-test boundary).
 Templates / docs checked for sync:
   ✅ plan-template.md — Constitution Check is generic ("[Gates determined based on
-     constitution file]"); auto-applies IX, no edit needed.
+     constitution file]"); auto-applies the expanded II, no edit needed.
   ✅ spec-template.md — does not enumerate principles; no change.
   ✅ tasks-template.md — does not enumerate principles; no change.
   ✅ CLAUDE.md (project) — points to the constitution, does not enumerate; no change.
-Follow-up: close GH #11 once ratified.
+  ⚠ hypostasis.example.yaml — `services.rpg_lib` is `managed: false` today; the target state is
+     `managed: true` per this clause. Left honest to current implementation (no start/stop or
+     `hypostasis up/down` machinery exists yet); comment records the decided target + GH #1.
+Follow-up: implement rpg-lib as a managed service (its own Spec-Kit feature, tracked in GH #1).
+
+PRIOR AMENDMENT — 2026-06-26 · 1.0.0 → 1.1.0 (MINOR — added Principle IX Observability +
+  anti-pattern Opacity / Tribal State; Governance range I–VIII → I–IX, four → five anti-patterns).
+  Rationale: GH #11 (was local issue 0008). See git history for the full report.
 -->
 # Platform Constitution
 
@@ -58,6 +71,35 @@ never appear hardcoded in component logic.
   are infrastructure proxies embedded in component logic. They move to
   `platform.yaml` and are injected; component code names *what it needs*
   ("the DGX endpoint"), never *where it is today*.
+- **On this platform — the anonymization boundary (what hypostasis owns vs
+  references):** hypostasis is a TTRPG-development platform, and its job is to *be
+  the anonymization boundary* for the TTRPG-specific named-physical resources it
+  runs on. A **named physical resource** is one whose identity *is* a specific
+  physical thing — my PDF corpus at a path on a machine, an NFS mount → a specific
+  server. rpg-lib is the worked example: it converts "my specific library, at a
+  path, on a box" into "the index endpoint," so that mneme consumes a *fungible
+  logical handle* and never learns the physical coordinate. Move the corpus,
+  re-index behind a fresh rpg-lib at the same logical address, and mneme is
+  oblivious — that swap-invisibility is Principle II delivered (identity stable
+  across move, decoupled from host). Because *providing that seam is hypostasis's
+  function*, hypostasis **OWNS** such resources' full lifecycle — install, render
+  config, **and start/stop** (rpg-lib is therefore *to be* a `managed` service, not
+  merely health-checked — decided; implementation pending, GH #1. Today it is still
+  `managed: false` in config, honest to the fact that the start/stop machinery
+  doesn't exist yet — Principle I: the doctrine states the target, the config states
+  the silicon).
+  Where the seam already exists — the substrate self-presents an anonymous handle
+  (the DGX's vLLM endpoint: fungible, general-purpose compute used by anyone for
+  anything) or an OS / physical admin owns the box — hypostasis **REFERENCES** the
+  anonymous handle and never provisions it (health-check only, Principle I — never
+  assume up; generalizes D2 beyond the DGX).
+  **Onboarding test for any new service — "could I swap this out and mneme wouldn't
+  care?"** Swap the **content** and mneme is wounded → it is irreplaceable, and if
+  it is TTRPG-specific hypostasis owns it. Swap the **host/coordinate** and mneme is
+  oblivious → the anonymization holds → reference the handle. mneme cares enormously
+  if it loses rpg-lib (own it); mneme cannot tell which GPU serves the model
+  (reference it). The purpose filter ("is it TTRPG?") decides *whether hypostasis
+  should provide the seam at all*; the swap test *verifies the seam holds*.
 
 ### III. Intrinsic State — no Horcruxes
 State and metadata travel with the thing they describe; they do not live in a
@@ -270,4 +312,4 @@ efficiency gap, agility/automation gap — and decide on the business cost, not 
   MINOR = a new principle or materially expanded guidance; PATCH = clarifications and
   wording that don't change meaning.
 
-**Version**: 1.1.0 | **Ratified**: 2026-06-24 | **Last Amended**: 2026-06-26
+**Version**: 1.2.0 | **Ratified**: 2026-06-24 | **Last Amended**: 2026-07-03

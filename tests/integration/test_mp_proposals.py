@@ -1,4 +1,4 @@
-"""Issue 0007 integration test: proposal branches surface as pending, then merged."""
+"""GH #14 integration test: proposal branches surface as pending, then merged."""
 
 from __future__ import annotations
 
