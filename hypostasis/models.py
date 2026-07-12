@@ -88,6 +88,7 @@ class ConfigEntity:
     # keys are single-valued — read them via `hypostasis.config.single_root`.
     data_roots: dict[str, tuple[Path, ...]] = field(default_factory=dict)
     env: dict[str, str] = field(default_factory=dict)  # exported to managed services on `up`
+    installer: str = "pip"  # package/venv tool: "pip" | "uv" (validated in config.validate)
     mneme_identity: MnemeIdentity | None = None  # 005 — minted lazily if absent
     source_path: Path | None = None
 

@@ -5,6 +5,7 @@ Authoritative config/wiring entity. Hand-edited. One per deployment. See
 
 ```yaml
 venv: ~/.venvs/main                      # required
+installer: pip                           # optional: pip | uv (default pip) — package/venv tool
 
 machines:                                # required (>=1; must include dgx)
   dgx:
@@ -56,6 +57,7 @@ repo root is the current worked reference if the two ever drift.*
 4. Each `managed: true` service defines `start` and `stop`.
 5. Each component with a `config_template` defines a `config_target`.
 6. No field introduces a second writable authority (no `lockfile`, no write-back target).
+7. `installer`, if present, is `pip` or `uv` (default `pip`) — a declared, deterministic choice, not a second store.
 
 ## What is deliberately NOT here
 - **No installed-version field** — observed live by `status`, never stored (Principle I/V).

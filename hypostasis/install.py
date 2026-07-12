@@ -8,6 +8,7 @@ tested without a real venv or network.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -29,13 +30,18 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
-def ensure_venv(venv: Path, runner: Runner = _run) -> Path:
-    """Return the venv's python, creating the venv if absent."""
+def ensure_venv(venv: Path, runner: Runner = _run, installer: str = "pip") -> Path:
+    """Return the venv's python, creating the venv (via the declared installer) if absent."""
     py = venv / "bin" / "python"
     if py.exists():
         return py
     venv.parent.mkdir(parents=True, exist_ok=True)
-    result = runner([sys.executable, "-m", "venv", str(venv)])
+    cmd = (
+        ["uv", "venv", str(venv)]
+        if installer == "uv"
+        else [sys.executable, "-m", "venv", str(venv)]
+    )
+    result = runner(cmd)
     if result.returncode != 0:
         raise InstallError("<venv>", result.stderr.strip() or "venv creation failed")
     return py
@@ -74,21 +80,33 @@ def _verify_path_pin(comp: Component, runner: Runner) -> None:
         )
 
 
-def install_component(py: Path, comp: Component, runner: Runner = _run) -> None:
+def install_component(
+    py: Path, comp: Component, runner: Runner = _run, installer: str = "pip"
+) -> None:
     if comp.source.kind == "path":
         _verify_path_pin(comp, runner)
     target = pip_target(comp)
-    result = runner([str(py), "-m", "pip", "install", "--upgrade", target])
+    # Both forms keep `install` as a token and the pin target as the LAST element.
+    cmd = (
+        ["uv", "pip", "install", "--python", str(py), "--upgrade", target]
+        if installer == "uv"
+        else [str(py), "-m", "pip", "install", "--upgrade", target]
+    )
+    result = runner(cmd)
     if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "pip install failed").strip()
+        detail = (result.stderr or result.stdout or "install failed").strip()
         raise InstallError(comp.name, detail[-400:])
 
 
 def install_all(entity: ConfigEntity, runner: Runner = _run) -> list[str]:
     """Install every component in `order.install`. Returns the installed names."""
-    py = ensure_venv(entity.venv, runner)
+    installer = entity.installer
+    # Fail loud before any side effect if the declared installer isn't available (FR-006).
+    if installer == "uv" and shutil.which("uv") is None:
+        raise InstallError("<uv>", "installer 'uv' selected but `uv` is not on PATH")
+    py = ensure_venv(entity.venv, runner, installer)
     installed: list[str] = []
     for name in entity.order.install:
-        install_component(py, entity.components[name], runner)
+        install_component(py, entity.components[name], runner, installer)
         installed.append(name)
     return installed
