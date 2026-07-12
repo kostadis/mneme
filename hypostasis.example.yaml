@@ -65,7 +65,7 @@ components:                      # what mneme INSTALLS. rpg-lib + claudelib are 
     config_target: ~/src/CampaignGenerator/config/wiring.yaml
     # KNOWN ISSUE: ~/src/CampaignGenerator has no pyproject.toml/setup.py yet, so `install` fails
     # loud here (pip/uv: "not a Python project"). CG is run-in-place (launched via its own `start`);
-    # the fix is to add a PINNED pyproject (cf. T036 rpg-lib) and bump this pin. Deferred for now.
+    # the fix is to add a PINNED pyproject (cf. T036 rpg-lib) and bump this pin. Deferred: GH #50.
   # NOTE: gm-assistant is NOT a component — it's pure-markdown Claude Code skills that ship
   # with the campaigns workspace (data_roots.campaigns: ~/campaigns/gm-assistant). Not
   # pip-installable; self-contained per its own README. (path bug tracked in GH #10)
