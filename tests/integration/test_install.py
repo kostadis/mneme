@@ -8,6 +8,8 @@ container acid test (T034), not duplicated here.
 
 from __future__ import annotations
 
+import importlib.util
+import shutil
 import subprocess
 
 import pytest
@@ -32,7 +34,7 @@ class FakeRunner:
         return [c[-1] for c in self.calls if "install" in c]
 
 
-def make_entity(tmp_path):
+def make_entity(tmp_path, installer="pip"):
     comps = {
         "a": Component("a", Source("pypi", "pkgA"), "1.0"),
         "b": Component("b", Source("pypi", "pkgB"), "2.0"),
@@ -43,6 +45,7 @@ def make_entity(tmp_path):
         services={},
         components=comps,
         order=Order(install=("a", "b"), startup=()),
+        installer=installer,
     )
 
 
@@ -60,6 +63,30 @@ def test_install_fails_loud_and_names_component(tmp_path):
     assert ei.value.component == "b"  # FR-006: names the offending unit
     # 'a' was attempted, 'b' failed — never reports success on a partial result
     assert "pkgA==1.0" in runner.pip_targets()
+
+
+def test_install_all_uv_shells_out_to_uv(tmp_path, monkeypatch):
+    # uv is on PATH (preflight passes) — assert the uv command forms are used.
+    monkeypatch.setattr(inst.shutil, "which", lambda name: "/usr/bin/uv")
+    runner = FakeRunner()
+    installed = inst.install_all(make_entity(tmp_path, installer="uv"), runner)
+    assert installed == ["a", "b"]
+    # venv is created with `uv venv`, not stdlib venv.
+    assert ["uv", "venv", str(tmp_path / "venv")] in runner.calls
+    # each install is `uv pip install --python <py> --upgrade <target>` (pin LAST).
+    assert runner.calls[1][:3] == ["uv", "pip", "install"]
+    assert "--python" in runner.calls[1]
+    assert runner.pip_targets() == ["pkgA==1.0", "pkgB==2.0"]  # pin-last invariant preserved
+
+
+def test_install_all_uv_missing_binary_fails_loud(tmp_path, monkeypatch):
+    # installer=uv but uv absent → fail loud, named, before any side effect.
+    monkeypatch.setattr(inst.shutil, "which", lambda name: None)
+    runner = FakeRunner()
+    with pytest.raises(inst.InstallError) as ei:
+        inst.install_all(make_entity(tmp_path, installer="uv"), runner)
+    assert ei.value.component == "<uv>"
+    assert runner.calls == []  # nothing ran — no venv, no install
 
 
 def test_pip_target_translations():
@@ -87,11 +114,7 @@ def test_path_pin_mismatch_fails_loud(tmp_path):
     assert "!=" in ei.value.detail
 
 
-@pytest.mark.slow
-def test_ensure_venv_creates_real_venv(tmp_path):
-    """Real, offline: a throwaway venv is genuinely created and its python runs."""
-    venv = tmp_path / "venv"
-    py = inst.ensure_venv(venv)
+def _assert_real_venv_python_runs(venv, py):
     assert py.exists(), "venv python should exist after creation"
     out = subprocess.run(
         [str(py), "-c", "import sys; print(sys.executable)"],
@@ -100,3 +123,24 @@ def test_ensure_venv_creates_real_venv(tmp_path):
     )
     assert out.returncode == 0
     assert str(venv) in out.stdout
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    importlib.util.find_spec("ensurepip") is None,
+    reason="stdlib `python -m venv` needs ensurepip to bootstrap pip; absent on uv-managed pythons",
+)
+def test_ensure_venv_creates_real_venv(tmp_path):
+    """Real, offline: a throwaway venv is genuinely created (stdlib/pip path); its python runs."""
+    venv = tmp_path / "venv"
+    py = inst.ensure_venv(venv)  # installer defaults to "pip" (stdlib venv)
+    _assert_real_venv_python_runs(venv, py)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv not installed")
+def test_ensure_venv_uv_creates_real_venv(tmp_path):
+    """Real, offline: `uv venv` genuinely creates a usable venv (no pip needed)."""
+    venv = tmp_path / "venv"
+    py = inst.ensure_venv(venv, installer="uv")
+    _assert_real_venv_python_runs(venv, py)

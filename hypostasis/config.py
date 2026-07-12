@@ -118,6 +118,9 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
     if not raw.get("venv"):
         problems.append("missing required field: venv")
 
+    # Which tool installs components / creates the venv (pip default; uv is a drop-in).
+    installer = str(raw.get("installer") or "pip").strip()
+
     machines: dict[str, Machine] = {}
     for name, m in (raw.get("machines") or {}).items():
         m = m or {}
@@ -190,6 +193,7 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
         order=order,
         data_roots=data_roots,
         env=env,
+        installer=installer,
         mneme_identity=mneme_identity,
         source_path=path,
     )
@@ -225,6 +229,10 @@ def validate(entity: ConfigEntity, raw: dict) -> list[str]:
         p.append("order.install: required")
     if not entity.order.startup:
         p.append("order.startup: required")
+
+    # The installer is a declared, deterministic choice — only pip/uv are supported.
+    if entity.installer not in ("pip", "uv"):
+        p.append(f"installer: '{entity.installer}' is not supported (use 'pip' or 'uv')")
 
     for name, c in entity.components.items():
         # Invariant 1 — exact pins.

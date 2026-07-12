@@ -105,6 +105,24 @@ def test_config_template_requires_target(tmp_path):
     assert_problem(tmp_path, raw, "config_target missing")
 
 
+def test_installer_defaults_to_pip(tmp_path):
+    # Omitting the field keeps the pre-feature default (backward compatible).
+    entity = load_raw(tmp_path, valid_raw(tmp_path))
+    assert entity.installer == "pip"
+
+
+def test_installer_uv_is_valid(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["installer"] = "uv"
+    assert load_raw(tmp_path, raw).installer == "uv"
+
+
+def test_installer_unknown_rejected(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["installer"] = "cargo"
+    assert_problem(tmp_path, raw, "installer")
+
+
 def test_all_problems_reported_at_once(tmp_path):
     raw = valid_raw(tmp_path)
     del raw["venv"]

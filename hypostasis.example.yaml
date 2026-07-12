@@ -9,6 +9,8 @@
 
 venv: ~/.venvs/main
 
+installer: pip                    # pip | uv — package/venv tool (default pip). uv is an accepted drop-in.
+
 machines:
   dgx:
     endpoint: http://192.0.2.10:8001/v1
@@ -61,6 +63,9 @@ components:                      # what mneme INSTALLS. rpg-lib + claudelib are 
     pin: 09622f6b185b9d9d2af9ece6ee7e38a4759d3d42
     config_template: campaigngenerator.wiring.yaml.j2
     config_target: ~/src/CampaignGenerator/config/wiring.yaml
+    # KNOWN ISSUE: ~/src/CampaignGenerator has no pyproject.toml/setup.py yet, so `install` fails
+    # loud here (pip/uv: "not a Python project"). CG is run-in-place (launched via its own `start`);
+    # the fix is to add a PINNED pyproject (cf. T036 rpg-lib) and bump this pin. Deferred: GH #50.
   # NOTE: gm-assistant is NOT a component — it's pure-markdown Claude Code skills that ship
   # with the campaigns workspace (data_roots.campaigns: ~/campaigns/gm-assistant). Not
   # pip-installable; self-contained per its own README. (path bug tracked in GH #10)
