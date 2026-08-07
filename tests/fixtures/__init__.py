@@ -19,33 +19,43 @@ from hypostasis.models import ConfigEntity, Machine, MnemeIdentity, Order
 STUB = Path(__file__).parent / "stub_mempalace.py"
 
 
-def entity_for(campaigns_root: Path) -> ConfigEntity:
+def entity_for(campaigns_root: Path, *, mempalace: Path | None = None) -> ConfigEntity:
     """A minimal ConfigEntity pointing data_roots.campaigns at ``campaigns_root``.
 
     Built directly (no validation) — these tests exercise the mp manager, not the
     hypostasis.yaml loader. venv is left unset so the runner falls back to PATH /
-    an injected runner.
+    an injected runner. ``mempalace`` declares this "host's" palace root (006).
     """
+    roots: dict = {"campaigns": campaigns_root}
+    if mempalace is not None:
+        roots["mempalace"] = mempalace  # normalized to a 1-tuple by ConfigEntity
     return ConfigEntity(
         venv=Path("."),
         machines={"dgx": Machine("http://dgx:8001/v1")},
         services={},
         components={},
         order=Order(install=(), startup=()),
-        data_roots={"campaigns": campaigns_root},
+        data_roots=roots,
     )
 
 
-def entity_for_trees(*campaign_trees: Path, identity: MnemeIdentity | None = None) -> ConfigEntity:
+def entity_for_trees(
+    *campaign_trees: Path,
+    identity: MnemeIdentity | None = None,
+    mempalace: Path | None = None,
+) -> ConfigEntity:
     """A ConfigEntity declaring one-or-more campaign trees (005), optionally with a
-    minted mneme identity."""
+    minted mneme identity and this host's palace root (006)."""
+    roots: dict = {"campaigns": [str(t) for t in campaign_trees]}
+    if mempalace is not None:
+        roots["mempalace"] = mempalace  # normalized to a 1-tuple by ConfigEntity
     return ConfigEntity(
         venv=Path("."),
         machines={"dgx": Machine("http://dgx:8001/v1")},
         services={},
         components={},
         order=Order(install=(), startup=()),
-        data_roots={"campaigns": [str(t) for t in campaign_trees]},
+        data_roots=roots,
         mneme_identity=identity,
     )
 

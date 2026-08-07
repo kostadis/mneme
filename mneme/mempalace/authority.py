@@ -52,7 +52,24 @@ def _normalize_wing_name(name: str) -> str:
     return name.strip().lower().replace("-", "_").replace(" ", "_")
 
 
-def _parse(raw: dict, source: Path, problems: list[str]) -> CampaignMempalaceConfig:
+def default_mempalace_root() -> Path:
+    """Fallback palace root when no entity is threaded in (tests, direct callers)."""
+    return Path.home() / ".mempalace"
+
+
+def store_path_for(alias: str, mempalace_root: Path | None = None) -> Path:
+    """THE resolution rule (006, FR-011/011a): ``<mempalace_root>/palaces/<alias>``.
+
+    Root-plus-alias is the only rule — there is no per-alias override table anywhere
+    (Principle V). Redirecting a single palace is a filesystem concern: the derived
+    location may be a symlink to the real one, followed transparently."""
+    root = Path(mempalace_root) if mempalace_root else default_mempalace_root()
+    return root / "palaces" / alias
+
+
+def _parse(
+    raw: dict, source: Path, problems: list[str], mempalace_root: Path | None = None
+) -> CampaignMempalaceConfig:
     campaign = str(raw.get("campaign", "")).strip()
     if not campaign:
         problems.append("missing required field: campaign")
@@ -95,13 +112,9 @@ def _parse(raw: dict, source: Path, problems: list[str]) -> CampaignMempalaceCon
     sraw = raw.get("store")
     if isinstance(sraw, dict):
         alias = _normalize_wing_name(str(sraw.get("alias", campaign))) or campaign
-        praw = sraw.get("path")
-        path = (
-            Path(os.path.expanduser(str(praw)))
-            if praw
-            else Path.home() / ".mempalace" / "palaces" / alias
-        )
-        store = StorePointer(alias=alias, path=path)
+        # The path is DERIVED, never read from the tracked file (006, FR-010/011). A `path:`
+        # key here is legacy — kept only so `validate` can judge it (FR-013/014).
+        store = StorePointer(alias=alias, path=store_path_for(alias, mempalace_root))
 
     return CampaignMempalaceConfig(
         campaign=campaign,
@@ -172,10 +185,39 @@ def validate(cfg: CampaignMempalaceConfig, raw: dict, campaign_dir: Path) -> lis
     if cfg.store is not None:
         if not cfg.store.alias:
             p.append("store.alias: empty")
-        if not cfg.store.path.is_absolute():
-            p.append(f"store.path '{cfg.store.path}' must resolve to an absolute path")
+        p += _legacy_store_path_problems(cfg, raw)
 
     return p
+
+
+def _resolved(path: Path) -> Path:
+    """Fully resolve for comparison — a sanctioned symlink redirect (FR-011a) must not read
+    as a conflict, and neither must a trailing separator."""
+    try:
+        return path.resolve()
+    except OSError:  # broken link / unreadable parent — compare what we can
+        return Path(os.path.normpath(os.path.expanduser(str(path))))
+
+
+def _legacy_store_path_problems(cfg: CampaignMempalaceConfig, raw: dict) -> list[str]:
+    """Judge a pre-006 `store.path` still present in the tracked authority.
+
+    Equal to the derived location → fine, and status reports it as owed cleanup (FR-013).
+    Different → a hard problem naming both, on EVERY operation including read-only ones
+    (FR-014). A conflicting path may name a real store full of real content; silently
+    switching to the derived location would abandon it."""
+    praw = (raw.get("store") or {}).get("path")
+    if not praw:
+        return []
+    legacy = Path(os.path.expanduser(str(praw)))
+    if _resolved(legacy) == _resolved(cfg.store.path):
+        return []
+    return [
+        f"store.path '{praw}' conflicts with this host's derived location "
+        f"'{cfg.store.path}'. The path is host-local and is no longer tracked (006): "
+        "remove the `path:` key under `store:`. If the store really lives at the tracked "
+        "location, move it or set data_roots.mempalace to that root first."
+    ]
 
 
 def require_store(cfg: CampaignMempalaceConfig) -> StorePointer:
@@ -203,7 +245,10 @@ def to_yaml(cfg: CampaignMempalaceConfig) -> str:
         "recipe_version": cfg.recipe_version,
     }
     if cfg.store is not None:
-        doc["store"] = {"alias": cfg.store.alias, "path": str(cfg.store.path)}
+        # Alias only. There is deliberately NO serializer for the path: that absence is what
+        # makes it impossible to write a host-local location into a tracked file (FR-010,
+        # SC-005) — the guarantee is structural, not a convention someone must remember.
+        doc["store"] = {"alias": cfg.store.alias}
     doc["wings"] = [
             {
                 "name": w.name,
@@ -235,8 +280,14 @@ def write(cfg: CampaignMempalaceConfig, campaign_dir: Path) -> Path:
     return path
 
 
-def load(campaign_dir: Path) -> CampaignMempalaceConfig:
-    """Parse + validate the campaign's authority. Raises AuthorityError on any violation."""
+def load(
+    campaign_dir: Path, *, mempalace_root: Path | None = None
+) -> CampaignMempalaceConfig:
+    """Parse + validate the campaign's authority. Raises AuthorityError on any violation.
+
+    ``mempalace_root`` is THIS host's palace root (006) — the store location is derived from
+    it, never read from the tracked file. Callers with a ConfigEntity pass
+    ``hypostasis.config.mempalace_root(entity)``; the default keeps direct callers working."""
     path = authority_path(campaign_dir)
     try:
         raw = yaml.safe_load(path.read_text()) or {}
@@ -248,8 +299,20 @@ def load(campaign_dir: Path) -> CampaignMempalaceConfig:
         raise AuthorityError(["top level of .mneme/mempalace.yaml must be a mapping"])
 
     problems: list[str] = []
-    cfg = _parse(raw, path, problems)
+    cfg = _parse(raw, path, problems, mempalace_root)
     problems += validate(cfg, raw, campaign_dir)
     if problems:
         raise AuthorityError(problems)
     return cfg
+
+
+def has_legacy_store_path(campaign_dir: Path) -> bool:
+    """True if the tracked authority still carries the removed `store.path` key (FR-013).
+
+    Read-only and tolerant: status uses it to report owed cleanup. A *conflicting* legacy
+    path never reaches here — `validate` fails the load outright (FR-014)."""
+    try:
+        raw = yaml.safe_load(authority_path(campaign_dir).read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return False
+    return isinstance(raw, dict) and bool((raw.get("store") or {}).get("path"))

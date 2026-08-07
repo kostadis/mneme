@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
 
 from . import authority as _authority
@@ -24,24 +25,26 @@ from .models import BringUpReport, BringUpStep, StorePointer
 from .runner import MempalaceError, MempalaceRunner
 
 
-def default_config_json() -> Path:
-    return Path.home() / ".mempalace" / "config.json"
+def default_config_json(mempalace_root: Path | None = None) -> Path:
+    """The global alias registry mneme merges into — under THIS host's palace root (006)."""
+    root = Path(mempalace_root) if mempalace_root else _authority.default_mempalace_root()
+    return root / "config.json"
 
 
-def _default_store(campaign: str) -> StorePointer:
+def _default_store(campaign: str, mempalace_root: Path | None = None) -> StorePointer:
     alias = _authority._normalize_wing_name(campaign) or campaign
-    return StorePointer(alias=alias, path=Path.home() / ".mempalace" / "palaces" / alias)
+    return StorePointer(alias=alias, path=_authority.store_path_for(alias, mempalace_root))
 
 
-def _plan_config(campaign: str, campaign_dir: Path, recipe):
+def _plan_config(campaign: str, campaign_dir: Path, recipe, mempalace_root: Path | None = None):
     """Compute the authority (bootstrap or load) + ensure a store pointer — NO write."""
     if _authority.has_authority(campaign_dir):
-        cfg = _authority.load(campaign_dir)
+        cfg = _authority.load(campaign_dir, mempalace_root=mempalace_root)
         if cfg.store is None:
-            cfg = replace(cfg, store=_default_store(campaign))
+            cfg = replace(cfg, store=_default_store(campaign, mempalace_root))
     else:
         cfg = _bootstrap.starter_config(campaign, campaign_dir, recipe)
-        cfg = replace(cfg, store=_default_store(campaign))
+        cfg = replace(cfg, store=_default_store(campaign, mempalace_root))
     return cfg
 
 
@@ -59,10 +62,11 @@ def bringup(
 ) -> BringUpReport:
     rec = recipe or _recipe.current()
     runner = runner or MempalaceRunner.for_venv(_venv(entity), stream=verbose)
-    config_json = config_json or default_config_json()
+    mp_root = _config.mempalace_root(entity)
+    config_json = config_json or default_config_json(mp_root)
     ref = _discover.resolve(entity, campaign, campaign_dir)
     steps: list[BringUpStep] = []
-    cfg = _plan_config(campaign, ref.path, rec)  # in-memory; no write yet
+    cfg = _plan_config(campaign, ref.path, rec, mp_root)  # in-memory; no write yet
 
     if dry_run:
         steps.append(
@@ -110,11 +114,12 @@ def render_existing_faces(
     no bootstrap, no mining. Used by convergence to wire the store-naming faces (cli pointer,
     cg_search, global alias, MCP) onto a campaign that already has a `.mneme/mempalace.yaml`."""
     rec = recipe or _recipe.current()
-    config_json = config_json or default_config_json()
+    mp_root = _config.mempalace_root(entity)
+    config_json = config_json or default_config_json(mp_root)
     ref = _discover.resolve(entity, campaign, campaign_dir)
     if not _authority.has_authority(ref.path):
         raise _authority.AuthorityError([f"{campaign}: no authority — bootstrap/bringup first"])
-    cfg = _authority.load(ref.path)
+    cfg = _authority.load(ref.path, mempalace_root=mp_root)
     return _render.render_faces(cfg, rec, ref.path, config_json)
 
 

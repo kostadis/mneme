@@ -83,7 +83,12 @@ class Disposition:
 @dataclass(frozen=True)
 class StorePointer:
     """The campaign's declaration of its dedicated store (003 / FR-013) — the single
-    source from which all store-naming faces render."""
+    source from which all store-naming faces render.
+
+    ``alias`` is the portable half: it is what the tracked authority carries, and it is
+    true on every host. ``path`` is **derived and in-memory only** (006) — resolved at load
+    as ``<mempalace_root>/palaces/<alias>`` and never serialized, because a host's home
+    directory in a git-tracked file makes the campaign unusable on every other machine."""
 
     alias: str
     path: Path

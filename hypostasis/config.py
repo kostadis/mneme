@@ -9,6 +9,7 @@ CLI maps to exit code 2 — before any side effect.
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -76,6 +77,20 @@ def single_root(entity, key: str) -> Path | None:
     if len(roots) > 1:
         raise ConfigError([f"data_roots.{key}: expects a single path, got {len(roots)}"])
     return roots[0]
+
+
+DEFAULT_MEMPALACE_ROOT = Path("~/.mempalace")
+
+
+def mempalace_root(entity) -> Path:
+    """Where THIS host keeps its palaces (006, FR-011/012).
+
+    A host coordinate, so it lives in the config authority and is injected — never
+    hardcoded in component logic, and never written into a campaign (Principle II).
+    Declared as single-valued ``data_roots.mempalace``; absent, it defaults to
+    ``~/.mempalace``, so an existing single-host config needs no edit."""
+    declared = single_root(entity, "mempalace")
+    return declared if declared else DEFAULT_MEMPALACE_ROOT.expanduser()
 
 
 def default_config_path() -> Path:
@@ -330,10 +345,74 @@ def ensure_mneme_identity(config_path: str | Path, *, label: str | None = None) 
     entity = load(config_path)
     if entity.mneme_identity and entity.mneme_identity.id:
         return entity.mneme_identity
+    return mint_mneme_identity(config_path, label=label)
+
+
+# An id must be a single opaque token: no whitespace (which would break the appended block)
+# and no path/URL punctuation, so a host coordinate can't masquerade as identity (Principle II).
+_ID_TOKEN = re.compile(r"^[A-Za-z0-9._:-]+$")
+
+
+def _identity_block(identity: MnemeIdentity) -> str:
+    block = f"mneme:\n  id: {identity.id}\n"
+    if identity.label:
+        block += f"  label: {identity.label}\n"
+    return block
+
+
+def _write_identity_block(config_path: Path, identity: MnemeIdentity) -> None:
+    """Append the ``mneme:`` block, or replace ONLY that block if one is already present.
+
+    A targeted textual edit, never a YAML round-trip: `hypostasis.yaml` is hand-authored and
+    comment-dense, and `safe_dump` of a parsed document would silently delete every comment
+    (005 research R3 / 006 research R1)."""
+    lines = config_path.read_text().splitlines(keepends=True)
+    start = next((i for i, ln in enumerate(lines) if ln.rstrip("\n") == "mneme:"), None)
+    if start is None:
+        text = "".join(lines).rstrip("\n")
+        config_path.write_text(f"{text}\n\n{_identity_block(identity)}")
+        return
+    end = start + 1
+    while end < len(lines) and (not lines[end].strip() or lines[end][:1] in (" ", "\t")):
+        end += 1
+    config_path.write_text(
+        "".join(lines[:start]) + _identity_block(identity) + "".join(lines[end:])
+    )
+
+
+def mint_mneme_identity(config_path: str | Path, *, label: str | None = None) -> MnemeIdentity:
+    """Generate a NEW fleet identity and persist it (006, FR-003/006).
+
+    Explicit counterpart to ``adopt_mneme_identity``: this starts a new fleet. Forking a
+    fleet is a legitimate choice, but it must be a deliberate one — see
+    ``mneme.cli.resolve_identity`` for the decision that routes here."""
+    config_path = Path(config_path)
     new = MnemeIdentity(id=str(uuid.uuid4()), label=label)
-    block = f"\nmneme:\n  id: {new.id}\n"
-    if new.label:
-        block += f"  label: {new.label}\n"
-    text = config_path.read_text()
-    config_path.write_text(text.rstrip("\n") + "\n" + block)
+    _write_identity_block(config_path, new)
+    return new
+
+
+def adopt_mneme_identity(
+    config_path: str | Path, identity_id: str, *, label: str | None = None
+) -> MnemeIdentity:
+    """Join an EXISTING fleet by persisting ``identity_id`` as this host's identity
+    (006, FR-001/006).
+
+    This is what makes the fleet identity portable: 005 specified a logical identity that
+    "MAY be present on more than one runtime" but shipped only a lazy per-host mint, so the
+    id could never legitimately reach a second machine.
+
+    Writes only the config authority — never a campaign (FR-008). The caller is responsible
+    for the orphan check (FR-007): whether *this host's current* identity already owns
+    campaigns is a discovery question, and discovery lives above this layer."""
+    config_path = Path(config_path)
+    ident = str(identity_id).strip()
+    if not _ID_TOKEN.match(ident):
+        raise ConfigError(
+            [f"mneme.id: '{identity_id}' is not a valid identity token "
+             "(expected an opaque id such as a uuid4; no whitespace or path separators)"]
+        )
+    load(config_path)  # refuse to touch an invalid authority
+    new = MnemeIdentity(id=ident, label=label)
+    _write_identity_block(config_path, new)
     return new

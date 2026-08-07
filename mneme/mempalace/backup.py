@@ -37,7 +37,7 @@ def backups_root(entity: ConfigEntity) -> Path:
 
 def _store_path(entity: ConfigEntity, campaign: str, campaign_dir: str | None = None) -> Path:
     ref = _discover.resolve(entity, campaign, campaign_dir)
-    cfg = _authority.load(ref.path)
+    cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     return _authority.require_store(cfg).path
 
 
@@ -111,7 +111,7 @@ def regenerate(
 ) -> tuple[Path, list[str]]:
     """The ONLY re-embed path (FR-012): clear the store and first-mine from scratch."""
     ref = _discover.resolve(entity, campaign, campaign_dir)
-    cfg = _authority.load(ref.path)
+    cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     store = _authority.require_store(cfg).path
     if store.is_dir():
         shutil.rmtree(store)

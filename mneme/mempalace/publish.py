@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
 
 from . import authority as _authority
@@ -49,7 +50,7 @@ def preview(entity: ConfigEntity) -> list[CampaignPlan]:
         if not ref.has_authority:
             continue
         try:
-            cfg = _authority.load(ref.path)
+            cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
         except _authority.AuthorityError:
             continue
         plans.append(CampaignPlan(ref.name, _target.resolve(cfg, rec)))
@@ -147,7 +148,7 @@ def adopt_in_place(entity: ConfigEntity, campaign: str) -> tuple[list[Path], Tar
         raise _workcopy.WorkingCopyError(
             f"{campaign} has no .mneme/mempalace.yaml — bootstrap it first"
         )
-    cfg = _authority.load(ref.path)
+    cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     diff = _target.resolve(cfg, rec)
     upgraded = replace(cfg, recipe_version=rec.version)
     written = [_authority.write(upgraded, ref.path)]

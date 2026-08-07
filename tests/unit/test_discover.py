@@ -48,6 +48,36 @@ def test_scalar_single_tree_parity(tmp_path):
     assert [r.name for r in by_scalar] == [r.name for r in by_list] == ["alpha"]
 
 
+def test_symlinked_child_is_not_a_campaign(tmp_path):
+    # GH #35 — `is_dir()` follows symlinks, so an unrelated link under the campaigns root
+    # (e.g. ~/campaigns/mnt -> /mnt/) was discovered as a campaign and walked.
+    t1 = tmp_path / "t1"
+    make_simple_campaign(t1, "alpha")
+    outside = tmp_path / "outside"
+    make_simple_campaign(outside, "not-a-campaign")
+    (t1 / "mnt").symlink_to(outside)
+    refs = discover.discover(entity_for_trees(t1))
+    assert [r.name for r in refs] == ["alpha"]
+
+
+def test_wing_walk_does_not_follow_symlinks_out_of_the_campaign(tmp_path):
+    # GH #35 — the wing walk used rglob, which follows symlinks; a link inside a campaign
+    # pulled unrelated mempalace.yaml files (potentially the whole filesystem) into wing_dirs.
+    t1 = tmp_path / "t1"
+    camp = make_simple_campaign(t1, "alpha")
+    (camp / "notes").mkdir()
+    (camp / "notes" / "mempalace.yaml").write_text("palace: alpha\n")
+
+    outside = tmp_path / "outside"
+    (outside / "deep").mkdir(parents=True)
+    (outside / "deep" / "mempalace.yaml").write_text("palace: elsewhere\n")
+    (camp / "escape").symlink_to(outside)
+
+    wing_dirs = discover.discover(entity_for_trees(t1))[0].wing_dirs
+    assert camp / "notes" in wing_dirs
+    assert all(outside not in d.parents for d in wing_dirs)
+
+
 def test_find_single_match(tmp_path):
     t1 = tmp_path / "t1"
     make_simple_campaign(t1, "alpha")

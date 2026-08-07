@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
 from mneme.mempalace import authority as _authority
 from mneme.mempalace import conform as _conform
@@ -29,7 +30,7 @@ def target_config(entity: ConfigEntity, campaign: str) -> dict:
     ref = _discover.find(entity, campaign)
     if not ref.has_authority:
         return {"campaign": campaign, "error": "no authority — bootstrap first"}
-    cfg = _authority.load(ref.path)
+    cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     t = _target.resolve(cfg, _recipe.current())
     return {
         "campaign": t.campaign,
@@ -74,7 +75,7 @@ def inventory(entity: ConfigEntity, campaign: str) -> dict:
     bible = max(md_files, key=lambda p: len(p.read_text().splitlines()), default=None)
     wings = []
     if ref.has_authority:
-        cfg = _authority.load(ref.path)
+        cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
         for w in cfg.wings:
             n = len(list((ref.path / w.source).glob("*.md")))
             wings.append({"name": w.name, "source": w.source, "files": n})
@@ -108,7 +109,7 @@ def adopt(entity: ConfigEntity, campaign: str, confirm: bool = False) -> dict:
     ref = _discover.find(entity, campaign)
     if not ref.has_authority:
         return {"campaign": campaign, "error": "no authority — bootstrap first"}
-    cfg = _authority.load(ref.path)
+    cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     diff = _target.resolve(cfg, _recipe.current())
     preview = {
         "campaign": campaign,
