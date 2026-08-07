@@ -178,7 +178,7 @@ and the repo is test-driven (`tests/unit`, `tests/integration`, 125+ tests green
 - [X] T053 Migrate the live fleet: `mneme identity adopt 64cf8b36-e823-4b8e-8353-d08fe707f9be`, then delete the `path:` line under `store:` in `~/campaigns/toee/.mneme/mempalace.yaml` and `~/campaigns/obelisk/.mneme/mempalace.yaml`, and commit both in the `~/campaigns` repo (depends US1–US3; ships with the release, not before).
 - [X] T054 Run quickstart Scenario 7 end-to-end: `mneme mp status`, `mneme mp render obelisk --check` **without** `--dir` (the GH #51 repro), and confirm `git -C ~/campaigns diff` is empty after a render (depends T053).
 - [X] T055 [P] Run the full suite and linter: `pytest tests/unit tests/integration` and `ruff check .`.
-- [ ] T056 [P] Close GH #35 (fixed by T002–T004) and GH #51 (fixed by this feature); note on GH #30 that its tracking decision is now unblocked, and that `~/.mempalace/config.json` and `.mcp.json` must stay untracked per `contracts/mempalace-yaml.schema.md`.
+- [X] T056 [P] Close GH #35 (fixed by T002–T004) and GH #51 (fixed by this feature); note on GH #30 that its tracking decision is now unblocked, and that `~/.mempalace/config.json` and `.mcp.json` must stay untracked per `contracts/mempalace-yaml.schema.md`.
 
 ---
 
