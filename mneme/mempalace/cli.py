@@ -159,7 +159,7 @@ def render(
             f"{campaign}: no .mneme/mempalace.yaml authority (run `mneme mp bootstrap`)", err=True
         )
         raise typer.Exit(EXIT_RUNTIME)
-    cfg_obj = _authority.load(ref.path)
+    cfg_obj = _authority.load(ref.path, mempalace_root=cfg.mempalace_root(entity))
     rec = _recipe.load(cfg_obj.recipe_version)
     if check:
         drifted = _render.coherent(cfg_obj, rec, ref.path)
@@ -488,7 +488,9 @@ def drop_legacy(
     if not _authority.has_authority(ref.path):
         typer.echo(f"{campaign}: no authority — bootstrap/bringup first", err=True)
         raise typer.Exit(EXIT_RUNTIME)
-    store = _authority.require_store(_authority.load(ref.path))
+    store = _authority.require_store(
+        _authority.load(ref.path, mempalace_root=cfg.mempalace_root(entity))
+    )
     found = _health.inspect(store.path).legacy_files
     if not found:
         typer.echo(f"{campaign}: no chroma legacy at {store.path}")

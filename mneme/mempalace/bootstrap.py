@@ -32,9 +32,9 @@ def _trust_for(wing_name: str, recipe: Recipe) -> str:
     return "reference"
 
 
-def _default_store(campaign: str) -> StorePointer:
+def _default_store(campaign: str, mempalace_root: Path | None = None) -> StorePointer:
     alias = _authority._normalize_wing_name(campaign) or campaign
-    return StorePointer(alias=alias, path=Path.home() / ".mempalace" / "palaces" / alias)
+    return StorePointer(alias=alias, path=_authority.store_path_for(alias, mempalace_root))
 
 
 def _folded_exclusions(campaign_dir: Path, wings: list[Wing], recipe: Recipe) -> tuple[str, ...]:

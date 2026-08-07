@@ -28,6 +28,13 @@ from .models import (
 from .recipe import RecipeError
 from .runner import MempalaceRunner
 
+
+def _mp_root(entity):
+    """This host's palace root, or None when status runs without an entity (check_dir)."""
+    from hypostasis import config as _config
+
+    return _config.mempalace_root(entity) if entity is not None else None
+
 # Stable divergence keys (see contracts/recipe.schema.md)
 DIV_VERSION_BEHIND = "recipe.version.behind"
 DIV_SCAFFOLD_NOMATCH = "scaffold.nomatch"
@@ -87,9 +94,10 @@ def _recipe_row(cfg: CampaignMempalaceConfig, recipe: Recipe) -> ConformanceRow:
 def _store_backup_rows(ref, cfg, entity, runner) -> list[ConformanceRow]:
     """003: per-campaign store + backup dimensions (Principle IX), only when the
     authority carries a store pointer and we have the entity (skipped for check_dir)."""
-    from pathlib import Path
+    from hypostasis import config as _config
 
     from . import backup as _backup
+    from . import bringup as _bringup
     from . import health as _health
     from .models import StoreState
 
@@ -114,7 +122,9 @@ def _store_backup_rows(ref, cfg, entity, runner) -> list[ConformanceRow]:
         )
     )
     # US5/SC-008: the store-naming faces (CLI pointer + MCP) must agree on the store.
-    config_json = Path.home() / ".mempalace" / "config.json"
+    # Resolved per host (006) — each host's faces name that host's root, which is sound
+    # precisely because config.json and .mcp.json are not tracked in the campaign repo.
+    config_json = _bringup.default_config_json(_config.mempalace_root(entity))
     mism = _render.faces_coherent(cfg, ref.path, config_json)
     if mism:
         rows.append(ConformanceRow(ref.name, "faces", State.STALE_RENDER, note="; ".join(mism)))
@@ -141,7 +151,8 @@ def _membership_row(ref: CampaignRef, entity=None) -> ConformanceRow:
     if state is _ownership.OwnerState.UNVERIFIABLE:
         return ConformanceRow(
             ref.name, "owner", State.UNVERIFIABLE,
-            note="mneme identity not yet minted (run `mneme integrate` to mint)",
+            note="fleet identity not established — `mneme identity show` names the choice "
+                 "(adopt an existing fleet, or mint a new one)",
         )
     return ConformanceRow(
         ref.name, "owner", State.UNINTEGRATED,
@@ -161,10 +172,16 @@ def _campaign_rows(
             _membership_row(ref, entity),
         ]
     try:
-        cfg = _authority.load(ref.path)
+        cfg = _authority.load(ref.path, mempalace_root=_mp_root(entity))
     except AuthorityError as e:
+        # FR-014a — one unloadable campaign is ONE bad row, never a wedged fleet run
+        # (Principle VI). Its other dimensions are unknowable until the authority loads.
         return [
-            ConformanceRow(ref.name, "recipe", State.INVALID_CONFIG, note="; ".join(e.problems))
+            ConformanceRow(
+                ref.name, "recipe", State.INVALID_CONFIG,
+                note="; ".join(e.problems) + " — other dimensions not reported until this is fixed",
+            ),
+            _membership_row(ref, entity),
         ]
     try:
         rec = _recipe.load(cfg.recipe_version)
@@ -194,6 +211,17 @@ def _campaign_rows(
         )
     )
     rows.extend(_store_backup_rows(ref, cfg, entity, runner))
+    if _authority.has_legacy_store_path(ref.path):
+        # FR-013 — it agrees with the derived location (a conflict would have failed the
+        # load), so this is owed cleanup, not breakage. Surfacing it is the point: the
+        # operator can't remove a field they were never told about (Principle IX).
+        rows.append(
+            ConformanceRow(
+                ref.name, "authority", State.STALE_RENDER,
+                note="legacy store.path — host-local, no longer tracked: remove the `path:` "
+                     "key under `store:` in .mneme/mempalace.yaml and commit",
+            )
+        )
     rows.append(_membership_row(ref, entity))
     return rows
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -186,6 +188,29 @@ def test_single_root_rejects_multiple(tmp_path):
     e = load_raw(tmp_path, raw)
     with pytest.raises(cfg.ConfigError):
         cfg.single_root(e, "backups")
+
+
+def test_mempalace_root_declared_wins(tmp_path):
+    # 006 FR-011/012 — the palace root is a host coordinate, declared in the authority.
+    raw = valid_raw(tmp_path)
+    raw["data_roots"]["mempalace"] = str(tmp_path / "palaces-here")
+    e = load_raw(tmp_path, raw)
+    assert cfg.mempalace_root(e) == tmp_path / "palaces-here"
+
+
+def test_mempalace_root_defaults_when_absent(tmp_path):
+    # FR-012 — an existing single-host config needs no edit.
+    e = load_raw(tmp_path, valid_raw(tmp_path))
+    assert "mempalace" not in e.data_roots
+    assert cfg.mempalace_root(e) == Path.home() / ".mempalace"
+
+
+def test_mempalace_root_rejects_multiple(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["data_roots"]["mempalace"] = [str(tmp_path / "x"), str(tmp_path / "y")]
+    e = load_raw(tmp_path, raw)
+    with pytest.raises(cfg.ConfigError):
+        cfg.mempalace_root(e)
 
 
 def test_default_config_path_uses_xdg(monkeypatch, tmp_path):

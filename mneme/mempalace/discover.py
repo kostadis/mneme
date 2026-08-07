@@ -10,6 +10,7 @@ a `.mneme/` authority is present and which existing wing dirs (those containing 
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,8 +44,15 @@ def campaigns_roots(entity: ConfigEntity) -> tuple[Path, ...]:
 
 
 def _existing_wing_dirs(campaign_dir: Path) -> tuple[Path, ...]:
-    """Dirs under the campaign that contain a `mempalace.yaml` (existing wings)."""
-    found = [p.parent for p in campaign_dir.rglob("mempalace.yaml")]
+    """Dirs under the campaign that contain a `mempalace.yaml` (existing wings).
+
+    Bounded to the campaign: `os.walk(followlinks=False)` rather than `rglob`, which follows
+    symlinks and would escape into the host filesystem (GH #35)."""
+    found = [
+        Path(root)
+        for root, _dirs, files in os.walk(campaign_dir, followlinks=False)
+        if "mempalace.yaml" in files
+    ]
     # Exclude the mneme authority itself (.mneme/mempalace.yaml is NOT a wing).
     found = [d for d in found if d.name != ".mneme"]
     return tuple(sorted(found, key=lambda d: len(d.relative_to(campaign_dir).parts), reverse=True))
@@ -73,11 +81,54 @@ def discover(entity: ConfigEntity) -> list[CampaignRef]:
             # tree must not wedge the whole fleet (Principle VI). Surfacing it is status's job.
             continue
         for child in sorted(root.iterdir()):
-            if not child.is_dir() or child.name.startswith("."):
+            # A symlinked entry is not a campaign. `is_dir()` follows symlinks, so without
+            # this guard an unrelated link (e.g. `~/campaigns/mnt -> /mnt/`) is treated as a
+            # campaign and the wing walk escapes into the host filesystem (GH #35).
+            if child.is_symlink() or not child.is_dir() or child.name.startswith("."):
                 continue
             refs.append(_ref_for(child, root, identity))
     refs.sort(key=lambda r: (r.name, str(r.tree)))
     return refs
+
+
+def _this_mneme(entity: ConfigEntity) -> str:
+    ident = entity.mneme_identity
+    return ident.id if ident and ident.id else "not established"
+
+
+def foreign_refusal(entity: ConfigEntity, ref: CampaignRef) -> str:
+    """The one ownership refusal message, shared by every route (006, FR-009).
+
+    Names the campaign's declared owner, this mneme's identity (or its absence), and the
+    remedy. The pre-006 message named none of those, so the only way forward was reading
+    the source."""
+    owner = _ownership.read_owner(ref.path)
+    owner_id = owner.mneme_id if owner else "?"
+    mine = _this_mneme(entity)
+    return (
+        f"campaign '{ref.name}' is owned by {owner_id}; this mneme is {mine}. "
+        f"If this host should join that fleet:  mneme identity adopt {owner_id}"
+    )
+
+
+def alias_conflicts(entity: ConfigEntity) -> dict[str, list[str]]:
+    """Store aliases claimed by more than one campaign (006, FR-016/016a).
+
+    Since the store location derives from the alias, a duplicate alias means two campaigns
+    resolve to ONE store and would commingle their content. Uniqueness is a fleet-level
+    invariant, so even a single-campaign command consults discovery to enforce it.
+    Tolerant: a campaign whose authority won't load contributes nothing (Principle VI)."""
+    by_alias: dict[str, list[str]] = {}
+    for ref in discover(entity):
+        if not ref.has_authority:
+            continue
+        try:
+            cfg = _authority.load(ref.path)
+        except _authority.AuthorityError:
+            continue
+        if cfg.store is not None:
+            by_alias.setdefault(cfg.store.alias, []).append(ref.name)
+    return {a: sorted(c) for a, c in sorted(by_alias.items()) if len(c) > 1}
 
 
 def find(entity: ConfigEntity, campaign: str) -> CampaignRef:
@@ -85,16 +136,15 @@ def find(entity: ConfigEntity, campaign: str) -> CampaignRef:
     owns (foreign-owned copies are excluded and surfaced separately — FR-005).
 
     Zero owned matches → not-found error (FR-006); foreign-only copies say so explicitly.
-    More than one owned match → ambiguity error naming every tree — never a silent pick."""
+    More than one owned match → ambiguity error naming every tree — never a silent pick.
+
+    Ownership is used here only to *disambiguate* — a foreign copy must not make a name
+    ambiguous. Enforcement lives in ``resolve``, so it applies to ``--dir`` too (FR-018)."""
     named = [r for r in discover(entity) if r.name == campaign]
     owned = [r for r in named if r.owner_state is not OwnerState.FOREIGN]
     if not owned:
         if named:  # exists, but only as foreign-owned copies
-            trees = ", ".join(str(r.tree) for r in named)
-            raise DiscoveryError(
-                f"campaign '{campaign}' exists only as foreign-owned copies (trees: {trees}) — "
-                "not managed by this mneme"
-            )
+            raise DiscoveryError(foreign_refusal(entity, named[0]))
         searched = ", ".join(str(r) for r in campaigns_roots(entity))
         raise DiscoveryError(f"campaign workspace not found: '{campaign}' (searched: {searched})")
     if len(owned) > 1:
@@ -109,8 +159,8 @@ def find(entity: ConfigEntity, campaign: str) -> CampaignRef:
 def ref_for_dir(entity: ConfigEntity, campaign_dir) -> CampaignRef:
     """Build a CampaignRef for an explicit campaign workspace path (the ``--dir`` override).
 
-    Bypasses tree discovery and the ambiguity guard — the caller names the exact workspace
-    (GH #27). The tree is taken as the parent dir; ownership is classified as usual."""
+    Bypasses tree discovery and the *ambiguity* guard — the caller names the exact workspace
+    (GH #27). It does NOT bypass ownership: that gate lives in ``resolve`` (FR-018)."""
     p = Path(campaign_dir).expanduser()
     if not p.is_dir():
         raise DiscoveryError(f"campaign workspace not found: {p}")
@@ -120,8 +170,20 @@ def ref_for_dir(entity: ConfigEntity, campaign_dir) -> CampaignRef:
 def resolve(entity: ConfigEntity, campaign: str | None, campaign_dir=None) -> CampaignRef:
     """Resolve one campaign to a ref — an explicit ``--dir`` path wins over the name lookup.
 
-    Lets `mneme mp` commands act on a specific workspace even when the name is ambiguous
-    across declared trees (GH #27)."""
-    if campaign_dir:
-        return ref_for_dir(entity, campaign_dir)
-    return find(entity, campaign)
+    ``--dir`` lets `mneme mp` act on a specific workspace when the name is ambiguous across
+    declared trees (GH #27). It is an **ambiguity** escape hatch and nothing more: ownership
+    (FR-018) and store-alias uniqueness (FR-016a) are enforced here, so both routes are
+    treated identically. Before 006, `--dir` skipped the ownership gate as a side effect of
+    sharing `find()`, which made it an undocumented take-over path."""
+    ref = ref_for_dir(entity, campaign_dir) if campaign_dir else find(entity, campaign)
+    if ref.owner_state is OwnerState.FOREIGN:
+        raise DiscoveryError(foreign_refusal(entity, ref))
+    conflicts = alias_conflicts(entity)
+    for alias, camps in conflicts.items():
+        if ref.name in camps:
+            raise DiscoveryError(
+                f"store alias '{alias}' is claimed by {len(camps)} campaigns "
+                f"({', '.join(camps)}) — they would share one store. Give each campaign its "
+                "own `store.alias` in .mneme/mempalace.yaml before continuing."
+            )
+    return ref

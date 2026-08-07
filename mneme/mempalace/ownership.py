@@ -60,6 +60,23 @@ def read_owner(campaign_dir: Path) -> Owner | None:
     )
 
 
+def owner_ids(campaign_dirs) -> dict[str, list[str]]:
+    """Group campaigns by the mneme id they declare — read-only evidence (006, FR-002).
+
+    This is what a host with no identity consults to decide whether to adopt an existing
+    fleet or mint a new one. It is computed for one decision and discarded: campaigns
+    remain the only record of ownership, so this is emphatically NOT a registry
+    (Principle III/IV). Un-integrated campaigns contribute nothing."""
+    by_id: dict[str, list[str]] = {}
+    for d in campaign_dirs:
+        d = Path(d)
+        owner = read_owner(d)
+        if owner is None or not owner.mneme_id:
+            continue
+        by_id.setdefault(owner.mneme_id, []).append(d.name)
+    return {k: sorted(v) for k, v in sorted(by_id.items())}
+
+
 def classify(campaign_dir: Path, identity: MnemeIdentity | None) -> OwnerState:
     owner = read_owner(campaign_dir)
     if owner is None:
@@ -88,9 +105,11 @@ def integrate_campaign(campaign_dir: Path, identity: MnemeIdentity) -> Owner:
     state = classify(campaign_dir, identity)
     if state is OwnerState.FOREIGN:
         owner = read_owner(campaign_dir)
+        owner_id = owner.mneme_id if owner else "?"
         raise OwnershipError(
-            f"{campaign_dir} is owned by a different mneme "
-            f"({owner.mneme_id if owner else '?'}) — refusing to manage or re-stamp"
+            f"{campaign_dir} is owned by {owner_id}; this mneme is {identity.id} — refusing "
+            f"to manage or re-stamp. If this host should join that fleet:  "
+            f"mneme identity adopt {owner_id}"
         )
     if state is OwnerState.OWNED:
         return read_owner(campaign_dir)  # idempotent

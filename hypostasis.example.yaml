@@ -16,15 +16,23 @@ machines:
     endpoint: http://192.0.2.10:8001/v1
     default_model: Qwen/Qwen3-Next-80B-A3B-Instruct-FP8
 
-# mneme:                         # the logical fleet identity (005). Minted automatically on the first
-#   id: <uuid4>                  # `mneme integrate`/`up` if absent — host-independent owner identity,
-#   label: kostadis-main         # stamped into each campaign's .mneme/owner.yaml. label is informational.
+# mneme:                         # the logical fleet identity (005) — host-independent owner identity,
+#   id: <uuid4>                  # stamped into each campaign's .mneme/owner.yaml. label is informational.
+#   label: kostadis-main         # A SECOND HOST IN THE SAME FLEET COPIES THIS BLOCK — it must not mint
+                                 # its own (006). Minting happens automatically only when the declared
+                                 # trees contain no owned campaigns; otherwise mneme names the id it
+                                 # found and stops. `mneme identity show|adopt <id>|mint` are the verbs.
 
 data_roots:                      # external paths mneme references (not owned; data-plane contents stay out of scope)
   fivetools: ~/src/5etools-kostadis/data
   campaigns:                     # one-or-more trees (005); a scalar is still valid (a single tree)
     - ~/campaigns                # the campaigns monorepo
     - ~/toee                     # a standalone tree (its own remote / sparse checkout) → campaign ~/toee/toee
+  mempalace: ~/.mempalace        # OPTIONAL (default ~/.mempalace) — where THIS host keeps its palaces.
+                                 # A campaign's store resolves to <this>/palaces/<store.alias>; the
+                                 # alias is tracked in the campaign, the root never is (006). To put a
+                                 # single palace elsewhere, symlink the derived location — there is no
+                                 # per-alias override.
   homebrew: ~/src/homebrew-private
   fivetools_mcp_index: ~/src/5etools-kostadis/mcp/index.js   # 5etools MCP entry point
   pdf_translators: ~/src/mytools/pdf-translators             # sibling mytools tool (validation)

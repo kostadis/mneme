@@ -7,7 +7,7 @@ import yaml
 
 from hypostasis.models import MnemeIdentity
 from mneme.mempalace import ownership
-from mneme.mempalace.ownership import OwnerState, OwnershipError
+from mneme.mempalace.ownership import OwnershipError, OwnerState
 
 ID_A = MnemeIdentity(id="11111111-1111-1111-1111-111111111111", label="fleet-a")
 ID_B = MnemeIdentity(id="22222222-2222-2222-2222-222222222222", label="fleet-b")
@@ -81,3 +81,37 @@ def test_brick_test_same_id_readopts_different_id_foreign(tmp_path):
     same_id = MnemeIdentity(id=ID_A.id, label="a-different-label-same-id")
     assert ownership.classify(c, same_id) is OwnerState.OWNED  # label ignored, id matches
     assert ownership.classify(c, ID_B) is OwnerState.FOREIGN
+
+
+# ── 006 — owner_ids: read-only evidence for the adopt-or-mint decision (FR-002) ──
+
+
+def _camps(tmp_path, *names) -> list:
+    dirs = []
+    for n in names:
+        d = tmp_path / n
+        d.mkdir()
+        dirs.append(d)
+    return dirs
+
+
+def test_owner_ids_groups_campaigns_by_owner(tmp_path):
+    a1, a2, b1 = _camps(tmp_path, "toee", "obelisk", "hillsfar")
+    for c in (a1, a2):
+        ownership.write_owner(c, ID_A)
+    ownership.write_owner(b1, ID_B)
+    assert ownership.owner_ids([a1, a2, b1]) == {
+        ID_A.id: ["obelisk", "toee"],  # sorted by campaign name
+        ID_B.id: ["hillsfar"],
+    }
+
+
+def test_owner_ids_ignores_unintegrated_campaigns(tmp_path):
+    owned, bare = _camps(tmp_path, "toee", "hillsfar")
+    ownership.write_owner(owned, ID_A)
+    assert ownership.owner_ids([owned, bare]) == {ID_A.id: ["toee"]}
+
+
+def test_owner_ids_empty_when_nothing_is_claimed(tmp_path):
+    assert ownership.owner_ids(_camps(tmp_path, "a", "b")) == {}
+    assert ownership.owner_ids([]) == {}
