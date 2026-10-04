@@ -3,7 +3,9 @@
 # file and are NON-authoritative (never hand-edit a rendered file; run `hypostasis apply`).
 #
 # Pins are the pre-refactor baseline (each unit's HEAD as of 2026-06-24), EXCEPT
-# claudelib + rpg_lib, which are at the T036 commit f432a8b on the mytools
+# turbovecdb + mempalace, bumped 2026-10-04 (turbovecdb origin/main 0.5.0; mempalace
+# kostadis-dev e321595: MAX_CHUNKS_PER_FILE 500 -> 50000, GH #31/#32); and claudelib + rpg_lib,
+# which are at the T036 commit f432a8b on the mytools
 # 001-reproducible-install refactor branch (where they became pip-installable).
 # Baseline pins bump to their post-refactor commits as each repo's edits land.
 
@@ -65,10 +67,10 @@ components:                      # what mneme INSTALLS. rpg-lib + claudelib are 
     pin: 8771104a2586ef6983f903543005c77db88e9de7  # models.yaml is its own; the endpoint reaches it from callers (machines.dgx).
   turbovecdb:                    # mneme-private storage engine (embedded; mempalace sits on it). Install-only —
     source: { path: ~/src/turbovecdb }  # no infra constants, no config to render. The :8077 HTTP service is
-    pin: fea4d804b5bbc744c17afcf3e7a75f6e7c9edb49  # a turbovecdb feature, not a mneme component (turbovecdb#4).
+    pin: 23cbea332b978fc0df5e2eb31fef227dd535fc14  # a turbovecdb feature, not a mneme component (turbovecdb#4). 0.5.0 = mempalace's turbovec>=0.5.
   mempalace:                     # mneme-native internal DB, but ALREADY env-driven — no file render.
     source: { path: ~/src/mempalace }  # wiring via top-level `env:`; stored memories are data-plane (out of scope).
-    pin: 46fcfc2adf50e31f68889edaf8965a7cb2adcfff
+    pin: e3215955166626c9773afdc73d35bf47579257e4
   CampaignGenerator:             # SERVICE (+ many CLI tools); reads mneme wiring from user config
     source: { path: ~/src/CampaignGenerator }
     pin: 2f79b59af2c7494ec262cd98d1ae1a199af83f25
