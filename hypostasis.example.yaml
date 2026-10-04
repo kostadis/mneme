@@ -40,6 +40,9 @@ data_roots:                      # external paths mneme references (not owned; d
 
 env:                             # required process env for mneme-run components (delivery via lifecycle, T028)
   MEMPALACE_BACKEND: turbovec    # mempalace resolves its backend from the environment (process-wide)
+  MEMPALACE_EMBEDDING_PROVIDER: ollama     # MUST match the embedder every palace was built with; unset ⇒ mempalace
+  MEMPALACE_EMBEDDING_MODEL: qwen3-embedding:0.6b   # silently falls back to onnx all-MiniLM-L6-v2 (384-dim) and
+  MEMPALACE_EMBEDDING_ENDPOINT: http://192.0.2.10:11434   # every search panics in turbovec (GH #26); `status` flags it
   # MEMPALACE_EMBEDDING_DEVICE: auto   # cpu|cuda|coreml|dml|auto — uncomment to pin the embedding device
 
 services:

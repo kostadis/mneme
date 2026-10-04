@@ -80,7 +80,7 @@ def bringup(
     steps.append(
         BringUpStep("configure", "ok", observed=f".mneme/mempalace.yaml; store={cfg.store.alias}")
     )
-    _render.render_faces(cfg, rec, ref.path, config_json)
+    _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 
     try:
@@ -120,7 +120,7 @@ def render_existing_faces(
     if not _authority.has_authority(ref.path):
         raise _authority.AuthorityError([f"{campaign}: no authority — bootstrap/bringup first"])
     cfg = _authority.load(ref.path, mempalace_root=mp_root)
-    return _render.render_faces(cfg, rec, ref.path, config_json)
+    return _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
 
 
 def _backup_step(entity: ConfigEntity, campaign: str, campaign_dir: Path) -> BringUpStep:

@@ -48,6 +48,7 @@ flowchart LR
 | CG content roots | `refs.local.yaml` roots → env (`FIVETOOLS_DATA_ROOT`/`RPG_LIBRARY_ROOT`/`HOMEBREW_PRIVATE_ROOT`) → `wiring.yaml` default | `resolve_refs.resolve_roots` |
 | Ingest palace | `--palace` → manifest `palace:` → `config.yaml` `mempalace.palace` | `apply_ingest_manifest.resolve_palace` (refuses to guess) |
 | Mempalace palace path | `MEMPALACE_PALACE_PATH`/`MEMPAL_PALACE_PATH` → walk-up `mempalace.yaml` → `config.json` `default_palace` → `PalaceNotDeclared` | `MempalaceConfig.resolved_palace_path` |
+| Mempalace embedder | hypostasis `env:` `MEMPALACE_EMBEDDING_PROVIDER/MODEL/ENDPOINT` (declared authority, GH #26) → `config.json embedding_provider` → `onnx` (384-dim) | `hypostasis.models.declared_embedder` |
 | Mempalace backend | `config.json backend` → `MEMPALACE_BACKEND` → `chroma` | `MempalaceConfig.backend` |
 | Mempalace config values | env → config file → defaults | class docstring |
 

@@ -111,3 +111,42 @@ class DerivedConfig:
     target: Path
     source_sha256: str
     content: str
+
+
+# Providers mempalace's embedding.py accepts; any other value logs "Unknown embedding_provider"
+# and silently falls back to onnx (384-dim) — the failure GH #26 exists to catch.
+KNOWN_EMBEDDING_PROVIDERS: tuple[str, ...] = ("onnx", "ollama", "openai-compat")
+
+
+@dataclass(frozen=True)
+class EmbedderDecl:
+    """The embedder hypostasis declares for mempalace (GH #26 — Principle V)."""
+
+    provider: str
+    model: str | None = None
+    endpoint: str | None = None
+
+    @property
+    def known(self) -> bool:
+        return self.provider in KNOWN_EMBEDDING_PROVIDERS
+
+    @property
+    def complete(self) -> bool:
+        """Model set, and an endpoint unless the provider is the local `onnx` one."""
+        return bool(self.model) and (self.provider == "onnx" or bool(self.endpoint))
+
+    def describe(self) -> str:
+        return f"{self.provider}:{self.model or '?'} @ {self.endpoint or '—'}"
+
+
+def declared_embedder(entity: ConfigEntity) -> EmbedderDecl | None:
+    """The `MEMPALACE_EMBEDDING_*` triple from `entity.env`, or None if PROVIDER is unset
+    (GH #26). mempalace would then silently fall back to onnx all-MiniLM-L6-v2 (384-dim)."""
+    provider = entity.env.get("MEMPALACE_EMBEDDING_PROVIDER", "").strip().lower()
+    if not provider:
+        return None
+    return EmbedderDecl(
+        provider,
+        entity.env.get("MEMPALACE_EMBEDDING_MODEL", "").strip() or None,
+        entity.env.get("MEMPALACE_EMBEDDING_ENDPOINT", "").strip() or None,
+    )

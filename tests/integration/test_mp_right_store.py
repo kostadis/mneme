@@ -25,6 +25,42 @@ def test_faces_agree_on_the_store(tmp_path, monkeypatch):
     assert render.faces_coherent(cfg, camp, config_json) == []  # CLI pointer + MCP agree
 
 
+DECLARED = {
+    "MEMPALACE_BACKEND": "turbovec",
+    "MEMPALACE_EMBEDDING_PROVIDER": "ollama",
+    "MEMPALACE_EMBEDDING_MODEL": "qwen3-embedding",
+    "MEMPALACE_EMBEDDING_ENDPOINT": "http://127.0.0.1:11434",
+    "MEMPALACE_EMBEDDING_DEVICE": "cpu",
+}
+
+
+def test_mcp_face_carries_declared_embedder_and_never_secrets(tmp_path, monkeypatch):
+    import json
+
+    camp = _bring_up(tmp_path, monkeypatch)
+    cfg = authority.load(camp)
+    env = {**DECLARED, "OPENAI_API_KEY": "sk-secret", "MEMPALACE_API_KEY": "s", "EXTRA": "1"}
+    render.render_mcp(cfg, camp, env)
+    written = json.loads((camp / ".mcp.json").read_text())["mcpServers"]["mempalace"]["env"]
+    assert {k: written[k] for k in DECLARED} == DECLARED
+    assert set(written) == {"MEMPALACE_PALACE_PATH", *DECLARED}  # allow-list only
+    assert "sk-secret" not in (camp / ".mcp.json").read_text()
+
+
+def test_mcp_face_staleness_follows_declared_env(tmp_path, monkeypatch):
+    camp = _bring_up(tmp_path, monkeypatch)  # rendered with NO declared env (old file shape)
+    cfg = authority.load(camp)
+    config_json = tmp_path / "home" / ".mempalace" / "config.json"
+    assert render.faces_coherent(cfg, camp, config_json, {}) == []
+    stale = render.faces_coherent(cfg, camp, config_json, DECLARED)
+    assert any("mcp" in m and "MEMPALACE_EMBEDDING_PROVIDER" in m for m in stale)
+    render.render_mcp(cfg, camp, DECLARED)  # re-render with the new keys -> conformant
+    assert render.faces_coherent(cfg, camp, config_json, DECLARED) == []
+    # declared embedder changed -> the old file is stale again
+    changed = {**DECLARED, "MEMPALACE_EMBEDDING_MODEL": "other"}
+    assert any("MODEL" in m for m in render.faces_coherent(cfg, camp, config_json, changed))
+
+
 def test_removed_palace_pointer_is_flagged(tmp_path, monkeypatch):
     camp = _bring_up(tmp_path, monkeypatch)
     cfg = authority.load(camp)

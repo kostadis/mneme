@@ -125,7 +125,7 @@ def _store_backup_rows(ref, cfg, entity, runner) -> list[ConformanceRow]:
     # Resolved per host (006) — each host's faces name that host's root, which is sound
     # precisely because config.json and .mcp.json are not tracked in the campaign repo.
     config_json = _bringup.default_config_json(_config.mempalace_root(entity))
-    mism = _render.faces_coherent(cfg, ref.path, config_json)
+    mism = _render.faces_coherent(cfg, ref.path, config_json, entity.env)
     if mism:
         rows.append(ConformanceRow(ref.name, "faces", State.STALE_RENDER, note="; ".join(mism)))
     else:
