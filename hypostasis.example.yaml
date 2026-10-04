@@ -71,7 +71,7 @@ components:                      # what mneme INSTALLS. rpg-lib + claudelib are 
     pin: 46fcfc2adf50e31f68889edaf8965a7cb2adcfff
   CampaignGenerator:             # SERVICE (+ many CLI tools); reads mneme wiring from user config
     source: { path: ~/src/CampaignGenerator }
-    pin: 09622f6b185b9d9d2af9ece6ee7e38a4759d3d42
+    pin: 2f79b59af2c7494ec262cd98d1ae1a199af83f25
     config_template: campaigngenerator.wiring.yaml.j2
     config_target: ~/.config/campaigngenerator/wiring.yaml
     # Installed mode provides CLI commands; the web UI still runs from a source checkout via ./start.
