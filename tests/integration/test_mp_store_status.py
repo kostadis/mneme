@@ -6,7 +6,7 @@ from __future__ import annotations
 from mneme.mempalace import bringup, conform
 from mneme.mempalace.models import State
 from mneme.mempalace.runner import MempalaceRunner
-from tests.fixtures import STUB, entity_for, make_greenfield_campaign
+from tests.fixtures import STUB, entity_for, make_greenfield_campaign, with_onnx
 
 
 def _bring_up(tmp_path, monkeypatch):
@@ -15,7 +15,7 @@ def _bring_up(tmp_path, monkeypatch):
     runner = MempalaceRunner(binary=str(STUB))
     root = tmp_path / "campaigns"
     make_greenfield_campaign(root, "stormhaven")
-    entity = entity_for(root)
+    entity = with_onnx(entity_for(root))
     bringup.bringup(entity, "stormhaven", runner=runner, do_backup=True)
     return entity, runner
 

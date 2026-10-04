@@ -11,6 +11,8 @@ import typer
 from hypostasis import config as cfg
 from hypostasis.models import ConfigEntity
 
+from .runner import MempalaceError, MempalaceRunner
+
 EXIT_OK = 0
 EXIT_RUNTIME = 1
 EXIT_INVALID_CONFIG = 2
@@ -24,6 +26,12 @@ app = typer.Typer(
 _config_opt = typer.Option(
     str(cfg.default_config_path()), "--config", "-c", help="Path to hypostasis.yaml"
 )
+
+def _err_text(e: Exception) -> str:
+    """One-line message; AuthorityError carries a problem list (e.g. no store pointer)."""
+    problems = getattr(e, "problems", None)
+    return "; ".join(problems) if problems else str(e)
+
 
 # GH #27 — resolve an ambiguous campaign name (present in >1 declared tree) to an explicit
 # workspace path. Mirrors `mneme up`/`mneme integrate`.
@@ -79,7 +87,7 @@ def refresh(
             dry_run=dry_run,
             verbose=verbose,
         )
-    except _discover.DiscoveryError as e:
+    except (_discover.DiscoveryError, MempalaceError) as e:
         typer.echo(f"FAIL refresh: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     rc = EXIT_OK
@@ -282,7 +290,10 @@ def migrate(
         raise typer.Exit(EXIT_OK)
     try:
         wc = _publish._clone_workcopy(entity, None, None)
-        result = _migrate.migrate_in_dir(mplan, wc.path / campaign)
+        # GH #46 — verification's `mempalace` calls must see the declared env/backend.
+        result = _migrate.migrate_in_dir(
+            mplan, wc.path / campaign, runner=MempalaceRunner.for_entity(entity), entity=entity
+        )
     except Exception as e:  # noqa: BLE001 - report any failure and exit non-zero
         typer.echo(f"FAIL migrate: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
@@ -351,7 +362,7 @@ def bringup(
             campaign_dir=campaign_dir,
             verbose=verbose,
         )
-    except _discover.DiscoveryError as e:
+    except (_discover.DiscoveryError, MempalaceError) as e:
         typer.echo(f"FAIL bringup: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     for s in report.steps:
@@ -399,16 +410,55 @@ def restore(
     from pathlib import Path
 
     from . import backup as _backup
+    from . import conform as _conform
+    from . import discover as _discover
+    from .authority import AuthorityError
+    from .models import State
 
     entity = _load_or_exit(config)
     try:
-        restored = _backup.restore(
+        res = _backup.restore(
             entity, campaign, from_backup=Path(from_) if from_ else None, campaign_dir=campaign_dir
         )
-    except _backup.BackupError as e:
-        typer.echo(f"FAIL restore: {e}", err=True)
+    except (
+        _backup.BackupError, _discover.DiscoveryError, AuthorityError, MempalaceError, OSError
+    ) as e:
+        typer.echo(f"FAIL restore: {_err_text(e)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
-    typer.echo(f"restored {len(restored)} binding files for {campaign} (no re-embed)")
+    typer.echo(f"restored {len(res.restored)} binding files for {campaign} (no re-embed)")
+    if res.previous_store:
+        typer.echo(f"previous store kept at {res.previous_store} — delete when satisfied")
+    for row in res.rows:
+        typer.echo(_conform.format_row(row))
+    if res.fresh:
+        typer.echo(
+            "restore verified: store opens, embedder dimension matches, no orphaned drawers, "
+            "authority conforms to recipe — documents added/changed since the backup are NOT "
+            f"detected; run `mneme mp refresh {campaign}` to index them"
+        )
+        return
+    typer.echo(f"restore NOT fresh for {campaign} — the restored index may be stale:", err=True)
+    advice: list[str] = []
+    for d in res.missing:
+        advice.append(f"could not evaluate {d} — no {d} row was produced")
+    for r in res.rows:
+        if r.state is State.STALE and "regenerate" in r.note:
+            extra = " (supersedes refresh)" if "refresh" in r.note else ""
+            advice.append(
+                f"`mneme mp regenerate {campaign} --confirm`{extra} (drawers out of scope)"
+            )
+        elif r.state is State.STALE:
+            advice.append(f"`mneme mp refresh {campaign}` (orphaned drawers)")
+        elif r.state is State.EMBEDDER_MISMATCH:
+            advice.append(f"`mneme mp regenerate {campaign} --confirm` (embedder mismatch)")
+        elif r.state in (State.INDEX_UNVERIFIED, State.EMBEDDER_UNVERIFIED):
+            advice.append(f"could not verify {r.dimension} — {r.note}")
+        elif not r.ok or (r.dimension == "store" and r.state is not State.BUILT):
+            advice.append(f"{r.dimension} {r.state.value}: {r.note}")
+    for a in dict.fromkeys(advice):
+        typer.echo(f"  recommend: {a}", err=True)
+    typer.echo("  (mneme never re-mines automatically; re-mine is your call)", err=True)
+    raise typer.Exit(EXIT_RUNTIME)
 
 
 @app.command()
@@ -422,6 +472,7 @@ def regenerate(
     """Re-embed from scratch (the ONLY re-embed path): clears the store and first-mines."""
     from . import backup as _backup
     from . import discover as _discover
+    from .authority import AuthorityError
 
     if not confirm:
         typer.echo("regenerate re-embeds the whole campaign (expensive). Re-run with --confirm.")
@@ -431,8 +482,8 @@ def regenerate(
         store, mined = _backup.regenerate(
             entity, campaign, campaign_dir=campaign_dir, verbose=verbose
         )
-    except _discover.DiscoveryError as e:
-        typer.echo(f"FAIL regenerate: {e}", err=True)
+    except (_discover.DiscoveryError, AuthorityError, MempalaceError, OSError) as e:
+        typer.echo(f"FAIL regenerate: {_err_text(e)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"regenerated {campaign} → {store} (mined: {', '.join(mined) or 'nothing'})")
 

@@ -144,6 +144,12 @@ class State(StrEnum):
     FOREIGN = "foreign"
     UNINTEGRATED = "unintegrated"
     UNVERIFIABLE = "unverifiable"
+    # GH #26b — built vs declared embedding dimension (both are FAIL states)
+    EMBEDDER_MISMATCH = "embedder_mismatch"
+    EMBEDDER_UNVERIFIED = "embedder_unverified"
+    # GH #22 — orphan check could not run/parse; environmental, so NOT a FAIL state, but
+    # rendered distinctly (never as ok)
+    INDEX_UNVERIFIED = "index_unverified"
 
 
 # States that count as a genuine FAIL (non-zero exit). A deliberate, recorded
@@ -153,6 +159,8 @@ FAIL_STATES = frozenset(
         State.INVALID_CONFIG,
         State.DIVERGENT_UNDISPOSITIONED,
         State.STALE_RENDER,
+        State.EMBEDDER_MISMATCH,
+        State.EMBEDDER_UNVERIFIED,
     }
 )
 
@@ -169,7 +177,7 @@ class ConformanceRow:
 
     @property
     def ok(self) -> bool:
-        return self.state not in FAIL_STATES
+        return self.state not in FAIL_STATES and self.state is not State.INDEX_UNVERIFIED
 
 
 @dataclass(frozen=True)
@@ -181,7 +189,10 @@ class ConformanceReport:
 
     def exit_code(self, strict: bool = False) -> int:
         for r in self.rows:
-            if not r.ok or (strict and r.state is State.STALE):
+            if r.state in FAIL_STATES:
+                return 1
+            # strict = "the index must be verified fresh" (GH #22)
+            if strict and r.state in (State.STALE, State.INDEX_UNVERIFIED):
                 return 1
         return 0
 

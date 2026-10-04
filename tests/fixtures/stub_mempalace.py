@@ -10,7 +10,10 @@ Palace resolution: `--palace <path>` arg or ``$MEMPALACE_PALACE_PATH`` env.
 - ``mine <path> [--palace P] [--dry-run]`` → exit 0; on a real (non-dry) run, create a
   fake turbovec store at ``P/turbovec/mempalace_drawers/{store.sqlite3,index.tvim}``.
 - ``status [--palace P]`` → exit 0, prints ``ok``.
-- ``sync <path> --dry-run`` → ``DRIFT`` if ``<path>/.stub_drift`` exists, else ``CLEAN``.
+- ``[--palace P] sync <path> --dry-run`` → the REAL report format (GH #22). Counts via
+  ``$MNEME_STUB_SYNC``: ``"<missing>,<gitignored>[,<oos>]"`` (default ``0,0``),
+  ``rc1`` (error, rc 1),
+  ``nopalace`` ("No palace found", rc 0), or ``garbage``.
 - ``split ...`` → exit 0.
 """
 
@@ -43,6 +46,19 @@ def _parse(argv: list[str]) -> tuple[str | None, list[str], str | None]:
     return sub, rest[1:], palace
 
 
+def _write_store(path: Path) -> None:
+    """A real tiny turbovec-like store: `meta(dim=384)` (the onnx default) so the GH #26 guard
+    can read it."""
+    import sqlite3
+
+    path.unlink(missing_ok=True)
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT)")
+    con.execute("INSERT INTO meta VALUES('dim','384')")
+    con.commit()
+    con.close()
+
+
 def main() -> int:
     argv = sys.argv[1:]
     log = os.environ.get("MNEME_STUB_LOG")
@@ -57,7 +73,7 @@ def main() -> int:
             for coll in ("mempalace_drawers", "mempalace_closets"):
                 d = Path(palace) / "turbovec" / coll
                 d.mkdir(parents=True, exist_ok=True)
-                (d / "store.sqlite3").write_text("stub-bindings\n")
+                _write_store(d / "store.sqlite3")
                 (d / "index.tvim").write_text("stub-index\n")
             (Path(palace) / "knowledge_graph.sqlite3").write_text("stub-kg\n")
         return 0
@@ -67,9 +83,25 @@ def main() -> int:
         return 0
 
     if sub == "sync" and "--dry-run" in subargs:
-        target = next((a for a in subargs if not a.startswith("-")), None)
-        drift = bool(target) and (Path(target) / ".stub_drift").exists()
-        print("DRIFT" if drift else "CLEAN")
+        mode = os.environ.get("MNEME_STUB_SYNC", "0,0")
+        if mode == "rc1":
+            print("sync exploded", file=sys.stderr)
+            return 1
+        if mode == "nopalace":
+            print(f"No palace found at {palace}")
+            return 0
+        if mode == "garbage":
+            print("DRIFT")
+            return 0
+        counts = [int(x) for x in mode.split(",")]
+        missing, gitignored, oos = counts[0], counts[1], (counts[2] if len(counts) > 2 else 0)
+        print("  === MemPalace Sync (dry run) ===")
+        print(f"  Scanned:        {missing + gitignored + 5}")
+        print("  Kept:           5")
+        print(f"  Gitignored:     {gitignored}  (would remove)")
+        print(f"  Missing:        {missing}  (would remove)")
+        print("  No source:      0  (kept)")
+        print(f"  Out of scope:   {oos}  (kept)")
         return 0
 
     return 0

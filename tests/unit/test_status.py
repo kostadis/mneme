@@ -131,3 +131,95 @@ def test_report_any_fail_exit_1(tmp_path):
         e, runner=fake_runner("abc123def456"), prober=lambda s: False
     )
     assert code == 1
+
+
+# ── declared embedder (GH #26) ────────────────────────────────────────────────
+
+def _mp_entity(tmp_path, env):
+    import dataclasses
+
+    return dataclasses.replace(make_entity(tmp_path), env=env)
+
+
+_FULL = {
+    "MEMPALACE_BACKEND": "turbovec",
+    "MEMPALACE_EMBEDDING_PROVIDER": "ollama",
+    "MEMPALACE_EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+    "MEMPALACE_EMBEDDING_ENDPOINT": "http://192.0.2.10:11434",
+}
+
+
+def test_declared_embedder_accessor(tmp_path):
+    from hypostasis.models import EmbedderDecl, declared_embedder
+
+    assert declared_embedder(_mp_entity(tmp_path, {})) is None
+    decl = declared_embedder(_mp_entity(tmp_path, _FULL))
+    assert decl == EmbedderDecl("ollama", "qwen3-embedding:0.6b", "http://192.0.2.10:11434")
+
+
+def test_embedder_row_ok_when_declared(tmp_path):
+    row = status.embedder_row(_mp_entity(tmp_path, _FULL))
+    assert row is not None and row.ok
+    assert row.observed == "ollama:qwen3-embedding:0.6b @ http://192.0.2.10:11434"
+
+
+def test_embedder_row_fails_when_undeclared_but_mempalace_in_play(tmp_path):
+    row = status.embedder_row(_mp_entity(tmp_path, {"MEMPALACE_BACKEND": "turbovec"}))
+    assert row is not None and not row.ok
+    assert "384" in row.note and "MEMPALACE_EMBEDDING_" in row.note
+
+
+def test_embedder_row_fails_when_incomplete(tmp_path):
+    env = {"MEMPALACE_BACKEND": "turbovec", "MEMPALACE_EMBEDDING_PROVIDER": "ollama"}
+    row = status.embedder_row(_mp_entity(tmp_path, env))
+    assert row is not None and not row.ok
+
+
+def test_embedder_row_onnx_needs_no_endpoint(tmp_path):
+    env = {"MEMPALACE_EMBEDDING_PROVIDER": "onnx", "MEMPALACE_EMBEDDING_MODEL": "m",
+           "MEMPALACE_BACKEND": "turbovec"}
+    row = status.embedder_row(_mp_entity(tmp_path, env))
+    assert row is not None and row.ok
+
+
+def test_embedder_row_absent_without_mempalace(tmp_path):
+    assert status.embedder_row(_mp_entity(tmp_path, {})) is None
+    rows, _ = status.status_report(_mp_entity(tmp_path, {}), fake_runner("x"), lambda s: True)
+    assert all(r.kind != "embedder" for r in rows)
+
+
+def test_example_yaml_embedder_row_ok():
+    import pathlib
+
+    from hypostasis import config as cfg
+
+    entity = cfg.load(pathlib.Path(__file__).resolve().parents[2] / "hypostasis.example.yaml")
+    row = status.embedder_row(entity)
+    assert row is not None and row.ok
+
+
+def test_runner_for_entity_carries_embedder_env(tmp_path):
+    from mneme.mempalace.runner import MempalaceRunner
+
+    env = MempalaceRunner.for_entity(_mp_entity(tmp_path, _FULL)).env
+    for k in ("MEMPALACE_EMBEDDING_PROVIDER", "MEMPALACE_EMBEDDING_MODEL",
+              "MEMPALACE_EMBEDDING_ENDPOINT"):
+        assert env[k] == _FULL[k]
+
+
+def test_embedder_row_unknown_provider_fails(tmp_path):
+    env = {**_FULL, "MEMPALACE_EMBEDDING_PROVIDER": "olama"}
+    row = status.embedder_row(_mp_entity(tmp_path, env))
+    assert row is not None and not row.ok
+    assert "olama" in row.note and "openai-compat" in row.note
+
+
+def test_embedder_provider_case_normalized(tmp_path):
+    from hypostasis.models import declared_embedder
+
+    env = {"MEMPALACE_BACKEND": "turbovec", "MEMPALACE_EMBEDDING_PROVIDER": "ONNX",
+           "MEMPALACE_EMBEDDING_MODEL": "m"}
+    row = status.embedder_row(_mp_entity(tmp_path, env))
+    assert row is not None and row.ok
+    env = {**_FULL, "MEMPALACE_EMBEDDING_PROVIDER": "Ollama"}
+    assert declared_embedder(_mp_entity(tmp_path, env)).provider == "ollama"

@@ -8,11 +8,13 @@ from mneme.mempalace import conform
 from mneme.mempalace.runner import MempalaceRunner
 from tests.fixtures import entity_for, entity_for_trees, make_campaigns, make_simple_campaign
 
+CLEAN_SYNC = "  Gitignored:     0  (would remove)\n  Missing:        0  (would remove)\n"
+
 
 def runner_clean() -> MempalaceRunner:
     def run(cmd):
-        if len(cmd) > 1 and cmd[1] == "sync":
-            return subprocess.CompletedProcess(cmd, 0, stdout="CLEAN", stderr="")
+        if "sync" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=CLEAN_SYNC, stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     return MempalaceRunner(binary="mempalace", runner=run)

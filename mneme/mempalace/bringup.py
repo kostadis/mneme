@@ -18,6 +18,7 @@ from hypostasis.models import ConfigEntity
 from . import authority as _authority
 from . import bootstrap as _bootstrap
 from . import discover as _discover
+from . import embedder_guard as _guard
 from . import provision as _provision
 from . import recipe as _recipe
 from . import render as _render
@@ -59,9 +60,10 @@ def bringup(
     dry_run: bool = False,
     campaign_dir: str | None = None,
     verbose: bool = False,
+    prober=None,
 ) -> BringUpReport:
     rec = recipe or _recipe.current()
-    runner = runner or MempalaceRunner.for_venv(_venv(entity), stream=verbose)
+    runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
     mp_root = _config.mempalace_root(entity)
     config_json = config_json or default_config_json(mp_root)
     ref = _discover.resolve(entity, campaign, campaign_dir)
@@ -76,15 +78,24 @@ def bringup(
             steps.append(BringUpStep(name, "skipped", note="dry-run"))
         return BringUpReport(campaign, tuple(steps))
 
+    try:  # GH #26: guard BEFORE any write, so a refused bring-up leaves no file changes
+        _guard.require_writable(entity, cfg.store.path, prober)
+    except MempalaceError as e:
+        steps.append(BringUpStep("configure", "skipped", note="nothing written: guard refused"))
+        steps.append(BringUpStep("first_mine", "failed", note=str(e)))
+        return BringUpReport(campaign, tuple(steps))
+
     _authority.write(cfg, ref.path)  # creation-time direct write (FR-005)
     steps.append(
         BringUpStep("configure", "ok", observed=f".mneme/mempalace.yaml; store={cfg.store.alias}")
     )
-    _render.render_faces(cfg, rec, ref.path, config_json)
+    _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 
     try:
-        store_path, mined = _provision.first_mine(cfg, ref.path, runner)
+        store_path, mined = _provision.first_mine(
+            cfg, ref.path, runner, entity=entity, prober=prober
+        )
     except MempalaceError as e:
         steps.append(BringUpStep("first_mine", "failed", note=str(e)))
         return BringUpReport(campaign, tuple(steps))  # not-ready (FR-008)
@@ -120,7 +131,7 @@ def render_existing_faces(
     if not _authority.has_authority(ref.path):
         raise _authority.AuthorityError([f"{campaign}: no authority — bootstrap/bringup first"])
     cfg = _authority.load(ref.path, mempalace_root=mp_root)
-    return _render.render_faces(cfg, rec, ref.path, config_json)
+    return _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
 
 
 def _backup_step(entity: ConfigEntity, campaign: str, campaign_dir: Path) -> BringUpStep:
@@ -139,6 +150,3 @@ def _backup_step(entity: ConfigEntity, campaign: str, campaign_dir: Path) -> Bri
     except Exception as e:  # noqa: BLE001 - report, don't crash bring-up
         return BringUpStep("backup", "failed", note=str(e))
 
-
-def _venv(entity: ConfigEntity):
-    return entity.venv if entity.venv and str(entity.venv) != "." else None

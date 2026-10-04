@@ -66,13 +66,15 @@ def unreachable_deps(entity: ConfigEntity, prober: Prober = _probe.reachable) ->
     ]
 
 
-def mempalace_not_ready(cdir: Path) -> str | None:
+def mempalace_not_ready(cdir: Path, entity: ConfigEntity | None = None) -> str | None:
     """`mneme up` store-health gate (003, FR-010). Returns None if the campaign's mempalace
     store is brought up and healthy — OR if the campaign declares no store pointer yet (a
     pre-003 campaign is not gated). Otherwise a reason string. mneme up FAILS on a reason;
-    it never brings the store up itself."""
+    it never brings the store up itself. ``entity`` supplies the declared env (GH #46) to the
+    health probe's `mempalace status`."""
     from .mempalace import authority as _a
     from .mempalace import health as _h
+    from .mempalace.runner import MempalaceRunner as _MR
 
     if not _a.has_authority(cdir):
         return None  # not a 003-managed campaign — nothing to gate
@@ -82,7 +84,8 @@ def mempalace_not_ready(cdir: Path) -> str | None:
         return None
     if cfg.store is None:
         return None
-    sh = _h.health(cfg.store.path)
+    runner = _MR.for_entity(entity) if entity is not None else None
+    sh = _h.health(cfg.store.path, runner=runner)
     return None if sh.ok else sh.note
 
 
@@ -122,7 +125,7 @@ def up(
     runner: Runner = _run,
     render: bool = True,
     dry_run: bool = False,
-    store_gate: Callable[[Path], str | None] = mempalace_not_ready,
+    store_gate: Callable[[Path], str | None] | None = None,
 ) -> UpResult:
     cdir = _campaign_dir(entity, campaign, campaign_dir)
     deps = [n for n in entity.order.startup if entity.services.get(n) is not None]
@@ -144,7 +147,7 @@ def up(
 
     # Gate the campaign's mempalace store (003, FR-010): mneme up runs the runtime, but
     # refuses to start against a not-brought-up store — it never brings it up itself.
-    reason = store_gate(cdir)
+    reason = mempalace_not_ready(cdir, entity) if store_gate is None else store_gate(cdir)
     if reason:
         raise LifecycleError(
             f"mempalace not brought up for '{campaign}': {reason} "

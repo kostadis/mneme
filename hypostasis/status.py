@@ -23,7 +23,7 @@ from pathlib import Path
 
 from . import probe as _probe
 from . import render as _render
-from .models import Component, ConfigEntity, Service
+from .models import KNOWN_EMBEDDING_PROVIDERS, Component, ConfigEntity, Service, declared_embedder
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 Prober = Callable[[Service], bool]
@@ -32,7 +32,7 @@ Prober = Callable[[Service], bool]
 @dataclass(frozen=True)
 class Row:
     name: str
-    kind: str  # "component" | "render" | "service"
+    kind: str  # "component" | "render" | "service" | "embedder"
     observed: str
     expected: str
     ok: bool
@@ -100,6 +100,29 @@ def service_row(name: str, service: Service, prober: Prober = _probe.reachable) 
     return Row(name, "service", "reachable" if up else "UNREACHABLE", "reachable", up, note)
 
 
+def embedder_row(entity: ConfigEntity) -> Row | None:
+    """Declared mempalace embedder (GH #26). None when mempalace isn't in play; a FAIL row
+    when it is but the embedder is undeclared/incomplete (mempalace silently picks onnx)."""
+    if "mempalace" not in entity.components and "MEMPALACE_BACKEND" not in entity.env:
+        return None
+    decl = declared_embedder(entity)
+    if decl is not None and decl.known and decl.complete:
+        return Row("embedder", "embedder", decl.describe(), "declared", True)
+    if decl is not None and not decl.known:
+        return Row(
+            "embedder", "embedder", decl.describe(), "declared", False,
+            f"unknown MEMPALACE_EMBEDDING_PROVIDER '{decl.provider}' — mempalace will fall "
+            f"back to onnx all-MiniLM-L6-v2, 384-dim; accepted: "
+            f"{', '.join(KNOWN_EMBEDDING_PROVIDERS)}",
+        )
+    observed = decl.describe() if decl else "(undeclared)"
+    return Row(
+        "embedder", "embedder", observed, "declared", False,
+        "mempalace will fall back to onnx all-MiniLM-L6-v2, 384-dim — declare "
+        "MEMPALACE_EMBEDDING_PROVIDER/MODEL/ENDPOINT in hypostasis.yaml env:",
+    )
+
+
 def status_report(
     entity: ConfigEntity, runner: Runner = _run, prober: Prober = _probe.reachable
 ) -> tuple[list[Row], int]:
@@ -115,5 +138,8 @@ def status_report(
         service = entity.services.get(name)
         if service is not None:
             rows.append(service_row(name, service, prober))
+    emb = embedder_row(entity)
+    if emb is not None:
+        rows.append(emb)
     code = 0 if all(r.ok for r in rows) else 1
     return rows, code
