@@ -18,7 +18,9 @@ from hypostasis.models import ConfigEntity
 from . import authority as _authority
 from . import discover as _discover
 from . import embedder_guard as _guard
+from . import mine_record as _record
 from .discover import CampaignRef
+from .mine_report import WingSkips, warning_lines
 from .runner import MempalaceError, MempalaceRunner
 
 
@@ -30,6 +32,15 @@ class RefreshResult:
     failed: bool = False
     error: str = ""
     dry_run: bool = False
+    skips: WingSkips = ()  # GH #31: (wing, notice) pairs from this mine
+    record_warning: str | None = None
+
+    def warnings(self) -> list[str]:
+        """GH #31: one `WARN index gap` line per skipped file (never changes the outcome)."""
+        lines = warning_lines(self.campaign, self.skips)
+        if self.record_warning:
+            lines.append(self.record_warning)
+        return lines
 
     def line(self) -> str:
         if self.skipped:
@@ -40,7 +51,7 @@ class RefreshResult:
         return f"{self.campaign:24} {verb:6} mined: {', '.join(self.wings) or '(none)'}"
 
 
-def _guard_store(ref: CampaignRef, entity: ConfigEntity, prober) -> Path:
+def _guard_store(ref: CampaignRef, entity: ConfigEntity, prober):
     """GH #26: resolve the campaign's store and refuse to extend an existing palace whose dim
     mismatches the embedder. FAILS CLOSED: unloadable authority / no store pointer ⇒
     MempalaceError (we cannot name, hence cannot verify, the palace being mined)."""
@@ -53,7 +64,7 @@ def _guard_store(ref: CampaignRef, entity: ConfigEntity, prober) -> Path:
             "authority has no store pointer — cannot verify the palace; run `mneme mp bringup`"
         )
     _guard.require_writable(entity, cfg.store.path, prober)
-    return cfg.store.path
+    return cfg
 
 
 def _refresh_one(
@@ -68,6 +79,7 @@ def _refresh_one(
         result.skipped = True
         return result
     store: Path | None = None
+    names: dict[str, str] = {}  # wing source -> wing name (for the GH #31 record)
     if entity is not None and not ref.has_authority:
         # spec 002 US1: no configuration ⇒ skipped (not failed, not mined).
         result.skipped = True
@@ -75,21 +87,36 @@ def _refresh_one(
         return result
     if entity is not None:
         try:
-            store = _guard_store(ref, entity, prober)
+            cfg = _guard_store(ref, entity, prober)
+            store = cfg.store.path
+            names = {(w.source or "."): w.name for w in cfg.wings}
         except MempalaceError as e:
             result.failed = True
             result.error = str(e)
             return result
     # discover returns wing dirs deepest-first → sub-scopes before root (FR-004).
+    skips: list = []
+    wing_names: list[str] = []
     for wing_dir in ref.wing_dirs:
         rel = str(wing_dir.relative_to(ref.path)) or "."
+        wing = names.get(rel, rel)
         try:
-            runner.mine(wing_dir, palace=store, dry_run=dry_run)
+            res = runner.mine(wing_dir, palace=store, dry_run=dry_run)
             result.wings.append(rel)
+            wing_names.append(wing)
+            skips.extend((wing, n) for n in (getattr(res, "skips", None) or ()))
         except MempalaceError as e:
             result.failed = True
             result.error = str(e)
+            result.skips = tuple(skips)  # earlier wings' skips are still real
+            if store is not None and not dry_run:  # no stale "clean" record behind a failure
+                result.record_warning = _record.try_write(
+                    store, ref.name, wing_names, result.skips, status="failed", error=str(e)
+                )
             return result
+    result.skips = tuple(skips)
+    if store is not None and not dry_run:  # GH #31: remember this mine's gaps for `mp status`
+        result.record_warning = _record.try_write(store, ref.name, wing_names, result.skips)
     return result
 
 

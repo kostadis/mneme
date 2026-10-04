@@ -13,6 +13,7 @@ from hypostasis.models import ConfigEntity
 
 from . import authority as _authority
 from . import discover as _discover
+from . import mine_record as _record
 from . import ownership as _ownership
 from . import recipe as _recipe
 from . import render as _render
@@ -221,6 +222,46 @@ def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow
     )
 
 
+def _gaps_row(ref: CampaignRef, cfg) -> ConformanceRow | None:
+    """GH #31 — files the LAST mneme-run mine skipped (Principle I: unknown is not green).
+    Only for campaigns with a store pointer; reads the record in the store folder."""
+    if cfg.store is None:
+        return None
+    try:
+        rec = _record.read(cfg.store.path)
+    except _record.MineRecordError as e:
+        return ConformanceRow(ref.name, "gaps", State.INDEX_UNVERIFIED, note=str(e))
+    if rec is None:
+        return ConformanceRow(
+            ref.name, "gaps", State.INDEX_UNVERIFIED,
+            note=f"no mine recorded by mneme yet — run `mneme mp refresh {ref.name}` "
+            "to record skipped files",
+        )
+    names = rec.names
+    carried = " (carried over by restore)" if rec.carried_over else ""
+    if rec.status == "failed":
+        partial = ", ".join(names[:_GAPS_SHOWN]) or "none"
+        return ConformanceRow(
+            ref.name, "gaps", State.INDEX_UNVERIFIED,
+            note=f"last mine failed at {rec.mined_at}: {rec.error}; partial skips: {partial}"
+            f"{carried}",
+        )
+    if not names:
+        return ConformanceRow(
+            ref.name, "gaps", State.CONFORMANT,
+            note=f"no files skipped at last mine ({rec.mined_at}){carried}",
+        )
+    shown = ", ".join(names[:_GAPS_SHOWN])
+    more = f" (+{len(names) - _GAPS_SHOWN} more)" if len(names) > _GAPS_SHOWN else ""
+    return ConformanceRow(
+        ref.name, "gaps", State.INDEX_GAPS, observed=str(len(names)),
+        note=f"{len(names)} file(s) skipped at last mine: {shown}{more}{carried}",
+    )
+
+
+_GAPS_SHOWN = 5
+
+
 def _campaign_rows(
     ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None, prober=None,
     *, mp_root=None, check_index: bool = True,
@@ -268,6 +309,8 @@ def _campaign_rows(
     if check_index:
         rows.append(_index_row(ref, cfg, runner))
     rows.extend(_store_backup_rows(ref, cfg, entity, runner, prober))
+    if entity is not None and (gaps := _gaps_row(ref, cfg)) is not None:
+        rows.append(gaps)
     if _authority.has_legacy_store_path(ref.path):
         # FR-013 — it agrees with the derived location (a conflict would have failed the
         # load), so this is owed cleanup, not breakage. Surfacing it is the point: the

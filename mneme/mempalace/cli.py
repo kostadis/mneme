@@ -11,6 +11,7 @@ import typer
 from hypostasis import config as cfg
 from hypostasis.models import ConfigEntity
 
+from . import mine_report as _mine_report
 from .runner import MempalaceError, MempalaceRunner
 
 EXIT_OK = 0
@@ -59,6 +60,12 @@ def _load_or_exit(config_path: str) -> ConfigEntity:
         raise typer.Exit(EXIT_INVALID_CONFIG) from None
 
 
+def _echo_gaps(lines: list[str]) -> None:
+    """GH #31: skipped files are warnings in the report — they never change the exit code."""
+    for line in lines:
+        typer.echo(line)
+
+
 # ── refresh (US1) ───────────────────────────────────────────────────────────
 
 
@@ -93,6 +100,7 @@ def refresh(
     rc = EXIT_OK
     for r in results:
         typer.echo(r.line())
+        _echo_gaps(r.warnings())
         if r.failed:
             rc = EXIT_RUNTIME
     raise typer.Exit(rc)
@@ -368,6 +376,7 @@ def bringup(
     for s in report.steps:
         flag = {"ok": "ok  ", "skipped": "skip", "failed": "FAIL"}.get(s.state, s.state)
         typer.echo(f"  {flag} {s.name:13} {s.observed or s.note}")
+    _echo_gaps(_mine_report.warning_lines(campaign, report.skips) + list(report.warnings))
     for owed in report.owed:
         typer.echo(f"  TODO {owed}")
     if dry_run:
@@ -479,13 +488,22 @@ def regenerate(
         raise typer.Exit(EXIT_OK)
     entity = _load_or_exit(config)
     try:
-        store, mined = _backup.regenerate(
-            entity, campaign, campaign_dir=campaign_dir, verbose=verbose
-        )
+        fm = _backup.regenerate(entity, campaign, campaign_dir=campaign_dir, verbose=verbose)
+        store, mined = fm
     except (_discover.DiscoveryError, AuthorityError, MempalaceError, OSError) as e:
+        # GH #31: a later wing's failure must not hide the gaps the earlier wings found.
+        record_warning = getattr(e, "record_warning", None)
+        _echo_gaps(
+            _mine_report.warning_lines(campaign, getattr(e, "skips", ()))
+            + ([record_warning] if record_warning else [])
+        )
         typer.echo(f"FAIL regenerate: {_err_text(e)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"regenerated {campaign} → {store} (mined: {', '.join(mined) or 'nothing'})")
+    _echo_gaps(
+        _mine_report.warning_lines(campaign, fm.skips)
+        + ([fm.record_warning] if fm.record_warning else [])
+    )
 
 
 # ── faces (H1, GH #24) ────────────────────────────────────────────────────────

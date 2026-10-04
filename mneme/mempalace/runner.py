@@ -11,10 +11,14 @@ import functools
 import os
 import re
 import subprocess
+import sys
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from .mine_report import SkipNotice, parse_skips
 
 if TYPE_CHECKING:
     from hypostasis.config import ConfigEntity
@@ -38,6 +42,13 @@ class SyncCheck:
     reason: str = ""
 
 
+@dataclass(frozen=True)
+class MineResult:
+    """What a successful `mempalace mine` reported as skipped (GH #31). Callers may ignore it."""
+
+    skips: tuple[SkipNotice, ...] = ()
+
+
 class MempalaceError(Exception):
     """A `mempalace` subprocess failed."""
 
@@ -54,21 +65,61 @@ def _run(
     return subprocess.run(cmd, capture_output=True, text=True, env=_merged_env(env))
 
 
+def _tee(src, sink_name: str, collected: list[str]) -> None:
+    """Forward each line to the CURRENT ``sys.<sink_name>`` as it arrives, and keep it.
+
+    Must NEVER stop draining: a dead reader fills the pipe and blocks the child forever.
+    Any failure is recorded in ``collected`` and the rest is drained in binary."""
+    try:
+        for line in iter(src.readline, ""):
+            collected.append(line)
+            sink = getattr(sys, sink_name)
+            try:
+                sink.write(line)
+                sink.flush()
+            except (OSError, ValueError):  # a closed terminal must not kill the mine
+                pass
+    except Exception as e:  # noqa: BLE001 - keep draining, whatever happened
+        collected.append(f"\n[mneme: output reader error: {e!r}]\n")
+        try:
+            while src.buffer.read(65536):
+                pass
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+
 def _run_stream(
     cmd: list[str], env: Mapping[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
-    """Streaming runner: do NOT capture — let the child's stdout/stderr inherit our
-    terminal so the user sees `mempalace mine` progress live (Principle IX, Observability).
+    """Tee runner (GH #31): show `mempalace mine` progress live (Principle IX) AND capture it,
+    so skipped files can be named even under ``-v``.
 
-    Force the child unbuffered (``PYTHONUNBUFFERED``) so per-file lines appear *during*
-    the mine, not flushed in a lump at the end — CPython block-buffers `print()` when its
-    stdout is a pipe rather than a tty (e.g. run from another tool). The returned
-    stdout/stderr are empty: the output already went to the terminal, so callers that key
-    an error message off the captured tail (see :meth:`MempalaceRunner.mine`) get a generic
-    "see output above" note in this mode.
+    The child's stdout/stderr are pipes; one reader thread per stream forwards each line to
+    our own stdout/stderr as it arrives (flushed) and collects it. ``PYTHONUNBUFFERED`` keeps
+    the child from block-buffering `print()` into a lump at the end (it is not on a tty).
+    Returns the collected stdout/stderr, so error tails are real, not "see output above".
     """
-    proc = subprocess.run(cmd, env={**_merged_env(env), "PYTHONUNBUFFERED": "1"})
-    return subprocess.CompletedProcess(cmd, proc.returncode, stdout="", stderr="")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",  # undecodable bytes must not kill a reader (and hang the child)
+        env={**_merged_env(env), "PYTHONUNBUFFERED": "1"},
+    )
+    out: list[str] = []
+    err: list[str] = []
+    threads = [
+        threading.Thread(target=_tee, args=(proc.stdout, "stdout", out), daemon=True),
+        threading.Thread(target=_tee, args=(proc.stderr, "stderr", err), daemon=True),
+    ]
+    for t in threads:
+        t.start()
+    rc = proc.wait()
+    for t in threads:
+        t.join()
+    return subprocess.CompletedProcess(cmd, rc, stdout="".join(out), stderr="".join(err))
 
 
 def resolve_binary(venv: Path | None) -> str:
@@ -135,12 +186,16 @@ class MempalaceRunner:
         prefix = ["--palace", str(palace)] if palace is not None else []
         return prefix + list(sub)
 
-    def mine(self, path: Path, palace: Path | str | None = None, dry_run: bool = False) -> None:
+    def mine(self, path: Path, palace: Path | str | None = None, dry_run: bool = False
+    ) -> MineResult:
+        """Mine ``path``; raise on failure. On success returns the skips parsed from the
+        combined stdout + stderr (GH #31 — a skipped file is a named gap, never silent)."""
         sub = ["mine", str(path)] + (["--dry-run"] if dry_run else [])
         out = self._call(self._with_palace(palace, *sub))
         if out.returncode != 0:
-            detail = (out.stderr or out.stdout or "").strip()[-300:] or "see output above"
+            detail = (out.stderr or out.stdout or "").strip()[-300:] or "no output"
             raise MempalaceError(f"mempalace mine {path} failed (rc {out.returncode}): {detail}")
+        return MineResult(tuple(parse_skips(f"{out.stdout or ''}\n{out.stderr or ''}")))
 
     def status(self, palace: Path | str | None = None) -> bool:
         """True iff `mempalace --palace <p> status` answers cleanly (the store is openable)."""
