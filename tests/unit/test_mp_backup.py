@@ -7,7 +7,7 @@ import subprocess
 from mneme.mempalace import authority, backup
 from mneme.mempalace.models import CampaignMempalaceConfig, StorePointer, Wing
 from mneme.mempalace.runner import MempalaceRunner
-from tests.fixtures import entity_for, with_onnx
+from tests.fixtures import STUB, entity_for, with_onnx
 
 
 def _setup(tmp_path, monkeypatch, campaign="saga"):
@@ -45,7 +45,7 @@ def test_restore_preserves_bindings_without_re_embed(tmp_path, monkeypatch):
     import shutil
 
     shutil.rmtree(store)  # lose the store
-    restored = backup.restore(entity, "saga")
+    restored = backup.restore(entity, "saga", runner=MempalaceRunner(binary=str(STUB))).restored
     # bindings are back; restore never re-embeds (no index.tvim restored — turbovecdb rebuilds it)
     assert (store / "turbovec" / "mempalace_drawers" / "store.sqlite3").read_text() == "BINDINGS"
     assert not (store / "turbovec" / "mempalace_drawers" / "index.tvim").exists()
