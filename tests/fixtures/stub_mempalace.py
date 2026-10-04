@@ -10,7 +10,10 @@ Palace resolution: `--palace <path>` arg or ``$MEMPALACE_PALACE_PATH`` env.
 - ``mine <path> [--palace P] [--dry-run]`` → exit 0; on a real (non-dry) run, create a
   fake turbovec store at ``P/turbovec/mempalace_drawers/{store.sqlite3,index.tvim}``.
 - ``status [--palace P]`` → exit 0, prints ``ok``.
-- ``sync <path> --dry-run`` → ``DRIFT`` if ``<path>/.stub_drift`` exists, else ``CLEAN``.
+- ``[--palace P] sync <path> --dry-run`` → the REAL report format (GH #22). Counts via
+  ``$MNEME_STUB_SYNC``: ``"<missing>,<gitignored>[,<oos>]"`` (default ``0,0``),
+  ``rc1`` (error, rc 1),
+  ``nopalace`` ("No palace found", rc 0), or ``garbage``.
 - ``split ...`` → exit 0.
 """
 
@@ -80,9 +83,25 @@ def main() -> int:
         return 0
 
     if sub == "sync" and "--dry-run" in subargs:
-        target = next((a for a in subargs if not a.startswith("-")), None)
-        drift = bool(target) and (Path(target) / ".stub_drift").exists()
-        print("DRIFT" if drift else "CLEAN")
+        mode = os.environ.get("MNEME_STUB_SYNC", "0,0")
+        if mode == "rc1":
+            print("sync exploded", file=sys.stderr)
+            return 1
+        if mode == "nopalace":
+            print(f"No palace found at {palace}")
+            return 0
+        if mode == "garbage":
+            print("DRIFT")
+            return 0
+        counts = [int(x) for x in mode.split(",")]
+        missing, gitignored, oos = counts[0], counts[1], (counts[2] if len(counts) > 2 else 0)
+        print("  === MemPalace Sync (dry run) ===")
+        print(f"  Scanned:        {missing + gitignored + 5}")
+        print("  Kept:           5")
+        print(f"  Gitignored:     {gitignored}  (would remove)")
+        print(f"  Missing:        {missing}  (would remove)")
+        print("  No source:      0  (kept)")
+        print(f"  Out of scope:   {oos}  (kept)")
         return 0
 
     return 0

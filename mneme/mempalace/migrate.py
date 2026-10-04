@@ -121,17 +121,29 @@ def apply_plan(plan: MigrationPlan, campaign_dir: Path) -> list[str]:
     return executed
 
 
-def verify(campaign_dir: Path, *, runner: MempalaceRunner | None = None) -> tuple[bool, str]:
+INDEX_NOT_CHECKED = "index not checked during migrate verification (run `mneme mp status`)"
+
+
+def verify(
+    campaign_dir: Path, *, runner: MempalaceRunner | None = None, entity=None
+) -> tuple[bool, str]:
     """Confirm the ACTUAL resulting config/index conforms (FR-026). Distinguishes
     'migration incomplete' (stale render / no authority) from a deliberate difference."""
-    report = _conform.check_dir(campaign_dir, runner=runner)
+    # Migration runs on a working copy, whose path is not the path the campaign's drawers
+    # were mined from: `sync` against it would call every drawer out-of-scope. So the index
+    # dimension is skipped (and said so) rather than reported as a misleading STALE.
+    report = _conform.check_dir(campaign_dir, runner=runner, entity=entity, check_index=False)
     # For *verification* (unlike status), a config-less result is incomplete — a
     # migration was supposed to leave a usable mempalace, so MISSING_CONFIG counts.
     incomplete_states = {State.STALE_RENDER, State.MISSING_CONFIG, State.INVALID_CONFIG}
     incomplete = [r for r in report.rows if r.state in incomplete_states]
-    bad = [r for r in report.rows if not r.ok and r not in incomplete]
+    unverified = [r for r in report.rows if r.state is State.INDEX_UNVERIFIED]
+    bad = [r for r in report.rows if not r.ok and r not in incomplete and r not in unverified]
+    if not incomplete and not bad and unverified:
+        why = "; ".join(r.note for r in unverified)
+        return False, f"migration NOT VERIFIED: index unchecked ({why})"
     if not incomplete and not bad:
-        return True, "migration verified: campaign conforms"
+        return True, f"migration verified: campaign conforms ({INDEX_NOT_CHECKED})"
     flagged = incomplete + bad
     detail = "; ".join(f"{r.dimension}:{r.state.value}" for r in flagged)
     if incomplete:
@@ -140,14 +152,20 @@ def verify(campaign_dir: Path, *, runner: MempalaceRunner | None = None) -> tupl
 
 
 def migrate_in_dir(
-    plan: MigrationPlan, campaign_dir: Path, *, runner: MempalaceRunner | None = None
+    plan: MigrationPlan, campaign_dir: Path, *, runner: MempalaceRunner | None = None,
+    entity=None,
 ) -> MigrationResult:
     """Apply + verify a plan in a campaign dir (the working copy). Re-render derived
     files from the (possibly updated) authority so verification reflects reality."""
     result = MigrationResult(campaign=plan.campaign)
     result.executed = apply_plan(plan, campaign_dir)
     if _authority.has_authority(campaign_dir):
-        cfg = _authority.load(campaign_dir)
+        from hypostasis import config as _config
+
+        cfg = _authority.load(
+            campaign_dir,
+            mempalace_root=_config.mempalace_root(entity) if entity is not None else None,
+        )
         _render.write_all(cfg, _recipe.load(cfg.recipe_version), campaign_dir)
-    result.conformant, result.note = verify(campaign_dir, runner=runner)
+    result.conformant, result.note = verify(campaign_dir, runner=runner, entity=entity)
     return result

@@ -93,6 +93,7 @@ def test_migrate_verification_carries_entity_env(tmp_path, monkeypatch):
     auth = (
         'campaign: saga\nrecipe_version: "1.0.0"\nwings:\n'
         '  - {name: saga, source: ".", trust: reference, rooms: []}\n'
+        "store:\n  alias: saga\n"  # sync only runs against a named store (GH #22)
     )
     plan = MigrationPlan(
         campaign="saga",
@@ -100,9 +101,10 @@ def test_migrate_verification_carries_entity_env(tmp_path, monkeypatch):
         steps=(MigrationStep("write_authority", {"content": auth}),),
     )
     runner = MempalaceRunner.for_entity(_entity(tmp_path))
-    migrate.migrate_in_dir(plan, saga, runner=runner)
-    syncs = [c for c in seen if "sync" in c["cmd"]]
-    assert syncs and all(c["env"]["MEMPALACE_BACKEND"] == "turbovec" for c in syncs)
+    res = migrate.migrate_in_dir(plan, saga, runner=runner, entity=_entity(tmp_path))
+    # the working copy is never synced (its path is not where drawers were mined from)
+    assert not [c for c in seen if "sync" in c["cmd"]]
+    assert res.conformant and "index not checked during migrate verification" in res.note
 
 
 def test_migrate_cli_passes_entity_runner(tmp_path, monkeypatch):
@@ -118,8 +120,9 @@ def test_migrate_cli_passes_entity_runner(tmp_path, monkeypatch):
     monkeypatch.setattr(publish, "_clone_workcopy", lambda *a: SimpleNamespace(path=tmp_path))
     got = {}
 
-    def fake(plan, cdir, *, runner=None):
+    def fake(plan, cdir, *, runner=None, entity=None):
         got["runner"] = runner
+        got["entity"] = entity
         return migrate.MigrationResult(campaign="saga", conformant=True, note="ok")
 
     monkeypatch.setattr(migrate, "migrate_in_dir", fake)
@@ -129,3 +132,4 @@ def test_migrate_cli_passes_entity_runner(tmp_path, monkeypatch):
     res = CliRunner().invoke(cli.app, ["migrate", "saga", "--plan", str(pf)])
     assert res.exit_code == 0, res.output
     assert got["runner"].env["MEMPALACE_BACKEND"] == "turbovec"
+    assert got["entity"] is entity

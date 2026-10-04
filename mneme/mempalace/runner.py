@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import functools
 import os
+import re
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,6 +20,22 @@ if TYPE_CHECKING:
     from hypostasis.config import ConfigEntity
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
+
+
+_GITIGNORED_RE = re.compile(r"^\s*Gitignored:\s+(\d+)", re.MULTILINE)
+_MISSING_RE = re.compile(r"^\s*Missing:\s+(\d+)", re.MULTILINE)
+_OUT_OF_SCOPE_RE = re.compile(r"^\s*Out of scope:\s+(\d+)", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class SyncCheck:
+    """Result of `is_stale` (GH #22). `stale` is None when it could not be determined."""
+
+    stale: bool | None
+    missing: int
+    gitignored: int
+    out_of_scope: int = 0
+    reason: str = ""
 
 
 class MempalaceError(Exception):
@@ -128,16 +146,39 @@ class MempalaceRunner:
         """True iff `mempalace --palace <p> status` answers cleanly (the store is openable)."""
         return self._call(self._with_palace(palace, "status")).returncode == 0
 
-    def is_stale(self, path: Path) -> bool:
-        """Source-vs-index drift via `mempalace sync --dry-run` (D2). True ⇒ stale.
+    def is_stale(
+        self,
+        path: Path,
+        palace: Path | str | None = None,
+        roots: Sequence[Path | str] = (),
+    ) -> SyncCheck:
+        """Orphaned-index check via `mempalace [--palace P] sync <path> --dry-run` (GH #22).
 
-        mneme stores no index metadata of its own; staleness is asked of mempalace
-        (Principle III/IV). A non-zero/unparseable result is treated as unknown→False.
+        Detects ORPHANED index entries only: drawers whose source is now gitignored or
+        missing. It does NOT detect new or changed sources — mempalace has no CLI for that
+        (`mine --dry-run` skips the already-mined check). Anything we cannot parse is
+        `stale=None` (unknown), never a guess (Principle I). Pass `palace` so the campaign's
+        own store is asked, not whatever default resolves. `roots` are the other legitimate
+        source roots (multi-root wings); drawers outside every root are `out_of_scope`
+        (a moved campaign or a foreign store) and count as stale.
         """
-        out = self._call(["sync", str(path), "--dry-run"])
+        root_args = [a for r in roots for a in ("--root", str(r))]
+        out = self._call(self._with_palace(palace, "sync", str(path), *root_args, "--dry-run"))
         if out.returncode != 0:
-            return False
-        return "DRIFT" in (out.stdout or "").upper()
+            detail = (out.stderr or out.stdout or "").strip()[-200:]
+            return SyncCheck(None, 0, 0, 0, f"sync failed (rc {out.returncode}): {detail}")
+        text = out.stdout or ""
+        gi = _GITIGNORED_RE.search(text)
+        ms = _MISSING_RE.search(text)
+        if gi is None or ms is None:
+            first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "no output")
+            err = (out.stderr or "").strip()[-200:]
+            tail = f"; stderr: {err}" if err else ""
+            return SyncCheck(None, 0, 0, 0, f"no sync report ({first[:120]}){tail}")
+        g, m = int(gi.group(1)), int(ms.group(1))
+        oo = _OUT_OF_SCOPE_RE.search(text)
+        o = int(oo.group(1)) if oo else 0
+        return SyncCheck(g + m + o > 0, m, g, o, "")
 
     def split(self, path: Path, *extra: str) -> None:
         out = self._call(["split", str(path), *extra])

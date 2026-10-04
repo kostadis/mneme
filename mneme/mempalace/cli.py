@@ -286,7 +286,7 @@ def migrate(
         wc = _publish._clone_workcopy(entity, None, None)
         # GH #46 — verification's `mempalace` calls must see the declared env/backend.
         result = _migrate.migrate_in_dir(
-            mplan, wc.path / campaign, runner=MempalaceRunner.for_entity(entity)
+            mplan, wc.path / campaign, runner=MempalaceRunner.for_entity(entity), entity=entity
         )
     except Exception as e:  # noqa: BLE001 - report any failure and exit non-zero
         typer.echo(f"FAIL migrate: {e}", err=True)

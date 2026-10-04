@@ -19,6 +19,7 @@ from . import render as _render
 from .authority import AuthorityError
 from .discover import CampaignRef
 from .models import (
+    FAIL_STATES,
     CampaignMempalaceConfig,
     ConformanceReport,
     ConformanceRow,
@@ -184,8 +185,45 @@ def _membership_row(ref: CampaignRef, entity=None) -> ConformanceRow:
     )
 
 
+def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow:
+    """GH #22 — orphaned-drawer check against the CAMPAIGN's store (Principle I: unknown is
+    reported as unknown). New/changed sources are not detectable via the mempalace CLI."""
+    if cfg.store is None:
+        return ConformanceRow(
+            ref.name, "index", State.INDEX_UNVERIFIED,
+            note="no store pointer — index not checked (won't query an unknown palace)",
+        )
+    # every legitimate source root: the campaign plus each wing's dir (as provision mines them)
+    roots = [ref.path / w.source for w in cfg.wings]
+    extra = [r for r in dict.fromkeys(roots) if r.resolve() != ref.path.resolve()]
+    chk = runner.is_stale(ref.path, palace=cfg.store.path, roots=extra)
+    if chk.stale is None:
+        return ConformanceRow(
+            ref.name, "index", State.INDEX_UNVERIFIED, note=f"unverified: {chk.reason}"
+        )
+    if chk.stale:
+        parts = []
+        n = chk.missing + chk.gitignored
+        if n:
+            parts.append(
+                f"index has {n} orphaned drawers ({chk.missing} missing, "
+                f"{chk.gitignored} gitignored) — run `mneme mp refresh`"
+            )
+        if chk.out_of_scope:
+            parts.append(
+                f"{chk.out_of_scope} drawers point outside the campaign's sources "
+                "(moved campaign or foreign store?) — run `mneme mp regenerate`"
+            )
+        return ConformanceRow(ref.name, "index", State.STALE, note="; ".join(parts))
+    return ConformanceRow(
+        ref.name, "index", State.BUILT,
+        note="no orphaned drawers (new/changed files are not detected)",
+    )
+
+
 def _campaign_rows(
-    ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None, prober=None
+    ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None, prober=None,
+    *, mp_root=None, check_index: bool = True,
 ) -> list[ConformanceRow]:
     if not ref.has_authority:
         return [
@@ -196,7 +234,7 @@ def _campaign_rows(
             _membership_row(ref, entity),
         ]
     try:
-        cfg = _authority.load(ref.path, mempalace_root=_mp_root(entity))
+        cfg = _authority.load(ref.path, mempalace_root=mp_root or _mp_root(entity))
     except AuthorityError as e:
         # FR-014a — one unloadable campaign is ONE bad row, never a wedged fleet run
         # (Principle VI). Its other dimensions are unknowable until the authority loads.
@@ -227,13 +265,8 @@ def _campaign_rows(
             ConformanceRow(ref.name, "render", State.CONFORMANT, note="derived files coherent")
         )
 
-    stale = runner.is_stale(ref.path)
-    rows.append(
-        ConformanceRow(
-            ref.name, "index", State.STALE if stale else State.BUILT,
-            note="documents changed since last index" if stale else "index up to date",
-        )
-    )
+    if check_index:
+        rows.append(_index_row(ref, cfg, runner))
     rows.extend(_store_backup_rows(ref, cfg, entity, runner, prober))
     if _authority.has_legacy_store_path(ref.path):
         # FR-013 — it agrees with the derived location (a conflict would have failed the
@@ -251,11 +284,19 @@ def _campaign_rows(
 
 
 def check_dir(
-    campaign_dir, *, runner: MempalaceRunner | None = None
+    campaign_dir, *, runner: MempalaceRunner | None = None, entity=None,
+    check_index: bool = True,
 ) -> ConformanceReport:
     """Conformance of a campaign at an arbitrary path (e.g. a working copy) — used by
-    post-migration verification (FR-026) where the dir is not the active checkout."""
+    post-migration verification (FR-026) where the dir is not the active checkout.
+
+    `entity` only resolves THIS host's palace root (store path derivation, GH #22); it does
+    not enable the store/backup/faces rows. `check_index=False` skips the orphaned-drawer
+    sync check: a working copy's path is not the path drawers were mined from, so sync
+    against it would report everything out-of-scope (a misleading STALE)."""
     from pathlib import Path
+
+    from hypostasis import config as _config
 
     from . import authority as _auth
     from .discover import CampaignRef, _existing_wing_dirs
@@ -269,7 +310,10 @@ def check_dir(
     )
     rec = _recipe.current()
     runner = runner or MempalaceRunner.for_venv(None)
-    return ConformanceReport(rows=tuple(_campaign_rows(ref, rec, runner)))
+    root = _config.mempalace_root(entity) if entity is not None else None
+    return ConformanceReport(
+        rows=tuple(_campaign_rows(ref, rec, runner, mp_root=root, check_index=check_index))
+    )
 
 
 def report(
@@ -293,6 +337,11 @@ def report(
 
 
 def format_row(row: ConformanceRow) -> str:
-    flag = "ok " if row.ok else "FAIL"
+    if row.state in FAIL_STATES:
+        flag = "FAIL"
+    elif not row.ok:
+        flag = "??  "  # unverified: not ok, but not a (non-strict) failure
+    else:
+        flag = "ok  "
     return f"{flag} {row.campaign:20} {row.dimension:7} {row.state.value:26} {row.note}"
 

@@ -7,13 +7,18 @@ import subprocess
 from mneme.mempalace import conform
 from mneme.mempalace.models import State
 from mneme.mempalace.runner import MempalaceRunner
-from tests.fixtures import entity_for, make_campaigns
+from tests.fixtures import add_store_pointer, entity_for, make_campaigns
+
+CLEAN_SYNC = (
+    "  Gitignored:     0  (would remove)\n  Missing:        0  (would remove)\n"
+    "  Out of scope:   0  (kept)\n"
+)
 
 
 def runner_clean():
     def run(cmd):
-        if cmd[1] == "sync":
-            return subprocess.CompletedProcess(cmd, 0, stdout="CLEAN", stderr="")
+        if "sync" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=CLEAN_SYNC, stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     return MempalaceRunner(binary="mempalace", runner=run)
@@ -23,14 +28,16 @@ def _states(report, campaign):
     return {r.dimension: r.state for r in report.for_campaign(campaign)}
 
 
-def test_full_is_conformant(tmp_path):
+def test_full_recipe_render_index_are_conformant(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
+    add_store_pointer(root)
     report = conform.report(entity_for(root), campaign="full", runner=runner_clean())
     st = _states(report, "full")
     assert st["recipe"] == State.CONFORMANT
     assert st["render"] == State.CONFORMANT
     assert st["index"] == State.BUILT
-    assert report.exit_code() == 0
+    # (faces/store rows need a provisioned palace; only the rows under test are asserted)
+    assert all(r.ok for r in report.rows if r.dimension in ("recipe", "render", "index"))
 
 
 def test_missing_config_is_reported_not_failed(tmp_path):
