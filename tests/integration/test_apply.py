@@ -74,3 +74,19 @@ def test_apply_is_idempotent(tmp_path):
     first = target.read_text()
     rnd.render_and_write_all(entity, tdir)
     assert target.read_text() == first  # same authority → identical bytes (same stamp)
+
+
+def test_campaigngenerator_user_config_target_renders_and_reports_current(tmp_path):
+    tdir = tmp_path / "templates"
+    tdir.mkdir()
+    (tdir / "wiring.yaml.j2").write_text("dgx_endpoint: {{ machines.dgx.endpoint }}\n")
+    target = tmp_path / "home" / ".config" / "campaigngenerator" / "wiring.yaml"
+    cfg_path = tmp_path / "hypostasis.yaml"
+    _write_config(cfg_path, "http://new:8001/v1", target)
+    entity = cfg.load(cfg_path)
+
+    written = rnd.render_and_write_all(entity, tdir)
+    assert target in written
+    assert "http://new:8001/v1" in target.read_text()
+    assert sts.render_row(entity, entity.components["cg"]).ok
+    assert not (tmp_path / "src" / "config" / "wiring.yaml").exists()

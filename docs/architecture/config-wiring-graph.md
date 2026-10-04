@@ -6,11 +6,11 @@
 
 ## The wiring bridge
 
-`mneme` is the source of truth. Its `hypostasis.yaml` renders CampaignGenerator's external `config/wiring.yaml`, which `resolve_refs` reads as the default for content roots.
+`mneme` is the source of truth. Its `hypostasis.yaml` renders CampaignGenerator's external `~/.config/campaigngenerator/wiring.yaml`, which `resolve_refs` reads as the default for content roots. An explicit `MNEME_WIRING` path remains available for deployments using different users.
 
 ```mermaid
 flowchart LR
-  H["hypostasis.yaml<br/>mneme authority"] -->|mneme renders| W["config/wiring.yaml<br/>external, do-not-edit"]
+  H["hypostasis.yaml<br/>mneme authority"] -->|mneme renders| W["~/.config/campaigngenerator/wiring.yaml<br/>external, do-not-edit"]
   W -->|campaignlib.wiring| R["resolve_refs<br/>refs.yaml + refs.local.yaml"]
   R -->|launch_5etools_mcp| RT["5etools runtime<br/>DATA_DIRS to MCP server"]
 ```
@@ -29,7 +29,7 @@ flowchart LR
 
 | File | Owner | Format | Location / discovery | Contents |
 |---|---|---|---|---|
-| `config/wiring.yaml` | CampaignGenerator (rendered by mneme) | YAML, do-not-edit, hash-stamped | explicit → `$MNEME_WIRING` → repo `config/wiring.yaml` → CWD | `fivetools_data_root`, `homebrew_private`, `fivetools_mcp_index`, `rpg_library_url`, `dgx_*`, `pdf_translators` |
+| `~/.config/campaigngenerator/wiring.yaml` | CampaignGenerator (rendered by mneme) | YAML, do-not-edit, hash-stamped | explicit → `$MNEME_WIRING` → user config default; no checkout/CWD fallback | `fivetools_data_root`, `homebrew_private`, `fivetools_mcp_index`, `rpg_library_url`, `dgx_*`, `pdf_translators` |
 | `config.yaml` | CampaignGenerator (hand-edited) | YAML, `$VAR` expanded | CWD → `<repo>/config/config.yaml` | prompts, agents, documents, log_dir, `mempalace.*` |
 | `refs.yaml` | CampaignGenerator campaign dir (git-tracked) | YAML | `<campaign-dir>/refs.yaml` | canonical source set + rpglib/homebrew/path refs |
 | `refs.local.yaml` | CampaignGenerator campaign dir (git-ignored) | YAML | `<campaign-dir>/refs.local.yaml` | per-machine root dirs |
