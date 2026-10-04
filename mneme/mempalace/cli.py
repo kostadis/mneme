@@ -11,6 +11,8 @@ import typer
 from hypostasis import config as cfg
 from hypostasis.models import ConfigEntity
 
+from .runner import MempalaceRunner
+
 EXIT_OK = 0
 EXIT_RUNTIME = 1
 EXIT_INVALID_CONFIG = 2
@@ -282,7 +284,10 @@ def migrate(
         raise typer.Exit(EXIT_OK)
     try:
         wc = _publish._clone_workcopy(entity, None, None)
-        result = _migrate.migrate_in_dir(mplan, wc.path / campaign)
+        # GH #46 — verification's `mempalace` calls must see the declared env/backend.
+        result = _migrate.migrate_in_dir(
+            mplan, wc.path / campaign, runner=MempalaceRunner.for_entity(entity)
+        )
     except Exception as e:  # noqa: BLE001 - report any failure and exit non-zero
         typer.echo(f"FAIL migrate: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None

@@ -256,7 +256,7 @@ def report(
     runner: MempalaceRunner | None = None,
 ) -> ConformanceReport:
     recipe = _recipe.current()
-    runner = runner or MempalaceRunner.for_venv(_venv(entity))
+    runner = runner or MempalaceRunner.for_entity(entity)
     if campaign or campaign_dir:
         refs = [_discover.resolve(entity, campaign, campaign_dir)]
     else:
@@ -271,6 +271,3 @@ def format_row(row: ConformanceRow) -> str:
     flag = "ok " if row.ok else "FAIL"
     return f"{flag} {row.campaign:20} {row.dimension:7} {row.state.value:26} {row.note}"
 
-
-def _venv(entity: ConfigEntity):
-    return entity.venv if entity.venv and str(entity.venv) != "." else None

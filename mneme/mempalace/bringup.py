@@ -61,7 +61,7 @@ def bringup(
     verbose: bool = False,
 ) -> BringUpReport:
     rec = recipe or _recipe.current()
-    runner = runner or MempalaceRunner.for_venv(_venv(entity), stream=verbose)
+    runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
     mp_root = _config.mempalace_root(entity)
     config_json = config_json or default_config_json(mp_root)
     ref = _discover.resolve(entity, campaign, campaign_dir)
@@ -139,6 +139,3 @@ def _backup_step(entity: ConfigEntity, campaign: str, campaign_dir: Path) -> Bri
     except Exception as e:  # noqa: BLE001 - report, don't crash bring-up
         return BringUpStep("backup", "failed", note=str(e))
 
-
-def _venv(entity: ConfigEntity):
-    return entity.venv if entity.venv and str(entity.venv) != "." else None

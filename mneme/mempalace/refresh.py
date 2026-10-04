@@ -10,7 +10,6 @@ writes only the index, never the campaign repo.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from hypostasis.models import ConfigEntity
 
@@ -65,13 +64,10 @@ def refresh(
     verbose: bool = False,
 ) -> list[RefreshResult]:
     """Refresh one campaign (``campaign``/``campaign_dir`` set) or all (both None)."""
-    runner = runner or MempalaceRunner.for_venv(_venv(entity), stream=verbose)
+    runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
     if campaign or campaign_dir:
         refs = [_discover.resolve(entity, campaign, campaign_dir)]
     else:
         refs = _discover.discover(entity)
     return [_refresh_one(ref, runner, dry_run) for ref in refs]
 
-
-def _venv(entity: ConfigEntity) -> Path | None:
-    return entity.venv if entity.venv and str(entity.venv) != "." else None

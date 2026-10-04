@@ -115,9 +115,6 @@ def regenerate(
     store = _authority.require_store(cfg).path
     if store.is_dir():
         shutil.rmtree(store)
-    runner = runner or MempalaceRunner.for_venv(_venv(entity), stream=verbose)
+    runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
     return _provision.first_mine(cfg, ref.path, runner)
 
-
-def _venv(entity: ConfigEntity):
-    return entity.venv if entity.venv and str(entity.venv) != "." else None

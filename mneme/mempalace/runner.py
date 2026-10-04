@@ -7,10 +7,15 @@ configured venv (`<venv>/bin/mempalace`) and overridable for tests.
 
 from __future__ import annotations
 
+import functools
 import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from hypostasis.config import ConfigEntity
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 
@@ -19,11 +24,21 @@ class MempalaceError(Exception):
     """A `mempalace` subprocess failed."""
 
 
-def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, capture_output=True, text=True)
+def _merged_env(env: Mapping[str, str] | None) -> dict[str, str]:
+    """Ambient environment with the declared overlay winning (GH #46 — Principle V)."""
+    return {**os.environ, **(env or {})}
 
 
-def _run_stream(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def _run(
+    cmd: list[str], env: Mapping[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Capturing runner. ``env`` (hypostasis ``env:``) is overlaid on ``os.environ``."""
+    return subprocess.run(cmd, capture_output=True, text=True, env=_merged_env(env))
+
+
+def _run_stream(
+    cmd: list[str], env: Mapping[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Streaming runner: do NOT capture — let the child's stdout/stderr inherit our
     terminal so the user sees `mempalace mine` progress live (Principle IX, Observability).
 
@@ -34,8 +49,7 @@ def _run_stream(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     an error message off the captured tail (see :meth:`MempalaceRunner.mine`) get a generic
     "see output above" note in this mode.
     """
-    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    proc = subprocess.run(cmd, env=env)
+    proc = subprocess.run(cmd, env={**_merged_env(env), "PYTHONUNBUFFERED": "1"})
     return subprocess.CompletedProcess(cmd, proc.returncode, stdout="", stderr="")
 
 
@@ -49,20 +63,46 @@ def resolve_binary(venv: Path | None) -> str:
 
 
 class MempalaceRunner:
-    def __init__(self, binary: str = "mempalace", runner: Runner = _run):
+    def __init__(
+        self,
+        binary: str = "mempalace",
+        runner: Runner = _run,
+        env: Mapping[str, str] | None = None,
+    ):
         self.binary = binary
         self.runner = runner
+        # The hypostasis-declared overlay (e.g. MEMPALACE_BACKEND), exposed for assertions.
+        self.env: dict[str, str] = dict(env or {})
 
     @classmethod
     def for_venv(
-        cls, venv: Path | None, runner: Runner | None = None, *, stream: bool = False
+        cls,
+        venv: Path | None,
+        runner: Runner | None = None,
+        *,
+        stream: bool = False,
+        env: Mapping[str, str] | None = None,
     ) -> MempalaceRunner:
         """Build a runner for ``<venv>/bin/mempalace``. ``stream=True`` opts into the
         non-capturing runner so subprocess progress (e.g. `mempalace mine`) is shown live
-        (``-v``/``--verbose`` on the CLI); the default captures for quiet, parseable output."""
+        (``-v``/``--verbose`` on the CLI); the default captures for quiet, parseable output.
+
+        ``env`` is the hypostasis-declared overlay, merged over ``os.environ`` for every
+        subprocess the DEFAULT runners launch (GH #46). An injected ``runner`` is called with
+        just ``cmd`` and owns its own environment."""
         if runner is None:
-            runner = _run_stream if stream else _run
-        return cls(resolve_binary(venv), runner)
+            base = _run_stream if stream else _run
+            runner = functools.partial(base, env=dict(env or {}))
+        return cls(resolve_binary(venv), runner, env)
+
+    @classmethod
+    def for_entity(
+        cls, entity: ConfigEntity, runner: Runner | None = None, *, stream: bool = False
+    ) -> MempalaceRunner:
+        """Runner for the entity's venv carrying ``entity.env`` (GH #46 — Principle V), so
+        `mempalace` sees the declared backend rather than whatever the shell has set."""
+        venv = entity.venv if entity.venv and str(entity.venv) != "." else None
+        return cls.for_venv(venv, runner, stream=stream, env=entity.env)
 
     def _call(self, args: list[str]) -> subprocess.CompletedProcess[str]:
         cmd = [self.binary, *args]
