@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import datetime as _dt
 import shutil
+import sqlite3
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -55,6 +57,57 @@ def has_backup(entity: ConfigEntity, campaign: str) -> bool:
     return latest_backup(entity, campaign) is not None
 
 
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+def _snapshot_file(src: Path, dest: Path) -> None:
+    """Copy one binding file. A SQLite database is snapshotted with the online-backup API,
+    NOT `shutil.copy2`: turbovecdb/mempalace run it in WAL mode, so committed rows can still
+    sit in `store.sqlite3-wal` (e.g. straight after a `mine`) and a bare copy of the main file
+    would silently capture an empty or stale store. Non-SQLite files are copied verbatim."""
+    with src.open("rb") as fh:
+        is_sqlite = fh.read(len(_SQLITE_MAGIC)) == _SQLITE_MAGIC
+    if not is_sqlite:
+        shutil.copy2(src, dest)
+        return
+    try:
+        _sqlite_backup(src, dest, readonly=True)
+    except sqlite3.OperationalError:
+        # A read-only open of a WAL database must create `-shm`; that fails in a read-only
+        # store dir or when the -shm belongs to another user. Never fall back to a bare copy
+        # of the main file (that loses the WAL rows): snapshot db + -wal (+ -shm) privately,
+        # open that copy writable so SQLite replays the WAL, and back up from it.
+        try:
+            with tempfile.TemporaryDirectory(prefix="mneme-backup-") as tmp:
+                local = Path(tmp) / src.name
+                for suffix in ("", "-wal", "-shm"):
+                    side = src.with_name(src.name + suffix)
+                    if side.is_file():
+                        shutil.copy2(side, Path(tmp) / side.name)
+                _sqlite_backup(local, dest, readonly=False)
+        except (sqlite3.Error, OSError) as e:
+            raise BackupError(
+                f"cannot snapshot {src}: read-only open failed and the private-copy fallback "
+                f"failed too ({e}); likely a permission/ownership problem on the store directory "
+                f"or its -wal/-shm files"
+            ) from e
+
+
+def _sqlite_backup(src: Path, dest: Path, *, readonly: bool) -> None:
+    # as_uri() percent-encodes `?`, `#`, `%` etc.; a raw f"file:{src}" would truncate there
+    # and silently open (and back up) a different, empty database.
+    uri = src.resolve().as_uri() + ("?mode=ro" if readonly else "")
+    source = sqlite3.connect(uri, uri=True, timeout=10.0)
+    try:
+        target = sqlite3.connect(dest)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
+
+
 def backup(
     entity: ConfigEntity, campaign: str, *, stamp: str | None = None, campaign_dir: str | None = None
 ) -> BindingsBackup:
@@ -71,7 +124,7 @@ def backup(
         rel = f.relative_to(store)
         out = dest / rel
         out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(f, out)
+        _snapshot_file(f, out)
         contents.append(out)
     (dest / MARKER).write_text("derived/disposable bindings snapshot — not an authority\n")
     return BindingsBackup(campaign=campaign, location=dest, taken=stamp, contents=tuple(contents))
