@@ -159,3 +159,20 @@ def make_campaigns(root: Path) -> Path:
         (bare / "notes.md").write_text("# Notes\n")
 
     return root
+
+
+def add_store_pointer(root: Path, name: str = "full") -> None:
+    """Give an authority-bearing fixture campaign a `store:` pointer (refresh is fail-closed
+    without one — GH #26: it cannot verify a palace it cannot name)."""
+    p = root / name / ".mneme" / "mempalace.yaml"
+    p.write_text(p.read_text() + f"store:\n  alias: {name}\n")
+
+
+ONNX_ENV = {"MEMPALACE_EMBEDDING_PROVIDER": "onnx"}  # explicit embedder (GH #26: no guessing)
+
+
+def with_onnx(entity):
+    """``entity`` declaring the onnx embedder (dim 384, what the stub store records)."""
+    import dataclasses
+
+    return dataclasses.replace(entity, env={**entity.env, **ONNX_ENV})

@@ -7,7 +7,7 @@ import subprocess
 from mneme.mempalace import authority, backup
 from mneme.mempalace.models import CampaignMempalaceConfig, StorePointer, Wing
 from mneme.mempalace.runner import MempalaceRunner
-from tests.fixtures import entity_for
+from tests.fixtures import entity_for, with_onnx
 
 
 def _setup(tmp_path, monkeypatch, campaign="saga"):
@@ -28,7 +28,7 @@ def _setup(tmp_path, monkeypatch, campaign="saga"):
     (store / "turbovec" / "mempalace_drawers" / "index.tvim").write_text("idx")
     (store / "knowledge_graph.sqlite3").write_text("kg")
     (store / "chroma.sqlite3").write_text("legacy")
-    return entity_for(root), store
+    return with_onnx(entity_for(root)), store
 
 
 def test_backup_includes_bindings_excludes_rebuildable_and_legacy(tmp_path, monkeypatch):

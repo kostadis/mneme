@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
+
 from mneme.mempalace import authority, bootstrap, recipe, refresh
+from mneme.mempalace.models import StorePointer
 from mneme.mempalace.runner import MempalaceRunner
 from tests.fixtures import STUB, entity_for, make_campaigns
 
+
+@pytest.fixture(autouse=True)
+def _isolated_home(tmp_path, monkeypatch):
+    """Keep derived palace paths (~/.mempalace/palaces/<alias>) inside tmp_path."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
 def test_bootstrap_then_refresh_builds_index(tmp_path, monkeypatch):
     root = make_campaigns(tmp_path / "campaigns")
@@ -15,6 +25,7 @@ def test_bootstrap_then_refresh_builds_index(tmp_path, monkeypatch):
     # bootstrap writes the starter authority + renders directly into the campaign dir
     # (creation-time write; for an existing-campaign upgrade this would go via workcopy)
     cfg = bootstrap.starter_config("bare1", bare, recipe.current())
+    cfg = replace(cfg, store=StorePointer("bare1", tmp_path / "palaces" / "bare1"))  # GH #26
     bootstrap.write_into(cfg, recipe.current(), bare)
     assert authority.has_authority(bare)
 

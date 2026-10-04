@@ -144,6 +144,9 @@ class State(StrEnum):
     FOREIGN = "foreign"
     UNINTEGRATED = "unintegrated"
     UNVERIFIABLE = "unverifiable"
+    # GH #26b — built vs declared embedding dimension (both are FAIL states)
+    EMBEDDER_MISMATCH = "embedder_mismatch"
+    EMBEDDER_UNVERIFIED = "embedder_unverified"
 
 
 # States that count as a genuine FAIL (non-zero exit). A deliberate, recorded
@@ -153,6 +156,8 @@ FAIL_STATES = frozenset(
         State.INVALID_CONFIG,
         State.DIVERGENT_UNDISPOSITIONED,
         State.STALE_RENDER,
+        State.EMBEDDER_MISMATCH,
+        State.EMBEDDER_UNVERIFIED,
     }
 )
 

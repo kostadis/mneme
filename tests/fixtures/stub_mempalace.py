@@ -43,6 +43,19 @@ def _parse(argv: list[str]) -> tuple[str | None, list[str], str | None]:
     return sub, rest[1:], palace
 
 
+def _write_store(path: Path) -> None:
+    """A real tiny turbovec-like store: `meta(dim=384)` (the onnx default) so the GH #26 guard
+    can read it."""
+    import sqlite3
+
+    path.unlink(missing_ok=True)
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT)")
+    con.execute("INSERT INTO meta VALUES('dim','384')")
+    con.commit()
+    con.close()
+
+
 def main() -> int:
     argv = sys.argv[1:]
     log = os.environ.get("MNEME_STUB_LOG")
@@ -57,7 +70,7 @@ def main() -> int:
             for coll in ("mempalace_drawers", "mempalace_closets"):
                 d = Path(palace) / "turbovec" / coll
                 d.mkdir(parents=True, exist_ok=True)
-                (d / "store.sqlite3").write_text("stub-bindings\n")
+                _write_store(d / "store.sqlite3")
                 (d / "index.tvim").write_text("stub-index\n")
             (Path(palace) / "knowledge_graph.sqlite3").write_text("stub-kg\n")
         return 0

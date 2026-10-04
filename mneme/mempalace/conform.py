@@ -91,7 +91,28 @@ def _recipe_row(cfg: CampaignMempalaceConfig, recipe: Recipe) -> ConformanceRow:
     )
 
 
-def _store_backup_rows(ref, cfg, entity, runner) -> list[ConformanceRow]:
+def _embedder_row(ref, cfg, entity, prober) -> ConformanceRow | None:
+    """GH #26b — built vs effective embedding dimension (Principle I: unknown is not green).
+    No row when the store dir doesn't exist (the `store` row already says not provisioned)."""
+    from . import embedder_guard as _guard
+
+    if not cfg.store.path.is_dir():
+        return None
+    r = _guard.check(entity, cfg.store.path, prober)
+    if r.state is _guard.GuardState.MISMATCH:
+        return ConformanceRow(
+            ref.name, "embedder", State.EMBEDDER_MISMATCH, observed=str(r.built or ""),
+            expected=str(r.expected or ""), note=r.message,
+        )
+    if r.state is _guard.GuardState.UNKNOWN:
+        return ConformanceRow(
+            ref.name, "embedder", State.EMBEDDER_UNVERIFIED, observed=str(r.built or ""),
+            note=r.message,
+        )
+    return ConformanceRow(ref.name, "embedder", State.CONFORMANT, note=r.message)
+
+
+def _store_backup_rows(ref, cfg, entity, runner, prober=None) -> list[ConformanceRow]:
     """003: per-campaign store + backup dimensions (Principle IX), only when the
     authority carries a store pointer and we have the entity (skipped for check_dir)."""
     from hypostasis import config as _config
@@ -115,6 +136,9 @@ def _store_backup_rows(ref, cfg, entity, runner) -> list[ConformanceRow]:
                 ref.name, "store", State.MISSING_CONFIG, note="not provisioned — `mneme mp bringup`"
             )
         )
+    emb = _embedder_row(ref, cfg, entity, prober)
+    if emb is not None:
+        rows.append(emb)
     b = _backup.latest_backup(entity, ref.name)
     rows.append(
         ConformanceRow(
@@ -161,7 +185,7 @@ def _membership_row(ref: CampaignRef, entity=None) -> ConformanceRow:
 
 
 def _campaign_rows(
-    ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None
+    ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None, prober=None
 ) -> list[ConformanceRow]:
     if not ref.has_authority:
         return [
@@ -210,7 +234,7 @@ def _campaign_rows(
             note="documents changed since last index" if stale else "index up to date",
         )
     )
-    rows.extend(_store_backup_rows(ref, cfg, entity, runner))
+    rows.extend(_store_backup_rows(ref, cfg, entity, runner, prober))
     if _authority.has_legacy_store_path(ref.path):
         # FR-013 — it agrees with the derived location (a conflict would have failed the
         # load), so this is owed cleanup, not breakage. Surfacing it is the point: the
@@ -254,6 +278,7 @@ def report(
     *,
     campaign_dir: str | None = None,
     runner: MempalaceRunner | None = None,
+    prober=None,
 ) -> ConformanceReport:
     recipe = _recipe.current()
     runner = runner or MempalaceRunner.for_entity(entity)
@@ -263,7 +288,7 @@ def report(
         refs = _discover.discover(entity)
     rows: list[ConformanceRow] = []
     for ref in refs:
-        rows.extend(_campaign_rows(ref, recipe, runner, entity))
+        rows.extend(_campaign_rows(ref, recipe, runner, entity, prober))
     return ConformanceReport(rows=tuple(rows))
 
 

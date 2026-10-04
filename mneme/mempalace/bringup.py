@@ -18,6 +18,7 @@ from hypostasis.models import ConfigEntity
 from . import authority as _authority
 from . import bootstrap as _bootstrap
 from . import discover as _discover
+from . import embedder_guard as _guard
 from . import provision as _provision
 from . import recipe as _recipe
 from . import render as _render
@@ -59,6 +60,7 @@ def bringup(
     dry_run: bool = False,
     campaign_dir: str | None = None,
     verbose: bool = False,
+    prober=None,
 ) -> BringUpReport:
     rec = recipe or _recipe.current()
     runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
@@ -76,6 +78,13 @@ def bringup(
             steps.append(BringUpStep(name, "skipped", note="dry-run"))
         return BringUpReport(campaign, tuple(steps))
 
+    try:  # GH #26: guard BEFORE any write, so a refused bring-up leaves no file changes
+        _guard.require_writable(entity, cfg.store.path, prober)
+    except MempalaceError as e:
+        steps.append(BringUpStep("configure", "skipped", note="nothing written: guard refused"))
+        steps.append(BringUpStep("first_mine", "failed", note=str(e)))
+        return BringUpReport(campaign, tuple(steps))
+
     _authority.write(cfg, ref.path)  # creation-time direct write (FR-005)
     steps.append(
         BringUpStep("configure", "ok", observed=f".mneme/mempalace.yaml; store={cfg.store.alias}")
@@ -84,7 +93,9 @@ def bringup(
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 
     try:
-        store_path, mined = _provision.first_mine(cfg, ref.path, runner)
+        store_path, mined = _provision.first_mine(
+            cfg, ref.path, runner, entity=entity, prober=prober
+        )
     except MempalaceError as e:
         steps.append(BringUpStep("first_mine", "failed", note=str(e)))
         return BringUpReport(campaign, tuple(steps))  # not-ready (FR-008)

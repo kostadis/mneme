@@ -6,6 +6,7 @@ Pure data, no I/O. The ConfigEntity is the in-memory form of the single authorit
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -139,14 +140,19 @@ class EmbedderDecl:
         return f"{self.provider}:{self.model or '?'} @ {self.endpoint or '—'}"
 
 
-def declared_embedder(entity: ConfigEntity) -> EmbedderDecl | None:
-    """The `MEMPALACE_EMBEDDING_*` triple from `entity.env`, or None if PROVIDER is unset
+def embedder_from_env(env: Mapping[str, str]) -> EmbedderDecl | None:
+    """The `MEMPALACE_EMBEDDING_*` triple from a mapping, or None if PROVIDER is unset
     (GH #26). mempalace would then silently fall back to onnx all-MiniLM-L6-v2 (384-dim)."""
-    provider = entity.env.get("MEMPALACE_EMBEDDING_PROVIDER", "").strip().lower()
+    provider = env.get("MEMPALACE_EMBEDDING_PROVIDER", "").strip().lower()
     if not provider:
         return None
     return EmbedderDecl(
         provider,
-        entity.env.get("MEMPALACE_EMBEDDING_MODEL", "").strip() or None,
-        entity.env.get("MEMPALACE_EMBEDDING_ENDPOINT", "").strip() or None,
+        env.get("MEMPALACE_EMBEDDING_MODEL", "").strip() or None,
+        env.get("MEMPALACE_EMBEDDING_ENDPOINT", "").strip() or None,
     )
+
+
+def declared_embedder(entity: ConfigEntity) -> EmbedderDecl | None:
+    """The embedder declared in `entity.env` (hypostasis.yaml `env:`), or None."""
+    return embedder_from_env(entity.env)

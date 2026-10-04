@@ -11,7 +11,7 @@ import typer
 from hypostasis import config as cfg
 from hypostasis.models import ConfigEntity
 
-from .runner import MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner
 
 EXIT_OK = 0
 EXIT_RUNTIME = 1
@@ -81,7 +81,7 @@ def refresh(
             dry_run=dry_run,
             verbose=verbose,
         )
-    except _discover.DiscoveryError as e:
+    except (_discover.DiscoveryError, MempalaceError) as e:
         typer.echo(f"FAIL refresh: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     rc = EXIT_OK
@@ -356,7 +356,7 @@ def bringup(
             campaign_dir=campaign_dir,
             verbose=verbose,
         )
-    except _discover.DiscoveryError as e:
+    except (_discover.DiscoveryError, MempalaceError) as e:
         typer.echo(f"FAIL bringup: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     for s in report.steps:
@@ -436,7 +436,7 @@ def regenerate(
         store, mined = _backup.regenerate(
             entity, campaign, campaign_dir=campaign_dir, verbose=verbose
         )
-    except _discover.DiscoveryError as e:
+    except (_discover.DiscoveryError, MempalaceError) as e:
         typer.echo(f"FAIL regenerate: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"regenerated {campaign} → {store} (mined: {', '.join(mined) or 'nothing'})")

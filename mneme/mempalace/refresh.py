@@ -10,10 +10,14 @@ writes only the index, never the campaign repo.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
+from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
 
+from . import authority as _authority
 from . import discover as _discover
+from . import embedder_guard as _guard
 from .discover import CampaignRef
 from .runner import MempalaceError, MempalaceRunner
 
@@ -29,23 +33,58 @@ class RefreshResult:
 
     def line(self) -> str:
         if self.skipped:
-            return f"{self.campaign:24} SKIP   no wings configured"
+            return f"{self.campaign:24} SKIP   {self.error or 'no wings configured'}"
         if self.failed:
             return f"{self.campaign:24} FAIL   {self.error}"
         verb = "PLAN" if self.dry_run else "OK"
         return f"{self.campaign:24} {verb:6} mined: {', '.join(self.wings) or '(none)'}"
 
 
-def _refresh_one(ref: CampaignRef, runner: MempalaceRunner, dry_run: bool) -> RefreshResult:
+def _guard_store(ref: CampaignRef, entity: ConfigEntity, prober) -> Path:
+    """GH #26: resolve the campaign's store and refuse to extend an existing palace whose dim
+    mismatches the embedder. FAILS CLOSED: unloadable authority / no store pointer ⇒
+    MempalaceError (we cannot name, hence cannot verify, the palace being mined)."""
+    try:
+        cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
+    except _authority.AuthorityError as e:
+        raise MempalaceError(f"authority unloadable ({'; '.join(e.problems)})") from None
+    if cfg.store is None:
+        raise MempalaceError(
+            "authority has no store pointer — cannot verify the palace; run `mneme mp bringup`"
+        )
+    _guard.require_writable(entity, cfg.store.path, prober)
+    return cfg.store.path
+
+
+def _refresh_one(
+    ref: CampaignRef,
+    runner: MempalaceRunner,
+    dry_run: bool,
+    entity: ConfigEntity | None = None,
+    prober=None,
+) -> RefreshResult:
     result = RefreshResult(campaign=ref.name, dry_run=dry_run)
     if not ref.wing_dirs:
         result.skipped = True
         return result
+    store: Path | None = None
+    if entity is not None and not ref.has_authority:
+        # spec 002 US1: no configuration ⇒ skipped (not failed, not mined).
+        result.skipped = True
+        result.error = "no mneme authority — run `mneme mp bootstrap`/`migrate`"
+        return result
+    if entity is not None:
+        try:
+            store = _guard_store(ref, entity, prober)
+        except MempalaceError as e:
+            result.failed = True
+            result.error = str(e)
+            return result
     # discover returns wing dirs deepest-first → sub-scopes before root (FR-004).
     for wing_dir in ref.wing_dirs:
         rel = str(wing_dir.relative_to(ref.path)) or "."
         try:
-            runner.mine(wing_dir, dry_run=dry_run)
+            runner.mine(wing_dir, palace=store, dry_run=dry_run)
             result.wings.append(rel)
         except MempalaceError as e:
             result.failed = True
@@ -62,6 +101,7 @@ def refresh(
     dry_run: bool = False,
     runner: MempalaceRunner | None = None,
     verbose: bool = False,
+    prober: _guard.Prober | None = None,
 ) -> list[RefreshResult]:
     """Refresh one campaign (``campaign``/``campaign_dir`` set) or all (both None)."""
     runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
@@ -69,5 +109,5 @@ def refresh(
         refs = [_discover.resolve(entity, campaign, campaign_dir)]
     else:
         refs = _discover.discover(entity)
-    return [_refresh_one(ref, runner, dry_run) for ref in refs]
+    return [_refresh_one(ref, runner, dry_run, entity, prober) for ref in refs]
 

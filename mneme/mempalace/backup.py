@@ -18,6 +18,7 @@ from hypostasis.models import ConfigEntity
 
 from . import authority as _authority
 from . import discover as _discover
+from . import embedder_guard as _guard
 from . import health as _health
 from . import provision as _provision
 from .models import BindingsBackup
@@ -108,13 +109,18 @@ def regenerate(
     runner: MempalaceRunner | None = None,
     campaign_dir: str | None = None,
     verbose: bool = False,
+    prober=None,
 ) -> tuple[Path, list[str]]:
     """The ONLY re-embed path (FR-012): clear the store and first-mine from scratch."""
     ref = _discover.resolve(entity, campaign, campaign_dir)
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     store = _authority.require_store(cfg).path
+    # GH #26: verify the embedder answers BEFORE deleting — else a down endpoint leaves
+    # the user with no store and a failed mine.
+    _guard.require_embedder_answers(entity, prober)
     if store.is_dir():
         shutil.rmtree(store)
     runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
-    return _provision.first_mine(cfg, ref.path, runner)
+    # store was just cleared ⇒ the GH #26 guard sees EMPTY and allows (this IS the remedy).
+    return _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
 

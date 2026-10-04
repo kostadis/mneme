@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import subprocess
 
+import pytest
+
 from mneme.mempalace import refresh
 from mneme.mempalace.runner import MempalaceRunner
-from tests.fixtures import entity_for, make_campaigns
+from tests.fixtures import add_store_pointer, entity_for, make_campaigns
 
+
+@pytest.fixture(autouse=True)
+def _isolated_home(tmp_path, monkeypatch):
+    """Keep derived palace paths (~/.mempalace/palaces/<alias>) inside tmp_path."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
 def fake_runner(fail_on: str | None = None):
     calls: list[list[str]] = []
@@ -23,11 +30,12 @@ def fake_runner(fail_on: str | None = None):
 
 def test_refresh_mines_full_subscopes_before_root(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
+    add_store_pointer(root)
     entity = entity_for(root)
     runner, calls = fake_runner()
     results = refresh.refresh(entity, campaign="full", runner=runner)
     assert len(results) == 1 and not results[0].failed and not results[0].skipped
-    mine_targets = [c[2] for c in calls if c[1] == "mine"]
+    mine_targets = [c[c.index("mine") + 1] for c in calls if "mine" in c]
     # the two doc sub-scopes are mined before the campaign root ("." wing)
     root_idx = next(i for i, t in enumerate(mine_targets) if t == str(root / "full"))
     chap_idx = next(i for i, t in enumerate(mine_targets) if t.endswith("docs/chapters"))
@@ -36,6 +44,7 @@ def test_refresh_mines_full_subscopes_before_root(tmp_path):
 
 def test_refresh_skips_campaign_without_wings(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
+    add_store_pointer(root)
     entity = entity_for(root)
     runner, _ = fake_runner()
     results = {r.campaign: r for r in refresh.refresh(entity, runner=runner)}
@@ -46,6 +55,7 @@ def test_refresh_skips_campaign_without_wings(tmp_path):
 
 def test_refresh_isolates_a_failing_campaign(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
+    add_store_pointer(root)
     entity = entity_for(root)
     runner, _ = fake_runner(fail_on="chapters")  # mining the narrative wing fails
     results = {r.campaign: r for r in refresh.refresh(entity, runner=runner)}
@@ -56,7 +66,8 @@ def test_refresh_isolates_a_failing_campaign(tmp_path):
 
 def test_refresh_dry_run_plans_without_real_mine(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
+    add_store_pointer(root)
     entity = entity_for(root)
     runner, calls = fake_runner()
     results = refresh.refresh(entity, campaign="full", dry_run=True, runner=runner)
-    assert results[0].dry_run and all("--dry-run" in c for c in calls if c[1] == "mine")
+    assert results[0].dry_run and all("--dry-run" in c for c in calls if "mine" in c)
