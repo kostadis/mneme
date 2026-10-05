@@ -9,6 +9,8 @@ an undispositioned one is "needs a decision" and IS (FR-027). mneme never guesse
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from hypostasis.models import ConfigEntity
 
 from . import authority as _authority
@@ -186,6 +188,17 @@ def _membership_row(ref: CampaignRef, entity=None) -> ConformanceRow:
     )
 
 
+def sync_scope(ref: CampaignRef, cfg) -> tuple[Path, list[Path]]:
+    """(palace, extra `--root`s) for `mempalace sync` against this campaign's own store.
+
+    Shared by the `index` status row and `mneme mp prune` so the check and the deletion can
+    never look at different scopes (Principle I). Roots: every legitimate source root — the
+    campaign plus each wing's dir (as provision mines them); the campaign itself is `path`."""
+    roots = [ref.path / w.source for w in cfg.wings]
+    extra = [r for r in dict.fromkeys(roots) if r.resolve() != ref.path.resolve()]
+    return cfg.store.path, extra
+
+
 def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow:
     """GH #22 — orphaned-drawer check against the CAMPAIGN's store (Principle I: unknown is
     reported as unknown). New/changed sources are not detectable via the mempalace CLI."""
@@ -194,10 +207,8 @@ def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow
             ref.name, "index", State.INDEX_UNVERIFIED,
             note="no store pointer — index not checked (won't query an unknown palace)",
         )
-    # every legitimate source root: the campaign plus each wing's dir (as provision mines them)
-    roots = [ref.path / w.source for w in cfg.wings]
-    extra = [r for r in dict.fromkeys(roots) if r.resolve() != ref.path.resolve()]
-    chk = runner.is_stale(ref.path, palace=cfg.store.path, roots=extra)
+    palace, extra = sync_scope(ref, cfg)
+    chk = runner.is_stale(ref.path, palace=palace, roots=extra)
     if chk.stale is None:
         return ConformanceRow(
             ref.name, "index", State.INDEX_UNVERIFIED, note=f"unverified: {chk.reason}"
@@ -208,12 +219,14 @@ def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow
         if n:
             parts.append(
                 f"index has {n} orphaned drawers ({chk.missing} missing, "
-                f"{chk.gitignored} gitignored) — run `mneme mp refresh`"
+                f"{chk.gitignored} gitignored) — preview with `mneme mp prune {ref.name}`, "
+                "then `--confirm`"
             )
         if chk.out_of_scope:
             parts.append(
                 f"{chk.out_of_scope} drawers point outside the campaign's sources "
-                "(moved campaign or foreign store?) — run `mneme mp regenerate`"
+                "(moved campaign or foreign store?) — run "
+                f"`mneme mp regenerate {ref.name} --confirm`"
             )
         return ConformanceRow(ref.name, "index", State.STALE, note="; ".join(parts))
     return ConformanceRow(

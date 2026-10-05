@@ -2,7 +2,7 @@
 
 Every other mp test drives ``tests/fixtures/stub_mempalace.py``, so a parser written against
 a fictional output format passes (GH #22: the `sync` report). This test closes that gap: it
-runs bring-up -> status -> orphan detection -> refresh -> backup/restore -> regenerate with
+runs bring-up -> status -> orphan detection -> refresh -> prune -> backup/restore -> regenerate with
 the real binary, a sandboxed HOME, and the real subprocess embedder probe.
 
 Opt-in: set ``MNEME_REAL_MEMPALACE_VENV`` to a venv with mempalace + turbovecdb installed
@@ -18,8 +18,9 @@ import shutil
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
-from mneme.mempalace import backup, bringup, conform, embedder_guard, refresh
+from mneme.mempalace import backup, bringup, cli, conform, embedder_guard, refresh
 from mneme.mempalace.models import State
 from mneme.mempalace.runner import MempalaceRunner
 from tests.fixtures import entity_for
@@ -101,6 +102,24 @@ def test_real_mempalace_end_to_end(tmp_path, monkeypatch):
     # --- refresh succeeds against the real `mine` CLI flags --------------------------------
     results = refresh.refresh(entity, "stormhaven", runner=runner, prober=_REAL_PROBER)
     assert len(results) == 1 and not results[0].failed and not results[0].skipped
+    # ...and cannot clear the orphan: it only mines
+    assert _rows(entity, "stormhaven", runner)["index"].state is State.STALE
+
+    # --- prune: preview (real dry-run), then --confirm (real `sync --apply --root`) --------
+    monkeypatch.setattr(cli, "_load_or_exit", lambda config: entity)
+    monkeypatch.setattr(MempalaceRunner, "for_entity", classmethod(lambda c, e, **k: runner))
+    cli_runner = CliRunner()
+    pv = cli_runner.invoke(cli.app, ["prune", "stormhaven"])
+    print(pv.output)
+    assert pv.exit_code == 0 and "would remove 1 orphaned drawers (1 missing" in pv.output
+    assert "--confirm --expect 1" in pv.output
+    pc = cli_runner.invoke(cli.app, ["prune", "stormhaven", "--confirm", "--expect", "1"])
+    print(pc.output)
+    assert pc.exit_code == 0, pc.output
+    assert "backed up bindings" in pc.output and "verified" in pc.output
+    idx = _rows(entity, "stormhaven", runner)["index"]
+    assert idx.state is State.BUILT, idx
+    assert "no orphaned drawers" in idx.note
 
     # --- backup + restore (into a deleted store): freshness rows sensible ------------------
     snap = backup.backup(entity, "stormhaven")

@@ -21,7 +21,7 @@ EXIT_INVALID_CONFIG = 2
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Manage per-campaign mempalaces (status/refresh/publish/adopt/migrate/bootstrap).",
+    help="Manage per-campaign mempalaces (status/refresh/prune/publish/adopt/migrate/bootstrap).",
 )
 
 _config_opt = typer.Option(
@@ -104,6 +104,70 @@ def refresh(
         if r.failed:
             rc = EXIT_RUNTIME
     raise typer.Exit(rc)
+
+
+# ── prune ─────────────────────────────────────────────────────────────────────
+
+
+@app.command()
+def prune(
+    campaign: str = typer.Argument(..., help="Campaign whose orphaned drawers to remove"),
+    campaign_dir: str = _dir_opt,
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Actually delete (default: preview what would be removed)"
+    ),
+    expect: int = typer.Option(
+        None, "--expect", help="With --confirm (required): the orphan count the preview showed"
+    ),
+    no_backup: bool = typer.Option(
+        False, "--no-backup", help="With --confirm: skip the bindings backup taken first"
+    ),
+    verbose: bool = _verbose_opt,
+    config: str = _config_opt,
+) -> None:
+    """Remove drawers whose source file is missing or gitignored (preview unless --confirm).
+
+    `refresh` only mines and never prunes; deletion is a separate, reviewed, backed-up step."""
+    from . import backup as _backup
+    from . import discover as _discover
+    from . import prune as _prune
+    from .authority import AuthorityError
+
+    if confirm and expect is None:
+        typer.echo(
+            f"FAIL prune: --confirm needs --expect N (the count from the preview) — run "
+            f"`mneme mp prune {campaign}` first, then re-run the command it prints",
+            err=True,
+        )
+        raise typer.Exit(EXIT_RUNTIME)
+    if not confirm and (no_backup or expect is not None):
+        typer.echo("note: --no-backup / --expect are ignored without --confirm (preview only)")
+    entity = _load_or_exit(config)
+
+    def emit(line: str) -> None:
+        typer.echo(line, err=line.startswith("FAIL"))
+
+    try:
+        ok = _prune.prune(
+            entity,
+            campaign,
+            campaign_dir=campaign_dir,
+            confirm=confirm,
+            expect=expect,
+            backup=not no_backup,
+            verbose=verbose,
+            emit=emit,
+        )
+    except _prune.PruneAbort as e:
+        typer.echo(f"FAIL prune: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    except (
+        _backup.BackupError, _discover.DiscoveryError, AuthorityError, MempalaceError, OSError
+    ) as e:
+        # lines already emitted (backup path, counts) stay on screen above this
+        typer.echo(f"FAIL prune: {_err_text(e)}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    raise typer.Exit(EXIT_OK if ok else EXIT_RUNTIME)
 
 
 # ── status (US2) ──────────────────────────────────────────────────────────────
@@ -451,13 +515,19 @@ def restore(
     for d in res.missing:
         advice.append(f"could not evaluate {d} — no {d} row was produced")
     for r in res.rows:
-        if r.state is State.STALE and "regenerate" in r.note:
-            extra = " (supersedes refresh)" if "refresh" in r.note else ""
-            advice.append(
-                f"`mneme mp regenerate {campaign} --confirm`{extra} (drawers out of scope)"
-            )
+        if r.state is State.STALE and r.dimension == "index":
+            # orphans (missing/gitignored) are PRUNED, never refreshed (refresh can't clear
+            # them); out-of-scope drawers need regenerate. Both notes can be present.
+            if "`mneme mp prune " in r.note:
+                advice.append(
+                    f"`mneme mp prune {campaign}` (preview), then `--confirm` (orphaned drawers)"
+                )
+            if "`mneme mp regenerate " in r.note:
+                advice.append(
+                    f"`mneme mp regenerate {campaign} --confirm` (drawers out of scope)"
+                )
         elif r.state is State.STALE:
-            advice.append(f"`mneme mp refresh {campaign}` (orphaned drawers)")
+            advice.append(f"{r.dimension} {r.state.value}: {r.note}")
         elif r.state is State.EMBEDDER_MISMATCH:
             advice.append(f"`mneme mp regenerate {campaign} --confirm` (embedder mismatch)")
         elif r.state in (State.INDEX_UNVERIFIED, State.EMBEDDER_UNVERIFIED):
