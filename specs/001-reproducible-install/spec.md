@@ -184,6 +184,11 @@ and confirm it stops.
 - **FR-004**: Component versions MUST be pinned (git sha/tag or released version) so that a
   `git checkout` or upstream change in one repo cannot silently alter another's behavior.
   Editable-install drift MUST be eliminated for in-scope components.
+  *Amendment (2026-10-05, owner decision):* a top-level `mode: dev` is a declared, opt-in
+  exception. Under it, local `path` components install editable and their `pin` is optional
+  and not enforced; `git`/`pypi` components still require exact pins, `pinned` stays the
+  default, and `status` reports editable components honestly (observed HEAD, dirty flag, and
+  whether the venv is actually editable from that path).
 - **FR-005**: The install MUST be reproducible: the same `hypostasis.yaml` on a fresh venv (or
   a second machine) MUST bring up an equivalent system with no manual path/IP/port edits.
 - **FR-006**: The install MUST fail loudly and name the offending component when a pin or

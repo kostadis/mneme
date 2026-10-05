@@ -1,5 +1,8 @@
 """Install components at exact pins (non-editable) in declared order.
 
+Exception (declared opt-in, FR-004 amendment 2026-10-05): under `mode: dev`, local `path`
+components install editable (`-e <path>`) and skip the pin check; git/pypi are unchanged.
+
 Fail loud (Principle I / FR-006): the first component that cannot be installed at
 its exact pin raises InstallError naming it; the run never reports success on a
 partial result. The command runner is injectable so the orchestration can be
@@ -14,7 +17,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from .models import Component, ConfigEntity
+from .models import Component, ConfigEntity, is_editable
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 
@@ -81,16 +84,26 @@ def _verify_path_pin(comp: Component, runner: Runner) -> None:
 
 
 def install_component(
-    py: Path, comp: Component, runner: Runner = _run, installer: str = "pip"
+    py: Path,
+    comp: Component,
+    runner: Runner = _run,
+    installer: str = "pip",
+    editable: bool = False,
 ) -> None:
-    if comp.source.kind == "path":
+    """Install one component. `editable` (dev mode, `path` only) installs `-e <path>` and
+    skips the pin check — the declared exception to exact pins (FR-004 amendment)."""
+    if editable and comp.source.kind != "path":
+        raise InstallError(comp.name, "editable install requires a local path source")
+    if comp.source.kind == "path" and not editable:
         _verify_path_pin(comp, runner)
     target = pip_target(comp)
-    # Both forms keep `install` as a token and the pin target as the LAST element.
+    # Both forms keep `install` as a token and the target (path, for `-e`) as the LAST
+    # element; `--upgrade -e <path>` is accepted by both pip and uv.
+    tail = ["--upgrade", *(["-e"] if editable else []), target]
     cmd = (
-        ["uv", "pip", "install", "--python", str(py), "--upgrade", target]
+        ["uv", "pip", "install", "--python", str(py), *tail]
         if installer == "uv"
-        else [str(py), "-m", "pip", "install", "--upgrade", target]
+        else [str(py), "-m", "pip", "install", *tail]
     )
     result = runner(cmd)
     if result.returncode != 0:
@@ -107,6 +120,12 @@ def install_all(entity: ConfigEntity, runner: Runner = _run) -> list[str]:
     py = ensure_venv(entity.venv, runner, installer)
     installed: list[str] = []
     for name in entity.order.install:
-        install_component(py, entity.components[name], runner, installer)
+        comp = entity.components[name]
+        install_component(py, comp, runner, installer, editable=is_editable(entity, comp))
         installed.append(name)
     return installed
+
+
+def editable_names(entity: ConfigEntity) -> list[str]:
+    """Names (in install order) of the components `install_all` installs editable."""
+    return [n for n in entity.order.install if is_editable(entity, entity.components[n])]

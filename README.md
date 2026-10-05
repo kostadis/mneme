@@ -32,9 +32,9 @@ override with `$XDG_CONFIG_HOME` or `--config`), **never in the repo**. The comm
 
 | Command | What it does |
 |---|---|
-| `hypostasis install` | install each component at its exact pin (non-editable) in dependency order, then render each component's native config from `hypostasis.yaml` |
+| `hypostasis install` | install each component at its exact pin (non-editable) in dependency order — or, under a declared `mode: dev`, local `path` components editable (`-e`), pin optional — then render each component's native config from `hypostasis.yaml` |
 | `hypostasis apply` | re-render derived configs so nothing runs on a stale copy (Principle V) |
-| `hypostasis status` | report **observed** state — component drift (source HEAD vs pin), service reachability, render drift — never declared. Exit 0 only if every row PASS (Principle I) |
+| `hypostasis status` | report **observed** state — component drift (source HEAD vs pin; in `mode: dev`, `editable @ <sha>` (+dirty) plus a check that the venv install is truly editable), service reachability, render drift — never declared. Exit 0 only if every row PASS (Principle I) |
 
 `hypostasis.yaml` is the single authority: `venv`, `machines`, `data_roots`, `env`, `services`,
 `components`, and `order`. Rendered component configs are derived (stamped, do-not-edit,

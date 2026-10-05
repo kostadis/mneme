@@ -6,6 +6,7 @@ Authoritative config/wiring entity. Hand-edited. One per deployment. See
 ```yaml
 venv: ~/.venvs/main                      # required
 installer: pip                           # optional: pip | uv (default pip) — package/venv tool
+mode: pinned                            # optional: pinned | dev (default pinned) — dev = editable `path` components, pin optional (see invariant 1)
 
 machines:                                # required (>=1; must include dgx)
   dgx:
@@ -52,6 +53,11 @@ repo root is the current worked reference if the two ever drift.*
 
 ## Invariants (validated before any side effect)
 1. `pin` is an exact version or git ref — **no ranges, no editable installs**.
+   *Amendment (2026-10-05, owner decision; FR-004):* an optional top-level
+   `mode: pinned | dev` (default `pinned`; any other value is invalid) is the only place
+   editability is declared. Under `mode: dev`, a `path` component's `pin` is **optional** and
+   informational (never enforced) and `install` uses `-e <path>`; `git`/`pypi` components still
+   require an exact pin. A pin *string* may never be a range or `-e …` in any mode.
 2. Every `order.install` name ∈ `components`; every `order.startup` name ∈ `services`.
 3. `order.*` are acyclic.
 4. Each `managed: true` service defines `start` and `stop`.

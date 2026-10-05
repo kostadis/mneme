@@ -11,6 +11,10 @@
 
 venv: ~/.venvs/main
 
+# mode: pinned                    # pinned (default) | dev. `dev` is a DECLARED opt-in for working on the code:
+#                                 # `path` components install EDITABLE (-e) and their pin becomes optional and
+#                                 # unenforced; git/pypi components still need exact pins. `status` then reports
+#                                 # `editable @ <sha>` (+dirty) and verifies the venv really is editable from that path.
 installer: pip                    # pip | uv — package/venv tool (default pip). uv is an accepted drop-in.
 
 machines:

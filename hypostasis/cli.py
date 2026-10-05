@@ -57,7 +57,7 @@ def _load_or_exit(config_path: str) -> ConfigEntity:
 
 @app.command()
 def install(config: str = _config_opt, json: bool = _json_opt) -> None:
-    """Install all components at their pins (order.install) and render derived configs."""
+    """Install components at their pins (`mode: dev`: path ones editable); render configs."""
     entity = _load_or_exit(config)
 
     try:
@@ -66,6 +66,7 @@ def install(config: str = _config_opt, json: bool = _json_opt) -> None:
         typer.echo(f"FAIL install: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
 
+    editable = inst.editable_names(entity)
     rendered: list[str] = []
     try:
         for derived in rnd.render_all(entity):
@@ -76,11 +77,14 @@ def install(config: str = _config_opt, json: bool = _json_opt) -> None:
         raise typer.Exit(EXIT_RUNTIME) from None
 
     if json:
-        typer.echo(_json.dumps({"installed": installed, "rendered": rendered}))
+        typer.echo(_json.dumps(
+            {"installed": installed, "editable": editable, "rendered": rendered}
+        ))
     else:
         typer.echo(
             f"OK: installed {len(installed)} components "
             f"({', '.join(installed)}); rendered {len(rendered)} configs"
+            + (f"; EDITABLE (dev mode): {', '.join(editable)}" if editable else "")
         )
 
 
@@ -140,7 +144,8 @@ def status(config: str = _config_opt, json: bool = _json_opt) -> None:
     else:
         for r in rows:
             mark = "PASS" if r.ok else "FAIL"
-            line = f"{mark}  {r.kind:9} {r.name:18} {r.observed:24} (pin {r.expected})"
+            exp = "dev mode" if r.expected == "editable (dev mode)" else f"pin {r.expected}"
+            line = f"{mark}  {r.kind:9} {r.name:18} {r.observed:24} ({exp})"
             if r.note:
                 line += f"  · {r.note}"
             typer.echo(line)

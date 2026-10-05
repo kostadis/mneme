@@ -223,3 +223,275 @@ def test_embedder_provider_case_normalized(tmp_path):
     assert row is not None and row.ok
     env = {**_FULL, "MEMPALACE_EMBEDDING_PROVIDER": "Ollama"}
     assert declared_embedder(_mp_entity(tmp_path, env)).provider == "ollama"
+
+
+# ── dev mode (FR-004 amendment, 2026-10-05) ───────────────────────────────────
+
+import json  # noqa: E402
+
+
+def dev_entity(tmp_path, pin=""):
+    e = make_entity(tmp_path, pin=pin)
+    return ConfigEntity(
+        venv=e.venv, machines=e.machines, services=e.services,
+        components=e.components, order=e.order, mode="dev",
+    )
+
+
+def fake_dist(venv, name, url, editable):
+    d = venv / "lib" / "python3.12" / "site-packages" / f"{name}-0.1.dist-info"
+    d.mkdir(parents=True)
+    (d / "direct_url.json").write_text(
+        json.dumps({"url": url, "dir_info": {"editable": editable}})
+    )
+
+
+def git_runner(head, porcelain=""):
+    def run(cmd):
+        out = porcelain if "status" in cmd else head + "\n"
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+    return run
+
+
+def test_dev_component_editable_ok(tmp_path):
+    e = dev_entity(tmp_path)
+    src = (tmp_path / "src")
+    src.mkdir()
+    fake_dist(e.venv, "comp", src.resolve().as_uri(), True)
+    row = status.component_row(e.components["comp"], git_runner("abcdef1234567890"), e)
+    assert row.ok
+    assert row.observed == "editable @ abcdef123456"
+    assert row.expected == "editable (dev mode)"
+
+
+def test_dev_component_dirty_marker_and_pin_note(tmp_path):
+    e = dev_entity(tmp_path, pin="1234567890abcdef")
+    src = tmp_path / "src"
+    src.mkdir()
+    fake_dist(e.venv, "comp", src.resolve().as_uri(), True)
+    row = status.component_row(e.components["comp"], git_runner("abcdef1234567890", " M x.py\n"), e)
+    assert row.ok
+    assert row.observed.endswith("(+dirty)")
+    assert "pin 1234567890ab (not enforced in dev mode)" in row.note
+
+
+def test_dev_component_non_editable_install_fails(tmp_path):
+    e = dev_entity(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    fake_dist(e.venv, "comp", src.resolve().as_uri(), False)
+    row = status.component_row(e.components["comp"], git_runner("abcdef1234567890"), e)
+    assert not row.ok
+    assert "non-editable" in row.note and "hypostasis install" in row.note
+
+
+def test_dev_component_installed_from_elsewhere_fails(tmp_path):
+    e = dev_entity(tmp_path)
+    (tmp_path / "src").mkdir()
+    fake_dist(e.venv, "comp", "file:///somewhere/else", True)
+    row = status.component_row(e.components["comp"], git_runner("abcdef1234567890"), e)
+    assert not row.ok
+    assert "file:///somewhere/else" in row.note
+
+
+def test_dev_component_not_installed_fails(tmp_path):
+    e = dev_entity(tmp_path)
+    row = status.component_row(e.components["comp"], git_runner("abcdef1234567890"), e)
+    assert not row.ok and "not installed" in row.note
+
+
+def test_pinned_mode_unchanged_with_entity(tmp_path):
+    e = make_entity(tmp_path, pin="abc123def456")
+    row = status.component_row(e.components["comp"], fake_runner("abc123def456"), e)
+    assert row.ok and row.expected == "abc123def456"
+
+
+# ── review fixes: pinned-mode leftovers, URL matching, purelib, legacy, non-git ──
+
+def venv_runner(venv, head="abcdef1234567890", porcelain="", git=True):
+    """Answers purelib from the venv's lib/python*/ named by pyvenv.cfg-less `live` dir."""
+    live = venv / "lib" / "python3.12" / "site-packages"
+
+    def run(cmd):
+        if cmd[0].endswith("python"):
+            return subprocess.CompletedProcess(cmd, 0, stdout=str(live) + "\n", stderr="")
+        if not git:
+            return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="no")
+        out = porcelain if "status" in cmd else head + "\n"
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+    return run
+
+
+def pinned_entity(tmp_path, pin="abc123def456"):
+    return make_entity(tmp_path, pin=pin)
+
+
+def test_pinned_mode_fails_on_leftover_editable_install(tmp_path):
+    e = pinned_entity(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    fake_dist(e.venv, "comp", src.resolve().as_uri(), True)
+    row = status.component_row(e.components["comp"], venv_runner(e.venv, "abc123def456"), e)
+    assert not row.ok
+    assert "installed editable but mode is pinned" in row.note
+
+
+def test_pinned_mode_non_editable_keeps_pin_check(tmp_path):
+    e = pinned_entity(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    fake_dist(e.venv, "comp", src.resolve().as_uri(), False)
+    ok = status.component_row(e.components["comp"], venv_runner(e.venv, "abc123def456"), e)
+    assert ok.ok
+    bad = status.component_row(e.components["comp"], venv_runner(e.venv, "9999feedface"), e)
+    assert not bad.ok and "drift" in bad.note
+
+
+def test_pinned_mode_not_installed_unchanged(tmp_path):
+    e = pinned_entity(tmp_path)
+    row = status.component_row(e.components["comp"], venv_runner(e.venv, "abc123def456"), e)
+    assert row.ok
+
+
+def test_url_match_symlinked_parent(tmp_path):
+    real = tmp_path / "real"
+    (real / "src").mkdir(parents=True)
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    e = make_entity(link)  # locator is under the symlink
+    e = ConfigEntity(venv=tmp_path / "venv", machines=e.machines, services=e.services,
+                     components=e.components, order=e.order, mode="dev")
+    # pip records the UN-resolved abspath
+    fake_dist(e.venv, "comp", (link / "src").as_uri(), True)
+    row = status.component_row(e.components["comp"], venv_runner(e.venv), e)
+    assert row.ok, row.note
+
+
+def test_url_match_percent_encoding_and_trailing_slash(tmp_path):
+    spaced = tmp_path / "my src"
+    spaced.mkdir()
+    comp = Component("comp", Source("path", str(spaced)), "")
+    e = ConfigEntity(venv=tmp_path / "venv", machines={}, services={}, components={"comp": comp},
+                     order=Order(install=("comp",), startup=()), mode="dev")
+    fake_dist(e.venv, "comp", spaced.as_uri() + "/", True)  # %20 and trailing slash
+    assert "%20" in spaced.as_uri()
+    assert status.component_row(comp, venv_runner(e.venv), e).ok
+
+
+def test_only_live_purelib_counts(tmp_path):
+    e = dev_entity(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    stale = e.venv / "lib" / "python3.11" / "site-packages" / "comp-0.1.dist-info"
+    stale.mkdir(parents=True)
+    (stale / "direct_url.json").write_text(
+        json.dumps({"url": src.resolve().as_uri(), "dir_info": {"editable": True}}))
+    fake_dist(e.venv, "comp", src.resolve().as_uri(), False)  # live 3.12: non-editable
+    row = status.component_row(e.components["comp"], venv_runner(e.venv), e)
+    assert not row.ok and "non-editable" in row.note
+
+
+def test_purelib_falls_back_to_pyvenv_cfg(tmp_path):
+    e = dev_entity(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (e.venv).mkdir(parents=True)
+    (e.venv / "pyvenv.cfg").write_text("home = /usr\nversion = 3.12.3\n")
+    stale = e.venv / "lib" / "python3.11" / "site-packages" / "comp-0.1.dist-info"
+    stale.mkdir(parents=True)
+    (stale / "direct_url.json").write_text(
+        json.dumps({"url": src.resolve().as_uri(), "dir_info": {"editable": True}}))
+    (e.venv / "lib" / "python3.12" / "site-packages").mkdir(parents=True)
+    row = status.component_row(e.components["comp"], git_runner("abcdef1234567890"), e)
+    assert not row.ok  # interpreter "can't run" (fake), cfg says 3.12, which has nothing
+
+
+def test_legacy_egg_link_and_pth_accepted(tmp_path):
+    e = dev_entity(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    sp = e.venv / "lib" / "python3.12" / "site-packages"
+    sp.mkdir(parents=True)
+    (sp / "comp.egg-link").write_text(f"{src}\n.\n")
+    row = status.component_row(e.components["comp"], venv_runner(e.venv), e)
+    assert row.ok and "legacy" in row.observed
+    (sp / "comp.egg-link").unlink()
+    (sp / "easy-install.pth").write_text(f"import sys\n{src}\n")
+    row = status.component_row(e.components["comp"], venv_runner(e.venv), e)
+    assert row.ok and "legacy" in row.observed
+
+
+def test_dev_non_git_source_ok_depends_on_install(tmp_path):
+    e = dev_entity(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    bad = status.component_row(e.components["comp"], venv_runner(e.venv, git=False), e)
+    assert not bad.ok and bad.observed == "editable @ (no git)"
+    fake_dist(e.venv, "comp", src.resolve().as_uri(), True)
+    good = status.component_row(e.components["comp"], venv_runner(e.venv, git=False), e)
+    assert good.ok and good.observed == "editable @ (no git)"
+
+
+# ── confirmation-review fixes: src layout, marker kinds, precedence, relative .pth ──
+
+def _sp(e):
+    sp = e.venv / "lib" / "python3.12" / "site-packages"
+    sp.mkdir(parents=True, exist_ok=True)
+    return sp
+
+
+def test_legacy_src_layout_accepted(tmp_path):
+    e = dev_entity(tmp_path)
+    (tmp_path / "src" / "src").mkdir(parents=True)
+    (_sp(e) / "comp.egg-link").write_text(f"{tmp_path / 'src' / 'src'}\n.\n")
+    row = status.component_row(e.components["comp"], venv_runner(e.venv), e)
+    assert row.ok and "legacy" in row.observed
+    (_sp(e) / "comp.egg-link").unlink()
+    (_sp(e) / "easy-install.pth").write_text(f"{tmp_path / 'src' / 'src'}\n")
+    assert status.component_row(e.components["comp"], venv_runner(e.venv), e).ok
+
+
+def test_unrelated_pth_is_not_an_editable_marker(tmp_path):
+    (tmp_path / "src").mkdir()
+    e = dev_entity(tmp_path)
+    (_sp(e) / "foo.pth").write_text(f"{tmp_path / 'src'}\n")
+    assert not status.component_row(e.components["comp"], venv_runner(e.venv), e).ok
+    p = pinned_entity(tmp_path)
+    row = status.component_row(p.components["comp"], venv_runner(p.venv, "abc123def456"), p)
+    assert row.ok  # no false "installed editable but mode is pinned"
+
+
+def test_dist_elsewhere_beats_stale_legacy_marker(tmp_path):
+    e = dev_entity(tmp_path)
+    (tmp_path / "src").mkdir()
+    fake_dist(e.venv, "comp", "file:///somewhere/else", False)
+    (_sp(e) / "easy-install.pth").write_text(f"{tmp_path / 'src'}\n")
+    state = status.install_state(e.venv, e.components["comp"], venv_runner(e.venv))
+    assert state[0] == "elsewhere"
+    assert not status.component_row(e.components["comp"], venv_runner(e.venv), e).ok
+
+
+def test_relative_pth_resolves_against_site_packages_not_cwd(tmp_path, monkeypatch):
+    e = dev_entity(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (_sp(e) / "easy-install.pth").write_text(".\n")
+    monkeypatch.chdir(src)
+    state = status.install_state(e.venv, e.components["comp"], venv_runner(e.venv))
+    assert state[0] == "absent"
+
+
+def test_dev_row_spawns_interpreter_once(tmp_path):
+    e = dev_entity(tmp_path)
+    (tmp_path / "src").mkdir()
+    base = venv_runner(e.venv)
+    calls = []
+
+    def counting(cmd):
+        calls.append(cmd)
+        return base(cmd)
+
+    status.component_row(e.components["comp"], counting, e)
+    assert sum(1 for c in calls if c[0].endswith("python")) == 1

@@ -49,6 +49,15 @@ class Component:
     config_target: Path | None = None
 
 
+MODES: tuple[str, ...] = ("pinned", "dev")
+
+
+def is_editable(entity: ConfigEntity, comp: Component) -> bool:
+    """True iff `comp` is installed editable: declared `mode: dev` AND a local `path` source.
+    Declared, never inferred (spec 001 research D6); git/pypi have no tree to edit."""
+    return entity.mode == "dev" and comp.source.kind == "path"
+
+
 @dataclass(frozen=True)
 class Order:
     install: tuple[str, ...]
@@ -90,6 +99,9 @@ class ConfigEntity:
     data_roots: dict[str, tuple[Path, ...]] = field(default_factory=dict)
     env: dict[str, str] = field(default_factory=dict)  # exported to managed services on `up`
     installer: str = "pip"  # package/venv tool: "pip" | "uv" (validated in config.validate)
+    # "pinned" (default: exact pins, non-editable) | "dev" (declared opt-in: `path` components
+    # install editable, pin optional/informational). Validated in config.validate.
+    mode: str = "pinned"
     mneme_identity: MnemeIdentity | None = None  # 005 — minted lazily if absent
     source_path: Path | None = None
 

@@ -243,3 +243,49 @@ def test_repo_hypostasis_yaml_is_valid():
     assert entity.services["dgx"].managed is False
     # env present (mempalace backend)
     assert entity.env.get("MEMPALACE_BACKEND") == "turbovec"
+
+
+# ── mode: pinned | dev (FR-004 amendment, 2026-10-05) ─────────────────────────
+
+def test_mode_defaults_to_pinned(tmp_path):
+    assert load_raw(tmp_path, valid_raw(tmp_path)).mode == "pinned"
+
+
+def test_mode_dev_accepted(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["mode"] = "dev"
+    assert load_raw(tmp_path, raw).mode == "dev"
+
+
+def test_mode_bad_value_rejected(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["mode"] = "yolo"
+    assert_problem(tmp_path, raw, "mode: 'yolo'")
+
+
+def test_dev_path_component_without_pin_ok(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["mode"] = "dev"
+    del raw["components"]["comp"]["pin"]
+    assert load_raw(tmp_path, raw).components["comp"].pin == ""
+
+
+def test_dev_git_and_pypi_without_pin_rejected(tmp_path):
+    for source in ({"git": "https://x/y.git"}, {"pypi": "pkg"}):
+        raw = valid_raw(tmp_path)
+        raw["mode"] = "dev"
+        raw["components"]["comp"] = {"source": source}
+        assert_problem(tmp_path, raw, "missing pin")
+
+
+def test_pinned_path_component_without_pin_rejected(tmp_path):
+    raw = valid_raw(tmp_path)
+    del raw["components"]["comp"]["pin"]
+    assert_problem(tmp_path, raw, "missing pin")
+
+
+def test_dev_mode_still_rejects_editable_pin_string(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["mode"] = "dev"
+    raw["components"]["comp"]["pin"] = "-e ."
+    assert_problem(tmp_path, raw, "range/editable")
