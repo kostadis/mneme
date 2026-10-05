@@ -73,6 +73,8 @@ mneme mp restore CAMPAIGN         # bring bindings back WITHOUT re-embedding (tu
 mneme mp regenerate CAMPAIGN --confirm   # the ONLY re-embed-from-scratch path (e.g. model change)
 mneme mp status [CAMPAIGN]        # per-campaign state incl. store/backup/faces dims (+ why)
 mneme mp refresh --all            # (re)mine every campaign from its own wings, correct order
+mneme mp prune CAMPAIGN           # PREVIEW removing drawers whose source is missing/gitignored (refresh never prunes)
+mneme mp prune CAMPAIGN --confirm --expect N  # N = count the preview showed; backs up, deletes only that set, re-verifies (--no-backup to skip)
 mneme mp render CAMPAIGN --check  # is the derived config still coherent with the authority?
 mneme mp faces CAMPAIGN           # re-render the four faces (cli/cg_search/global_alias/mcp) from the authority
 mneme mp publish --recipe 2.0.0   # stage a recipe upgrade for all campaigns on a proposal branch

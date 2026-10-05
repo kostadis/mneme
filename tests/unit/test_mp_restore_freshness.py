@@ -76,13 +76,26 @@ def test_cli_clean_exit_zero(world, monkeypatch):
     assert "mneme mp refresh stormhaven" in res.output
 
 
-def test_cli_stale_nonzero_recommends_refresh(world, monkeypatch):
+def test_cli_stale_nonzero_recommends_prune(world, monkeypatch):
     entity, _s, runner = world
     monkeypatch.setenv("MNEME_STUB_SYNC", "3,0,0")
     res = _invoke(entity, runner, monkeypatch)
     assert res.exit_code != 0
     assert "NOT fresh" in res.output
-    assert "mneme mp refresh stormhaven" in res.output
+    assert "recommend: `mneme mp prune stormhaven`" in res.output
+    assert "recommend: `mneme mp refresh" not in res.output
+
+
+def test_cli_out_of_scope_recommends_regenerate_and_both(world, monkeypatch):
+    entity, _s, runner = world
+    monkeypatch.setenv("MNEME_STUB_SYNC", "0,0,4")
+    res = _invoke(entity, runner, monkeypatch)
+    assert "mneme mp regenerate stormhaven --confirm" in res.output
+    assert "mneme mp prune" not in res.output
+    monkeypatch.setenv("MNEME_STUB_SYNC", "2,0,4")
+    res = _invoke(entity, runner, monkeypatch)
+    assert "mneme mp regenerate stormhaven --confirm" in res.output
+    assert "mneme mp prune stormhaven" in res.output
 
 
 

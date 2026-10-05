@@ -16,6 +16,11 @@ Palace resolution: `--palace <path>` arg or ``$MEMPALACE_PALACE_PATH`` env.
   ``$MNEME_STUB_SYNC``: ``"<missing>,<gitignored>[,<oos>]"`` (default ``0,0``),
   ``rc1`` (error, rc 1),
   ``nopalace`` ("No palace found", rc 0), or ``garbage``.
+- ``[--palace P] sync <path> [--root R ...] --apply`` → the "removed" report form; logged.
+  With ``$MNEME_STUB_APPLY_STATE`` (a file path) the apply writes it, and any later dry-run
+  reports zero missing/gitignored (out-of-scope kept) — the post-prune check. Without it the
+  counts never change (a prune that did not take). ``$MNEME_STUB_SYNC`` ``applyrc1`` makes
+  the apply exit 1.
 - ``split ...`` → exit 0.
 """
 
@@ -91,8 +96,16 @@ def main() -> int:
         print("ok")
         return 0
 
-    if sub == "sync" and "--dry-run" in subargs:
+    if sub == "sync" and ("--dry-run" in subargs or "--apply" in subargs):
+        apply = "--apply" in subargs
         mode = os.environ.get("MNEME_STUB_SYNC", "0,0")
+        state = os.environ.get("MNEME_STUB_APPLY_STATE")
+        if apply and mode == "applyrc1":
+            print("sync apply exploded", file=sys.stderr)
+            return 1
+        if mode == "applyrc1":
+            mode = "0,0"
+        done = bool(state) and Path(state).exists()
         if mode == "rc1":
             print("sync exploded", file=sys.stderr)
             return 1
@@ -104,13 +117,24 @@ def main() -> int:
             return 0
         counts = [int(x) for x in mode.split(",")]
         missing, gitignored, oos = counts[0], counts[1], (counts[2] if len(counts) > 2 else 0)
-        print("  === MemPalace Sync (dry run) ===")
+        if done and not apply:
+            missing = gitignored = 0
+        suffix = "(removed)" if apply else "(would remove)"
+        print(f"  === MemPalace Sync ({'apply' if apply else 'dry run'}) ===")
         print(f"  Scanned:        {missing + gitignored + 5}")
         print("  Kept:           5")
-        print(f"  Gitignored:     {gitignored}  (would remove)")
-        print(f"  Missing:        {missing}  (would remove)")
+        print(f"  Gitignored:     {gitignored}  {suffix}")
+        print(f"  Missing:        {missing}  {suffix}")
         print("  No source:      0  (kept)")
         print(f"  Out of scope:   {oos}  (kept)")
+        if missing + gitignored:
+            label = "Top sources removed" if apply else "Top sources to remove"
+            print(f"\n  {label}:")
+            print(f"    /stub/gone.md  ({missing + gitignored})")
+        if apply:
+            print(f"\n  Removed {missing + gitignored} drawers, 0 closets.")
+            if state:
+                Path(state).write_text("applied\n")
         return 0
 
     return 0

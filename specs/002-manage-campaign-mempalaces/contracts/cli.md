@@ -27,6 +27,16 @@ Honest cross-campaign conformance. With no `CAMPAIGN`, reports every discovered 
 
 ---
 
+### `mneme mp prune CAMPAIGN [--dir PATH] [--confirm --expect N] [--no-backup] [-v] [--config PATH]`  → GH #22 follow-up
+
+Remove drawers whose source file is **missing or gitignored** (`mempalace sync`), the orphans `refresh` can never clear. Deletion is a separate, reviewed step.
+
+- Default is a **preview** (dry-run sync): counts, top sources, and a note that out-of-scope drawers are untouched (they need `regenerate`). Exit 0.
+- `--confirm` REQUIRES `--expect N` (the count the preview printed, with the exact command to re-run); a fresh count that differs aborts before any backup or deletion. It then backs up the bindings first (`--no-backup` skips; a failed backup aborts), runs `sync --apply`, re-runs the dry-run and verifies no orphans remain (else exit 1). Same `--palace`/`--root` scope as the `status` index row.
+- No store pointer or missing store → `FAIL prune: …`, exit 1. Not exposed over MCP (destructive).
+
+---
+
 ### `mneme mp render CAMPAIGN [--check] [--config PATH]`  → FR-016 (Principle V)
 
 Regenerate the derived wing `mempalace.yaml` + `.mempalaceignore` from the authority, **stamped**. `--check` verifies coherence without writing (used by `status`). Writes (without `--check`) target the **working copy** when the campaign is repo-backed.

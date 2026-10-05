@@ -31,6 +31,20 @@ _MISSING_RE = re.compile(r"^\s*Missing:\s+(\d+)", re.MULTILINE)
 _OUT_OF_SCOPE_RE = re.compile(r"^\s*Out of scope:\s+(\d+)", re.MULTILINE)
 
 
+def _top_sources(text: str) -> tuple[str, ...]:
+    """The indented lines under `Top sources to remove|removed:` (up to the next blank line)."""
+    lines = text.splitlines()
+    for i, ln in enumerate(lines):
+        if ln.strip().startswith("Top sources"):
+            found: list[str] = []
+            for nxt in lines[i + 1:]:
+                if not nxt.strip():
+                    break
+                found.append(nxt.strip())
+            return tuple(found)
+    return ()
+
+
 @dataclass(frozen=True)
 class SyncCheck:
     """Result of `is_stale` (GH #22). `stale` is None when it could not be determined."""
@@ -40,6 +54,7 @@ class SyncCheck:
     gitignored: int
     out_of_scope: int = 0
     reason: str = ""
+    top_sources: tuple[str, ...] = ()  # "path  (n)" lines from the report's top-sources list
 
 
 @dataclass(frozen=True)
@@ -217,10 +232,31 @@ class MempalaceRunner:
         source roots (multi-root wings); drawers outside every root are `out_of_scope`
         (a moved campaign or a foreign store) and count as stale.
         """
+        return self.sync(path, palace, roots, apply=False)
+
+    def sync(
+        self,
+        path: Path,
+        palace: Path | str | None = None,
+        roots: Sequence[Path | str] = (),
+        apply: bool = False,
+    ) -> SyncCheck:
+        """`mempalace [--palace P] sync <path> [--root R ...] (--dry-run | --apply)`.
+
+        Dry-run never raises (unknown is `stale=None`, Principle I). `apply` DELETES the
+        drawers whose source is missing or gitignored (out-of-scope are kept) — deletion is
+        an explicit, reviewed step (`mneme mp prune`); a failed or unparseable apply raises
+        `MempalaceError` so a caller never assumes it worked.
+        """
         root_args = [a for r in roots for a in ("--root", str(r))]
-        out = self._call(self._with_palace(palace, "sync", str(path), *root_args, "--dry-run"))
+        mode = "--apply" if apply else "--dry-run"
+        out = self._call(self._with_palace(palace, "sync", str(path), *root_args, mode))
         if out.returncode != 0:
             detail = (out.stderr or out.stdout or "").strip()[-200:]
+            if apply:
+                raise MempalaceError(
+                    f"mempalace sync --apply {path} failed (rc {out.returncode}): {detail}"
+                )
             return SyncCheck(None, 0, 0, 0, f"sync failed (rc {out.returncode}): {detail}")
         text = out.stdout or ""
         gi = _GITIGNORED_RE.search(text)
@@ -229,11 +265,14 @@ class MempalaceRunner:
             first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "no output")
             err = (out.stderr or "").strip()[-200:]
             tail = f"; stderr: {err}" if err else ""
-            return SyncCheck(None, 0, 0, 0, f"no sync report ({first[:120]}){tail}")
+            reason = f"no sync report ({first[:120]}){tail}"
+            if apply:
+                raise MempalaceError(f"mempalace sync --apply {path}: {reason}")
+            return SyncCheck(None, 0, 0, 0, reason)
         g, m = int(gi.group(1)), int(ms.group(1))
         oo = _OUT_OF_SCOPE_RE.search(text)
         o = int(oo.group(1)) if oo else 0
-        return SyncCheck(g + m + o > 0, m, g, o, "")
+        return SyncCheck(g + m + o > 0, m, g, o, "", _top_sources(text))
 
     def split(self, path: Path, *extra: str) -> None:
         out = self._call(["split", str(path), *extra])
