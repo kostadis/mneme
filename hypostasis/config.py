@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 
 from .models import (
+    MODES,
     Component,
     ConfigEntity,
     Health,
@@ -135,6 +136,7 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
 
     # Which tool installs components / creates the venv (pip default; uv is a drop-in).
     installer = str(raw.get("installer") or "pip").strip()
+    mode = str(raw.get("mode") or "pinned").strip()
 
     machines: dict[str, Machine] = {}
     for name, m in (raw.get("machines") or {}).items():
@@ -209,6 +211,7 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
         data_roots=data_roots,
         env=env,
         installer=installer,
+        mode=mode,
         mneme_identity=mneme_identity,
         source_path=path,
     )
@@ -249,10 +252,18 @@ def validate(entity: ConfigEntity, raw: dict) -> list[str]:
     if entity.installer not in ("pip", "uv"):
         p.append(f"installer: '{entity.installer}' is not supported (use 'pip' or 'uv')")
 
+    # `mode` is declared, never inferred (FR-004 amendment, 2026-10-05 owner decision).
+    if entity.mode not in MODES:
+        p.append(f"mode: '{entity.mode}' is not supported (use 'pinned' or 'dev')")
+    dev = entity.mode == "dev"
+
     for name, c in entity.components.items():
-        # Invariant 1 — exact pins.
+        # Invariant 1 — exact pins. In dev mode a `path` component's pin is optional (and
+        # informational, never enforced); git/pypi still need one (no local tree to edit).
+        # The pin STRING may never be editable/a range: dev mode, not the pin, makes -e.
         if not c.pin:
-            p.append(f"component '{name}': missing pin")
+            if not (dev and c.source.kind == "path"):
+                p.append(f"component '{name}': missing pin")
         elif _is_range_or_editable(c.pin):
             p.append(
                 f"component '{name}': pin '{c.pin}' is a range/editable — "
