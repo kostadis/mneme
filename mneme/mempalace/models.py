@@ -150,6 +150,9 @@ class State(StrEnum):
     # GH #22 — orphan check could not run/parse; environmental, so NOT a FAIL state, but
     # rendered distinctly (never as ok)
     INDEX_UNVERIFIED = "index_unverified"
+    # GH #31 — the last mine skipped named files (a known index gap). Like INDEX_UNVERIFIED:
+    # not a FAIL state, rendered `??`, fails only under --strict.
+    INDEX_GAPS = "index_gaps"
 
 
 # States that count as a genuine FAIL (non-zero exit). A deliberate, recorded
@@ -164,6 +167,9 @@ FAIL_STATES = frozenset(
     }
 )
 
+# Not failures (exit 0) but never green: the index is unverified or has known gaps.
+_NOT_OK_STATES = frozenset({State.INDEX_UNVERIFIED, State.INDEX_GAPS})
+
 
 @dataclass(frozen=True)
 class ConformanceRow:
@@ -177,7 +183,7 @@ class ConformanceRow:
 
     @property
     def ok(self) -> bool:
-        return self.state not in FAIL_STATES and self.state is not State.INDEX_UNVERIFIED
+        return self.state not in FAIL_STATES and self.state not in _NOT_OK_STATES
 
 
 @dataclass(frozen=True)
@@ -192,7 +198,7 @@ class ConformanceReport:
             if r.state in FAIL_STATES:
                 return 1
             # strict = "the index must be verified fresh" (GH #22)
-            if strict and r.state in (State.STALE, State.INDEX_UNVERIFIED):
+            if strict and r.state in (State.STALE, State.INDEX_UNVERIFIED, State.INDEX_GAPS):
                 return 1
         return 0
 
@@ -298,6 +304,8 @@ class BringUpReport:
     campaign: str
     steps: tuple[BringUpStep, ...]
     owed: tuple[str, ...] = ()
+    skips: tuple = ()  # GH #31: (wing, SkipNotice) pairs from the first mine
+    warnings: tuple[str, ...] = ()  # GH #31: e.g. the mine record could not be written
 
     @property
     def ready(self) -> bool:

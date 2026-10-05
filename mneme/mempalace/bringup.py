@@ -93,12 +93,14 @@ def bringup(
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 
     try:
-        store_path, mined = _provision.first_mine(
-            cfg, ref.path, runner, entity=entity, prober=prober
-        )
+        fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
+        store_path, mined = fm
     except MempalaceError as e:
         steps.append(BringUpStep("first_mine", "failed", note=str(e)))
-        return BringUpReport(campaign, tuple(steps))  # not-ready (FR-008)
+        warns = (e.record_warning,) if getattr(e, "record_warning", None) else ()
+        return BringUpReport(  # not-ready (FR-008)
+            campaign, tuple(steps), skips=tuple(getattr(e, "skips", ())), warnings=warns
+        )
     steps.append(BringUpStep("provision", "ok", observed=str(store_path)))
     steps.append(
         BringUpStep("first_mine", "ok", observed=f"mined: {', '.join(mined) or 'nothing yet'}")
@@ -110,7 +112,9 @@ def bringup(
     else:
         steps.append(BringUpStep("backup", "skipped", note="--no-backup"))
 
-    return BringUpReport(campaign, tuple(steps))
+    return BringUpReport(campaign, tuple(steps), skips=tuple(fm.skips),
+        warnings=(fm.record_warning,) if fm.record_warning else (),
+    )
 
 
 def render_existing_faces(

@@ -41,8 +41,16 @@ def test_default_runner_overlay_wins_over_ambient(tmp_path, monkeypatch):
 
 
 def test_stream_runner_gets_overlay_and_unbuffered(tmp_path, monkeypatch):
+    """The tee runner (GH #31) launches via Popen; the overlay + PYTHONUNBUFFERED still apply."""
     monkeypatch.setenv("MEMPALACE_BACKEND", "chroma")
-    seen = _capture(monkeypatch)
+    seen: list[dict] = []
+    real = subprocess.Popen
+
+    def spy(cmd, **kw):
+        seen.append({"cmd": cmd, **kw})
+        return real(["true"], **{k: v for k, v in kw.items() if k != "env"})
+
+    monkeypatch.setattr(subprocess, "Popen", spy)
     MempalaceRunner.for_entity(_entity(tmp_path), stream=True).mine(tmp_path)
     assert seen[0]["env"]["MEMPALACE_BACKEND"] == "turbovec"
     assert seen[0]["env"]["PYTHONUNBUFFERED"] == "1"

@@ -9,6 +9,8 @@ Palace resolution: `--palace <path>` arg or ``$MEMPALACE_PALACE_PATH`` env.
 
 - ``mine <path> [--palace P] [--dry-run]`` → exit 0; on a real (non-dry) run, create a
   fake turbovec store at ``P/turbovec/mempalace_drawers/{store.sqlite3,index.tvim}``.
+  ``$MNEME_STUB_MINE_SKIPS`` (GH #31): newline-separated lines the mine prints; a line
+  starting ``out:`` goes to stdout (the older mempalace), anything else to stderr.
 - ``status [--palace P]`` → exit 0, prints ``ok``.
 - ``[--palace P] sync <path> --dry-run`` → the REAL report format (GH #22). Counts via
   ``$MNEME_STUB_SYNC``: ``"<missing>,<gitignored>[,<oos>]"`` (default ``0,0``),
@@ -67,6 +69,13 @@ def main() -> int:
             fh.write(" ".join(argv) + "\n")
 
     sub, subargs, palace = _parse(argv)
+
+    if sub == "mine":
+        for line in os.environ.get("MNEME_STUB_MINE_SKIPS", "").split("\n"):
+            if line.startswith("out:"):
+                print(line[4:], flush=True)
+            elif line:
+                print(line, file=sys.stderr, flush=True)
 
     if sub == "mine" and "--dry-run" not in subargs:
         if palace:

@@ -23,6 +23,7 @@ from . import authority as _authority
 from . import discover as _discover
 from . import embedder_guard as _guard
 from . import health as _health
+from . import mine_record as _mine_record
 from . import provision as _provision
 from .models import FAIL_STATES, BindingsBackup, ConformanceRow, State
 from .runner import MempalaceRunner
@@ -143,6 +144,10 @@ class RestoreResult:
 
 _FRESHNESS_DIMS = ("recipe", "render", "embedder", "index", "store")
 _NOT_FRESH = (State.STALE, State.INDEX_UNVERIFIED)
+# GH #31: the `gaps` row (INDEX_GAPS / no-record INDEX_UNVERIFIED) is deliberately NOT a
+# freshness dimension: a restore replaces the store and never re-mines, so the restored store
+# has no mine record by construction, and skipped files are a property of the sources, not of
+# whether the restored bindings are stale. INDEX_GAPS is therefore not in _NOT_FRESH.
 
 
 def _precheck_embedder(entity: ConfigEntity, campaign: str, src: Path, prober) -> None:
@@ -227,6 +232,9 @@ def restore(
         if aside is not None:
             aside.rename(target)
         raise
+    if aside is not None:  # GH #31: skips belong to the sources, which restore doesn't change
+        stamp = aside.name.rsplit(".pre-restore-", 1)[-1]
+        _mine_record.carry_over(aside, target, f"restore {stamp}")
     # no mine/embed invoked — bindings preserved; now observe, don't assume
     runner = runner or MempalaceRunner.for_entity(entity)
     # One resolved ref per call; with --dir its rows are named after the workspace dir, not the
