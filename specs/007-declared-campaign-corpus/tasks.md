@@ -196,11 +196,11 @@ Every user story needs these.
 
 **Independent Test**: quickstart scenario 4.
 
-- [ ] T035 [US3] Create `mneme/corpus/cli.py` with a Typer app and `check` plus `toc [--kind K] [--json] [--write]` (`contracts/cli.md`). `toc` always resolves fresh from `corpus.yaml` and the disk (never from the snapshot) and exits non-zero on an invalid configuration. `--write` also refreshes the snapshot. This is the consumer entry point (FR-012). Register it in `mneme/cli.py` with `app.add_typer(corpus_app, name="corpus")`. Both take `--config` and `--dir` like `mneme mp`.
-- [ ] T036 [P] [US3] Add an MCP tool `corpus_files(campaign: str, kind: str) -> dict` in `mneme/mcp/server.py`, beside `get_status`. It resolves fresh on every call (same code as `corpus toc`), looks the campaign up with `_discover.resolve()` (never `find()`; PR #61), and returns `{files}` or `{error: "invalid"|"not-declared", detail}`.
-- [ ] T037 [P] [US3] Integration test `tests/integration/test_corpus_toc_readers.py` for quickstart scenario 4: `mneme corpus toc --json` and `corpus_files` return identical lists; a file added to a declared dir appears in both with no render; a hand-edited snapshot affects neither, and status reports `toc-stale`; an invalid `corpus.yaml` is refused by both; an undeclared kind gets "not declared", not `[]`.
-- [ ] T038 [P] [US3] Add a "Declared corpus" section to `mneme/recipes/instructions/manage-mempalace.md`: the `corpus.yaml` shape, the TOC, the consumer obligations (read the TOC, refuse when stale), and `mined_as`. The `mneme mp mcp` server serves it.
-- [ ] T039 (Opus) Gate US3: ruff, pytest, diff review.
+- [X] T035 [US3] Create `mneme/corpus/cli.py` with a Typer app and `check` plus `toc [--kind K] [--json] [--write]` (`contracts/cli.md`). `toc` always resolves fresh from `corpus.yaml` and the disk (never from the snapshot) and exits non-zero on an invalid configuration. `--write` also refreshes the snapshot. This is the consumer entry point (FR-012). Register it in `mneme/cli.py` with `app.add_typer(corpus_app, name="corpus")`. Both take `--config` and `--dir` like `mneme mp`.
+- [X] T036 [P] [US3] Add an MCP tool `corpus_files(campaign: str, kind: str) -> dict` in `mneme/mcp/server.py`, beside `get_status`. It resolves fresh on every call (same code as `corpus toc`), looks the campaign up with `_discover.resolve()` (never `find()`; PR #61), and returns `{files}` or `{error: "invalid"|"not-declared", detail}`.
+- [X] T037 [P] [US3] Integration test `tests/integration/test_corpus_toc_readers.py` for quickstart scenario 4: `mneme corpus toc --json` and `corpus_files` return identical lists; a file added to a declared dir appears in both with no render; a hand-edited snapshot affects neither, and status reports `toc-stale`; an invalid `corpus.yaml` is refused by both; an undeclared kind gets "not declared", not `[]`.
+- [X] T038 [P] [US3] Add a "Declared corpus" section to `mneme/recipes/instructions/manage-mempalace.md`: the `corpus.yaml` shape, the TOC, the consumer obligations (read the TOC, refuse when stale), and `mined_as`. The `mneme mp mcp` server serves it.
+- [X] T039 (Opus) Gate US3: ruff, pytest, diff review.
 
 ---
 

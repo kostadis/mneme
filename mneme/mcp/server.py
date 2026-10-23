@@ -13,6 +13,7 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
+from mneme.corpus import api as _corpus_api
 from mneme.mempalace import authority as _authority
 from mneme.mempalace import conform as _conform
 from mneme.mempalace import discover as _discover
@@ -66,6 +67,18 @@ def status(entity: ConfigEntity, campaign: str | None = None) -> list[dict]:
             }
         )
     return out
+
+
+def corpus_files(entity: ConfigEntity, campaign: str, kind: str) -> dict:
+    """FR-012/013/021: the files of one kind, resolved fresh from `corpus.yaml` on every call
+    (same code as `mneme corpus toc`; never the snapshot). Consumers MUST take their files from
+    here and refuse on ``error``. A DiscoveryError (unknown/foreign/alias-clash) propagates."""
+    ref = _discover.resolve(entity, campaign)
+    answer = _corpus_api.consult(ref.path, _recipe.current(), kind)
+    if "error" in answer:
+        return {"campaign": campaign, "kind": kind, "error": answer["error"],
+                "detail": answer["detail"]}
+    return {"campaign": campaign, "kind": kind, "files": answer["toc"]["kinds"][kind]["files"]}
 
 
 def inventory(entity: ConfigEntity, campaign: str) -> dict:
@@ -172,6 +185,12 @@ def build_server(entity: ConfigEntity):
     def get_status(campaign: str | None = None) -> list[dict]:
         """Observed per-campaign conformance, each divergence paired with its disposition."""
         return status(entity, campaign)
+
+    @mcp.tool(name="corpus_files")
+    def corpus_files_tool(campaign: str, kind: str) -> dict:
+        """The files of one declared corpus kind, resolved fresh on every call. Read ONLY these
+        files; on an `error` (invalid / not-declared) refuse and never glob."""
+        return corpus_files(entity, campaign, kind)
 
     @mcp.tool()
     def get_campaign_inventory(campaign: str) -> dict:
