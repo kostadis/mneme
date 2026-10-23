@@ -14,12 +14,14 @@ from pathlib import Path
 import yaml
 
 from hypostasis.models import ConfigEntity
+from mneme.corpus.config import CORPUS_REFUSAL, has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
 from . import recipe as _recipe
 from . import render as _render
 from .models import CampaignMempalaceConfig, Recipe, Room, StorePointer, Wing
+from .runner import MempalaceError
 
 
 def _trust_for(wing_name: str, recipe: Recipe) -> str:
@@ -101,6 +103,8 @@ def consolidate_config(
     campaign: str, campaign_dir: Path, recipe: Recipe
 ) -> CampaignMempalaceConfig:
     """FR-017: build one authority from existing scattered per-wing mempalace.yaml files."""
+    if has_corpus(campaign_dir):  # 007: the root mempalace.yaml is not a wing here
+        raise MempalaceError(CORPUS_REFUSAL)
     wings: list[Wing] = []
     for wing_dir in _discover._existing_wing_dirs(campaign_dir):  # deepest-first
         try:

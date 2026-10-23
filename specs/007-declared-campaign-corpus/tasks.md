@@ -92,13 +92,13 @@ Every user story needs these.
   - Add `KindDef(name, default_trust, rooms_hint)` to `mneme/mempalace/models.py` and `kinds: tuple[KindDef, ...] = ()` to `Recipe`.
   - Parse `kinds:` in `mneme/mempalace/recipe.py` `_parse`. v1/v2 yield no kinds.
   - Tests in `tests/unit/test_mp_recipe_v3.py`: v3 loads five kinds with the ratified trusts, v2 loads none, and `current()` returns v3.
-- [ ] T013 Implement `mneme/corpus/config.py`:
+- [X] T013 Implement `mneme/corpus/config.py`:
   - Dataclasses `CorpusConfig`, `KindDecl`, and `load(campaign_dir, recipe) -> CorpusConfig` raising `CorpusConfigError(findings)`.
   - Enforce `contracts/corpus-yaml.md` and data-model validation rules 1–3 and 6 (the structural half: at most one `mined_as` per shared file, trust agreement), plus unknown-key rejection. Rule 8 (`empty-corpus`) needs resolution and belongs to T014.
   - Error codes: `unknown-kind`, `shadowed-kind`, `missing-trust`, `empty-declaration`, `path-escape`, `trust-conflict`, `ambiguous-mining-kind`, `campaign-mismatch`.
   - `corpus_sha256` is the sha256 of the raw file bytes.
   - Table-driven tests in `tests/unit/test_corpus_config.py`, one case per code (quickstart scenario 5).
-- [ ] T014 Implement `mneme/corpus/resolve.py`:
+- [X] T014 Implement `mneme/corpus/resolve.py`:
   - `resolve(cfg, campaign_dir, recipe) -> ResolvedCorpus` per data-model § ResolvedCorpus.
   - Expand `dirs` recursively and classify each file as minable, non-minable (extension outside mempalace's readable set; mirror the list in a constant with a comment citing `miner.py:140-181`), not_materialized (`git ls-files -t` reports `S`) or missing.
   - Resolve symlinks: a declared symlink (or one inside a declared dir) that resolves to a regular file inside the campaign is minable, with `target` set to the resolved campaign-relative path. Symlinked directories are followed. Resolving outside the campaign gives `symlink-outside`, and resolving to a non-file gives `symlink-not-file`.
@@ -106,14 +106,14 @@ Every user story needs these.
   - Assign each file its mining kind (R2). Overlaps discovered only through `dirs` expansion are checked here: emit `ambiguous-mining-kind` (shared by more than one kind, with zero or several `mined_as` marks) and `trust-conflict`.
   - Emit `empty-corpus` when the whole declaration resolves to no files (data-model rule 8).
   - Tests in `tests/unit/test_corpus_resolve.py`, using a temporary git repo with sparse/skip-worktree, an in-campaign symlink through a symlinked dir (the out-of-the-abyss `docs/party.md → grounding/current/party.md` shape), an out-of-campaign symlink, a gitignored file, a `.pdf` and a file shared across kinds.
-- [ ] T015 Implement `mneme/corpus/toc.py` per `contracts/toc-json.md`:
+- [X] T015 Implement `mneme/corpus/toc.py` per `contracts/toc-json.md`:
   - `build(resolved, cfg, recipe) -> dict`, `write(campaign_dir, toc)` (atomic write, then append `.mneme/corpus.toc.json` to the campaign `.gitignore` if it is missing), `read(campaign_dir)`.
   - The file is a **snapshot** (GM decision 2026-10-23: consumers re-resolve on read and never read it). `verify(campaign_dir, fresh) -> TocCheck` compares the snapshot with a fresh resolution and returns missing, stale (differs in stamp, file set or hashes, which covers a new file in a declared dir and a hand-edited file list) or ok. Status uses it for `toc-stale`.
   - `files_for(toc, kind)` distinguishes a kind that is not declared from one that is declared but empty.
   - Each file entry carries `target` when the declared path is a symlink (`contracts/toc-json.md`).
   - Tests in `tests/unit/test_corpus_toc.py`, including "file added to a declared dir after render" and "hand-edited `files[]` with the stamp kept", both reported stale.
-- [ ] T016 Add the dual-authority check to `mneme/mempalace/authority.py`. When `.mneme/corpus.yaml` exists and `.mneme/mempalace.yaml` has `wings:` or `extra_exclusions:`, `load()` raises `AuthorityError` with `dual-authority`, naming both files (research R8, FR-001a). When `corpus.yaml` is present, `wings` may be absent; the existing "no wings" validation must not fire. Tests go in the existing authority unit tests.
-- [ ] T017 Guard every wing-model mining path against corpus campaigns. In `mneme/mempalace/refresh.py` (`_refresh_one`), `mneme/mempalace/provision.py` (`first_mine`), `mneme/mempalace/bootstrap.py` (`:105` loop) and `mneme/mempalace/conform.py` (`check_dir`, `:358-365`), when `.mneme/corpus.yaml` exists, never iterate `wing_dirs`. Those paths now either hand off to the corpus path (refresh, first_mine) or refuse with "corpus campaign — mining is driven by .mneme/corpus.yaml". The reason: a corpus campaign keeps a root `mempalace.yaml`, so `_existing_wing_dirs` returns the campaign root and a wing-model mine would mine the whole tree, the exact fail-open this feature removes. Unit tests in `tests/unit/test_corpus_guards.py` assert that no `mine <campaign root>` without `--files-from` is ever issued for a corpus campaign (check the stub log).
+- [X] T016 Add the dual-authority check to `mneme/mempalace/authority.py`. When `.mneme/corpus.yaml` exists and `.mneme/mempalace.yaml` has `wings:` or `extra_exclusions:`, `load()` raises `AuthorityError` with `dual-authority`, naming both files (research R8, FR-001a). When `corpus.yaml` is present, `wings` may be absent; the existing "no wings" validation must not fire. Tests go in the existing authority unit tests.
+- [X] T017 Guard every wing-model mining path against corpus campaigns. In `mneme/mempalace/refresh.py` (`_refresh_one`), `mneme/mempalace/provision.py` (`first_mine`), `mneme/mempalace/bootstrap.py` (`:105` loop) and `mneme/mempalace/conform.py` (`check_dir`, `:358-365`), when `.mneme/corpus.yaml` exists, never iterate `wing_dirs`. Those paths now either hand off to the corpus path (refresh, first_mine) or refuse with "corpus campaign — mining is driven by .mneme/corpus.yaml". The reason: a corpus campaign keeps a root `mempalace.yaml`, so `_existing_wing_dirs` returns the campaign root and a wing-model mine would mine the whole tree, the exact fail-open this feature removes. Unit tests in `tests/unit/test_corpus_guards.py` assert that no `mine <campaign root>` without `--files-from` is ever issued for a corpus campaign (check the stub log).
 - [ ] T018 (Opus) Gate Phase 2: `ruff check hypostasis mneme tests` and `pytest` in `~/src/mneme-007`. Read the diff against the contracts before Phase 3.
 
 **Checkpoint**: the corpus can be loaded, validated, resolved and published as a TOC, and the runner can drive the new verbs.

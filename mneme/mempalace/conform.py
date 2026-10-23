@@ -353,11 +353,17 @@ def check_dir(
     from pathlib import Path
 
     from hypostasis import config as _config
+    from mneme.corpus.config import CORPUS_REFUSAL, has_corpus
 
     from . import authority as _auth
     from .discover import CampaignRef, _existing_wing_dirs
 
     cdir = Path(campaign_dir)
+    if has_corpus(cdir):
+        # 007: wing_dirs of a corpus campaign is its root; a wing-model check would be a lie.
+        return ConformanceReport(rows=(
+            ConformanceRow(cdir.name, "recipe", State.INVALID_CONFIG, note=CORPUS_REFUSAL),
+        ))
     ref = CampaignRef(
         name=cdir.name,
         path=cdir,

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
+from mneme.corpus.config import CORPUS_REFUSAL, has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
@@ -75,6 +76,12 @@ def _refresh_one(
     prober=None,
 ) -> RefreshResult:
     result = RefreshResult(campaign=ref.name, dry_run=dry_run)
+    if has_corpus(ref.path):
+        # 007: a corpus campaign keeps a root mempalace.yaml, so wing_dirs would be the whole
+        # tree. FAIL (not skip): it is not being refreshed, and must not read as quiet.
+        result.failed = True
+        result.error = CORPUS_REFUSAL
+        return result
     if not ref.wing_dirs:
         result.skipped = True
         return result

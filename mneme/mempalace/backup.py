@@ -18,6 +18,7 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
+from mneme.corpus.config import CORPUS_REFUSAL, has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
@@ -26,7 +27,7 @@ from . import health as _health
 from . import mine_record as _mine_record
 from . import provision as _provision
 from .models import FAIL_STATES, BindingsBackup, ConformanceRow, State
-from .runner import MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner
 
 MARKER = ".mneme-backup"  # labels a backup dir as derived/disposable
 
@@ -268,6 +269,8 @@ def regenerate(
     ref = _discover.resolve(entity, campaign, campaign_dir)
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     store = _authority.require_store(cfg).path
+    if has_corpus(ref.path):  # 007: refuse BEFORE the store is deleted, not after
+        raise MempalaceError(CORPUS_REFUSAL)
     # GH #26: verify the embedder answers BEFORE deleting — else a down endpoint leaves
     # the user with no store and a failed mine.
     _guard.require_embedder_answers(entity, prober)

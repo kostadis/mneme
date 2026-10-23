@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from hypostasis.models import ConfigEntity
+from mneme.corpus.config import CORPUS_REFUSAL, has_corpus
 
 from . import authority as _authority
 from . import embedder_guard as _guard
@@ -49,6 +50,8 @@ def first_mine(
     (FR-013/016). With ``entity``, fails closed (GH #26) if the existing store's dimension
     mismatches/can't be verified against the declared embedder; ``entity=None`` skips it.
     GH #31: on a real, successful run the aggregated skips are recorded in the store."""
+    if has_corpus(campaign_dir):  # 007: never mine a corpus campaign by wings
+        raise MempalaceError(CORPUS_REFUSAL)
     store = _authority.require_store(cfg)
     _guard.require_writable(entity, store.path, prober)
     mined: list[str] = []

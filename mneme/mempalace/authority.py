@@ -14,6 +14,8 @@ from pathlib import Path
 
 import yaml
 
+from mneme.corpus.config import CORPUS_RELPATH, has_corpus
+
 from .models import (
     DISPOSITION_KINDS,
     TRUST_LEVELS,
@@ -142,11 +144,23 @@ def validate(cfg: CampaignMempalaceConfig, raw: dict, campaign_dir: Path) -> lis
         if key in raw:
             p.append(f"forbidden field '{key}': derived/observed truth is never stored here")
 
-    if not cfg.wings:
-        p.append("wings: at least one wing is required")
+    if has_corpus(campaign_dir):
+        # 007 R8/FR-001a: the corpus declaration is the one authority for what is mined, so
+        # the wing model's keys must be gone, not merely ignored. `wings` may be absent.
+        for key in ("wings", "extra_exclusions"):
+            if key in raw:
+                p.append(
+                    f"dual-authority: {AUTHORITY_RELPATH} has `{key}:` but {CORPUS_RELPATH} "
+                    "exists; the corpus file declares the wings, so remove the key"
+                )
+        wings: tuple = ()
+    else:
+        wings = cfg.wings
+        if not wings:
+            p.append("wings: at least one wing is required")
 
     seen: set[str] = set()
-    for w in cfg.wings:
+    for w in wings:
         if not w.name:
             p.append("wing: a wing has an empty name")
         elif w.name in seen:
@@ -161,7 +175,7 @@ def validate(cfg: CampaignMempalaceConfig, raw: dict, campaign_dir: Path) -> lis
 
     # Sub-scopes-before-root invariant (FR-004): the root wing (source '.') must be
     # last, and no wing source may be an ancestor of a later wing's source.
-    sources = [w.source for w in cfg.wings]
+    sources = [w.source for w in wings]
     for i, src in enumerate(sources):
         for later in sources[i + 1 :]:
             if src == "." or _is_ancestor(src, later):
