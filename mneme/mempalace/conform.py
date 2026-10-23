@@ -424,6 +424,15 @@ def _campaign_rows(
     if entity is not None and not corpus and (warn := _former.try_record(cfg)):
         rows.append(ConformanceRow(ref.name, "former-wings", State.CONFORMANT, note=warn))
 
+    if not corpus:  # 007 FR-019: owed work, listed but never a failure
+        rows.append(
+            ConformanceRow(
+                ref.name, "corpus", State.CORPUS_UNDECLARED,
+                note="UNDECLARED (owed): wing-model mining is unchanged until the corpus is "
+                     f"declared -> mneme corpus init {ref.name}",
+            )
+        )
+
     drifted = _render.coherent(cfg, rec, ref.path)
     if drifted:
         rows.append(
@@ -521,6 +530,8 @@ def report(
 def format_row(row: ConformanceRow) -> str:
     if row.state in FAIL_STATES:
         flag = "FAIL"
+    elif row.state is State.CORPUS_UNDECLARED:
+        flag = "todo"  # owed work: neither green nor a failure
     elif not row.ok:
         flag = "??  "  # unverified: not ok, but not a (non-strict) failure
     else:

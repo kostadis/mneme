@@ -13,10 +13,13 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from mneme.corpus.config import has_corpus
+
 from . import authority as _authority
 from . import conform as _conform
 from . import recipe as _recipe
 from . import render as _render
+from .corpus_guard import refusal
 from .models import CONTENT_PRESERVING_OPS, MigrationPlan, State
 from .runner import MempalaceRunner
 
@@ -31,6 +34,9 @@ class MigrationResult:
     executed: list[str] = field(default_factory=list)
     conformant: bool = False
     note: str = ""
+
+
+MIGRATE_REASON = "migration plans edit wings, and a corpus campaign has none (FR-001a)"
 
 
 def validate_plan(plan: MigrationPlan) -> list[str]:
@@ -111,6 +117,8 @@ _EXECUTORS = {
 
 def apply_plan(plan: MigrationPlan, campaign_dir: Path) -> list[str]:
     """Execute every step in ``campaign_dir`` (a working copy). Returns step labels."""
+    if has_corpus(campaign_dir):  # 007 T042
+        raise refusal("migrate", plan.campaign, MIGRATE_REASON)
     problems = validate_plan(plan)
     if problems:
         raise MigrationError("; ".join(problems))

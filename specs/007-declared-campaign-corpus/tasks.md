@@ -210,16 +210,16 @@ Every user story needs these.
 
 **Independent Test**: quickstart scenario 6, on a fixture first, then the live fleet.
 
-- [ ] T040 [US4] Add `corpus current CAMPAIGN` (files the palace holds, from `runner.sources()`, grouped by wing; read-only; "no palace" when there is none) and `corpus init CAMPAIGN` (a skeleton `corpus.yaml` listing the standard kinds as comments, no paths; refuses if the file exists) to `mneme/corpus/cli.py` (FR-020, R10).
-- [ ] T041 [US4] In `mneme/mempalace/conform.py`, a campaign with a mempalace authority but no `corpus.yaml` gets a `corpus` row `UNDECLARED (owed)` with the remedy `mneme corpus init`. Its other rows and wing-model mining are unaffected (FR-019). The owed state is **not** in `FAIL_STATES` (`mneme/mempalace/models.py:160`), so `mp status` still exits 0 (GM decision, 2026-10-23). A test asserts the exit code.
-- [ ] T042 [US4] Define corpus-campaign behaviour for the wing-editing commands, and test each one:
+- [X] T040 [US4] Add `corpus current CAMPAIGN` (files the palace holds, from `runner.sources()`, grouped by wing; read-only; "no palace" when there is none) and `corpus init CAMPAIGN` (a skeleton `corpus.yaml` listing the standard kinds as comments, no paths; refuses if the file exists) to `mneme/corpus/cli.py` (FR-020, R10).
+- [X] T041 [US4] In `mneme/mempalace/conform.py`, a campaign with a mempalace authority but no `corpus.yaml` gets a `corpus` row `UNDECLARED (owed)` with the remedy `mneme corpus init`. Its other rows and wing-model mining are unaffected (FR-019). The owed state is **not** in `FAIL_STATES` (`mneme/mempalace/models.py:160`), so `mp status` still exits 0 (GM decision, 2026-10-23). A test asserts the exit code.
+- [X] T042 [US4] Define corpus-campaign behaviour for the wing-editing commands, and test each one:
   - `mp bootstrap` refuses: the campaign already has a corpus authority.
   - `mp migrate` refuses: migration plans edit wings, and corpus campaigns have none (FR-001a).
   - `mp publish` / `mp adopt` may only move `recipe_version` and must never write `wings:` or `extra_exclusions:` into a corpus campaign's `.mneme/mempalace.yaml`. Adopting a recipe whose standard kinds collide with a campaign kind reports `shadowed-kind` instead of writing.
   - `mp faces` and `mp render --check` use the corpus render (T020).
   - The changes go in `mneme/mempalace/bootstrap.py`, `mneme/mempalace/migrate.py`, `mneme/mempalace/publish.py` and `mneme/mempalace/proposals.py`/`cli.py` (adopt). Each refusal names the command and the reason.
   - Tests in `tests/unit/test_corpus_wing_commands.py`.
-- [ ] T043 [P] [US4] Integration test `tests/integration/test_corpus_migration.py`, using a wing-model fixture palace with a root wing:
+- [X] T043 [P] [US4] Integration test `tests/integration/test_corpus_migration.py`, using a wing-model fixture palace with a root wing:
   - Status shows undeclared-owed.
   - `corpus current` lists today's files.
   - After a `corpus.yaml` is written, render, then status shows the old extra drawers as `undeclared-drawers`, and nothing is deleted before the prune is confirmed.
@@ -233,7 +233,7 @@ Every user story needs these.
   7. **A decision checklist** (one line per kind: which dirs/files, trust override?, `mined_as` for shared files), and a **blank `corpus.yaml` skeleton** with the standard kinds as empty entries and no paths filled in.
 
   The worksheet must not fill in membership or say "recommended". Opus reviews each one against the disk before handing it to the GM.
-- [ ] T045 (Opus) Gate US4: ruff, pytest, diff review.
+- [X] T045 (Opus) Gate US4: ruff, pytest, diff review.
 - [ ] T046 (GM) Live migration, one campaign at a time (obelisk, toee, out-of-the-abyss):
   - The GM writes each `corpus.yaml` from its worksheet (T044), at their own pace and in any order. `mneme corpus init` is optional; the worksheet's skeleton is enough. No agent writes or converts a campaign on the GM's behalf.
   - **Prerequisite (plan Dependency 6):** the CampaignGenerator change (reads `canon_wings`; no query names a pre-corpus wing) has shipped. No campaign gets a `corpus.yaml` before then.

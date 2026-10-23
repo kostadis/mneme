@@ -282,6 +282,7 @@ def publish(
 ) -> None:
     """Stage a recipe upgrade for every campaign on a proposal branch (not the active checkout)."""
     from . import publish as _publish
+    from .corpus_guard import CorpusRefusal
     from .workcopy import WorkingCopyError
 
     entity = _load_or_exit(config)
@@ -291,7 +292,7 @@ def publish(
         raise typer.Exit(EXIT_OK)
     try:
         branch, plans = _publish.publish(entity, recipe_version=recipe_version)
-    except WorkingCopyError as e:
+    except (WorkingCopyError, CorpusRefusal) as e:
         typer.echo(f"FAIL publish: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     for plan in plans:
@@ -311,6 +312,7 @@ def adopt(
     """Campaign-side gate: stage the upgrade on a branch (default), or --here to write it
     directly into the active checkout for review (FR-021/FR-030)."""
     from . import publish as _publish
+    from .corpus_guard import CorpusRefusal
     from .workcopy import WorkingCopyError
 
     entity = _load_or_exit(config)
@@ -326,7 +328,7 @@ def adopt(
             raise typer.Exit(EXIT_OK)
         try:
             written, _ = _publish.adopt_in_place(entity, campaign)
-        except WorkingCopyError as e:
+        except (WorkingCopyError, CorpusRefusal) as e:
             typer.echo(f"FAIL adopt: {e}", err=True)
             raise typer.Exit(EXIT_RUNTIME) from None
         for w in written:
@@ -335,7 +337,7 @@ def adopt(
         raise typer.Exit(EXIT_OK)
     try:
         branch = _publish.adopt(entity, campaign)
-    except WorkingCopyError as e:
+    except (WorkingCopyError, CorpusRefusal) as e:
         typer.echo(f"FAIL adopt: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"staged adoption for '{campaign}' on branch: {branch} (merge/pull to take it)")
@@ -368,6 +370,19 @@ def migrate(
         ),
         approved_by_human=bool(raw.get("approved_by_human", False)),
     )
+    from mneme.corpus.config import has_corpus
+
+    from . import discover as _discover
+    from .corpus_guard import CorpusRefusal, refusal
+
+    try:  # 007 T042: refuse before validating, planning or cloning anything
+        if has_corpus(_discover.resolve(entity, campaign).path):
+            raise refusal("migrate", campaign, _migrate.MIGRATE_REASON)
+    except CorpusRefusal as e:
+        typer.echo(f"REFUSED: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    except _discover.DiscoveryError:
+        pass  # not in the active checkout: apply_plan checks the working copy
     problems = _migrate.validate_plan(mplan)
     if problems:
         for p in problems:
@@ -414,12 +429,13 @@ def bootstrap(
 ) -> None:
     """Write a starter (or consolidated) authority into a campaign via the working copy."""
     from . import bootstrap as _bootstrap
+    from .corpus_guard import CorpusRefusal
     from .workcopy import WorkingCopyError
 
     entity = _load_or_exit(config)
     try:
         branch = _bootstrap.bootstrap(entity, campaign, consolidate=consolidate)
-    except WorkingCopyError as e:
+    except (WorkingCopyError, CorpusRefusal) as e:
         typer.echo(f"FAIL bootstrap: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"bootstrapped '{campaign}' on branch: {branch} (merge/pull to take it)")

@@ -7,14 +7,19 @@ call and never reads the snapshot. `current`, `init` and `consumers` register on
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 
+from hypostasis import config as _hconfig
+from mneme.mempalace import authority as _authority
 from mneme.mempalace import discover as _discover
 from mneme.mempalace import recipe as _recipe
 from mneme.mempalace.cli import EXIT_OK, EXIT_RUNTIME, _config_opt, _dir_opt, _load_or_exit
+from mneme.mempalace.runner import MempalaceRunner
 
 from . import api as _api
+from . import config as _cconfig
 from . import toc as _toc
 
 app = typer.Typer(no_args_is_help=True, help="Declared campaign corpus: check, resolve, inspect.")
@@ -85,4 +90,89 @@ def toc(
             typer.echo(f"{name} ({k['trust']}): {len(k['files'])} file(s)")
             for f in k["files"]:
                 typer.echo(f"  {f['path']}")
+    raise typer.Exit(EXIT_OK)
+
+
+@app.command()
+def current(
+    campaign: str = typer.Argument(..., help="Campaign name"),
+    campaign_dir: str = _dir_opt,
+    config: str = _config_opt,
+) -> None:
+    """List the files the palace holds today, grouped by wing (FR-020). Read-only: it only
+    asks `mempalace sources`. Exit non-zero, saying "unknown", if the palace cannot be read."""
+    entity = _load_or_exit(config)
+    try:
+        ref = _discover.resolve(entity, campaign, campaign_dir)
+    except _discover.DiscoveryError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    if not ref.has_authority:
+        typer.echo(f"{campaign}: no palace (no .mneme/mempalace.yaml authority)")
+        raise typer.Exit(EXIT_OK)
+    try:
+        cfg = _authority.load(ref.path, mempalace_root=_hconfig.mempalace_root(entity))
+    except _authority.AuthorityError as e:
+        typer.echo(f"error: unknown: authority does not load: {'; '.join(e.problems)}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    if cfg.store is None or not Path(cfg.store.path).is_dir():
+        typer.echo(f"{campaign}: no palace (the store is not provisioned)")
+        raise typer.Exit(EXIT_OK)
+    runner = MempalaceRunner.for_entity(entity)
+    rows = runner.sources(cfg.store.path) if runner.supports_corpus() else None
+    if rows is None:
+        typer.echo(f"error: unknown: the palace for {campaign} could not be read "
+                   "(`mempalace sources` failed, or this mempalace lacks it)", err=True)
+        raise typer.Exit(EXIT_RUNTIME)
+    root = ref.path.resolve()
+    by_wing: dict[str, list[str]] = {}
+    for r in rows:
+        p = Path(r.source_file)
+        try:
+            shown = p.resolve().relative_to(root).as_posix()
+        except (ValueError, OSError):
+            shown = r.source_file
+        by_wing.setdefault(r.wing, []).append(shown)
+    if not by_wing:
+        typer.echo(f"{campaign}: the palace holds no files")
+    for wing in sorted(by_wing):
+        files = sorted(by_wing[wing])
+        typer.echo(f"{wing}: {len(files)} file(s)")
+        for f in files:
+            typer.echo(f"  {f}")
+    raise typer.Exit(EXIT_OK)
+
+
+def _skeleton(campaign: str) -> str:
+    lines = [
+        f"# Declared corpus for {campaign} (feature 007). Nothing is mined from a path until you",
+        "# declare it. Uncomment a kind and list its dirs/files (campaign-relative, POSIX).",
+        "# Check with `mneme corpus check`; see what the palace holds with `mneme corpus current`.",
+        f"campaign: {campaign}",
+        "",
+        "# kinds:",
+    ]
+    for k in _recipe.current().kinds:
+        lines += [f"#   {k.name}:", "#     dirs: []", "#     files: []"]
+    lines += ["", "# Kinds specific to this campaign (not a standard kind name):",
+              "# campaign_kinds:", ""]
+    return "\n".join(lines)
+
+
+@app.command()
+def init(
+    campaign: str = typer.Argument(..., help="Campaign name"),
+    campaign_dir: str = _dir_opt,
+    config: str = _config_opt,
+) -> None:
+    """Write a skeleton .mneme/corpus.yaml: every standard kind as a comment, no paths.
+    Refuses if one already exists."""
+    path = _campaign_dir(config, campaign, campaign_dir)
+    target = _cconfig.corpus_path(path)
+    if target.exists():
+        typer.echo(f"error: {target} already exists; `corpus init` never overwrites", err=True)
+        raise typer.Exit(EXIT_RUNTIME)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_skeleton(campaign))
+    typer.echo(f"wrote {target} (edit it, then `mneme corpus check {campaign}`)")
     raise typer.Exit(EXIT_OK)

@@ -174,6 +174,9 @@ class State(StrEnum):
     TOC_STALE = "toc_stale"
     OUT_OF_SCOPE = "out_of_scope"
     CORPUS_UNKNOWN = "corpus_unknown"
+    # 007 US4 — a wing-model campaign that has not declared a corpus yet: owed work, never a
+    # failure (not in FAIL_STATES, not a --strict failure; GM decision 2026-10-23).
+    CORPUS_UNDECLARED = "corpus_undeclared"
 
 
 # States that count as a genuine FAIL (non-zero exit). A deliberate, recorded
