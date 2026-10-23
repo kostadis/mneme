@@ -27,7 +27,7 @@ INSTRUCTIONS_DIR = Path(__file__).resolve().parent.parent / "recipes" / "instruc
 
 def target_config(entity: ConfigEntity, campaign: str) -> dict:
     """FR-022: what mneme recommends this campaign adopt (advisory)."""
-    ref = _discover.find(entity, campaign)
+    ref = _discover.resolve(entity, campaign)
     if not ref.has_authority:
         return {"campaign": campaign, "error": "no authority — bootstrap first"}
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
@@ -70,7 +70,7 @@ def status(entity: ConfigEntity, campaign: str | None = None) -> list[dict]:
 
 def inventory(entity: ConfigEntity, campaign: str) -> dict:
     """Current document/wing structure, so an assistant can reason about a migration."""
-    ref = _discover.find(entity, campaign)
+    ref = _discover.resolve(entity, campaign)
     md_files = [p for p in ref.path.rglob("*.md") if ".mneme" not in p.parts]
     bible = max(md_files, key=lambda p: len(p.read_text().splitlines()), default=None)
     wings = []
@@ -106,7 +106,7 @@ def adopt(entity: ConfigEntity, campaign: str, confirm: bool = False) -> dict:
     from mneme.mempalace import publish as _publish
     from mneme.mempalace.workcopy import WorkingCopyError
 
-    ref = _discover.find(entity, campaign)
+    ref = _discover.resolve(entity, campaign)
     if not ref.has_authority:
         return {"campaign": campaign, "error": "no authority — bootstrap first"}
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
@@ -143,7 +143,7 @@ def management_instructions() -> str:
 
 def campaign_usage_guide(entity: ConfigEntity, campaign: str) -> str:
     """FR-028/029: the campaign's own MEMPALACE.md usage guide (served from the campaign)."""
-    ref = _discover.find(entity, campaign)
+    ref = _discover.resolve(entity, campaign)
     guide = ref.path / "MEMPALACE.md"
     if not guide.is_file():
         return f"(no MEMPALACE.md usage guide for {campaign})"

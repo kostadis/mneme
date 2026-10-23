@@ -299,7 +299,7 @@ def adopt(
     entity = _load_or_exit(config)
     if here:
         # Interactive in-place adopt (FR-030): preview unless --confirm.
-        ref_diff = _publish._discover.find(entity, campaign)
+        ref_diff = _publish._discover.resolve(entity, campaign)
         if not ref_diff.has_authority:
             typer.echo(f"{campaign}: no authority — bootstrap first", err=True)
             raise typer.Exit(EXIT_RUNTIME)

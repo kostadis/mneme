@@ -37,18 +37,15 @@ def _run(cmd: list[str], env: dict) -> subprocess.CompletedProcess[str]:
 def _campaign_dir(entity: ConfigEntity, campaign: str, override: str | None = None) -> Path:
     """Resolve the campaign workspace: an explicit ``override`` path wins; otherwise
     the campaign NAME is resolved against ``data_roots.campaigns`` (config-based)."""
-    if override:
-        cdir = Path(override).expanduser()
-        if not cdir.is_dir():
-            raise LifecycleError(f"campaign workspace not found: {cdir}")
-        return cdir
     # 005 — resolve the NAME across all declared trees (never guess on ambiguity).
+    # 006 FR-016a/018 — `--dir` goes through the same gate: it selects a workspace, it never
+    # confers ownership or waives alias uniqueness.
     from mneme.mempalace import discover as _discover
 
     try:
-        return _discover.find(entity, campaign).path
+        return _discover.resolve(entity, campaign, override).path
     except _discover.DiscoveryError as e:
-        raise LifecycleError(f"{e} (or pass --dir)") from e
+        raise LifecycleError(str(e) if override else f"{e} (or pass --dir)") from e
 
 
 def _cg_source(entity: ConfigEntity) -> Path:
