@@ -101,13 +101,15 @@ Every user story needs these.
 - [ ] T014 Implement `mneme/corpus/resolve.py`:
   - `resolve(cfg, campaign_dir, recipe) -> ResolvedCorpus` per data-model § ResolvedCorpus.
   - Expand `dirs` recursively and classify each file as minable, non-minable (extension outside mempalace's readable set; mirror the list in a constant with a comment citing `miner.py:140-181`), not_materialized (`git ls-files -t` reports `S`) or missing.
-  - Emit `gitignored` (via `git check-ignore`) and `symlink` findings.
+  - Resolve symlinks: a declared symlink (or one inside a declared dir) that resolves to a regular file inside the campaign is minable, with `target` set to the resolved campaign-relative path. Symlinked directories are followed. Resolving outside the campaign gives `symlink-outside`, and resolving to a non-file gives `symlink-not-file`.
+  - Emit `gitignored` findings (via `git check-ignore`, checked on both the declared path and the target).
   - Assign each file its mining kind (R2).
-  - Tests in `tests/unit/test_corpus_resolve.py`, using a temporary git repo with sparse/skip-worktree, a symlink, a gitignored file, a `.pdf` and a file shared across kinds.
+  - Tests in `tests/unit/test_corpus_resolve.py`, using a temporary git repo with sparse/skip-worktree, an in-campaign symlink through a symlinked dir (the out-of-the-abyss `docs/party.md → grounding/current/party.md` shape), an out-of-campaign symlink, a gitignored file, a `.pdf` and a file shared across kinds.
 - [ ] T015 Implement `mneme/corpus/toc.py` per `contracts/toc-json.md`:
   - `build(resolved, cfg, recipe) -> dict`, `write(campaign_dir, toc)` (atomic write, then append `.mneme/corpus.toc.json` to the campaign `.gitignore` if it is missing), `read(campaign_dir)`.
   - `verify(campaign_dir) -> TocCheck`, which returns missing, stale (corpus.yaml hash differs), invalid or ok.
   - `files_for(toc, kind)` distinguishes a kind that is not declared from one that is declared but empty.
+  - Each file entry carries `target` when the declared path is a symlink (`contracts/toc-json.md`).
   - Tests in `tests/unit/test_corpus_toc.py`.
 - [ ] T016 Add the dual-authority check to `mneme/mempalace/authority.py`. When `.mneme/corpus.yaml` exists and `.mneme/mempalace.yaml` has `wings:` or `extra_exclusions:`, `load()` raises `AuthorityError` with `dual-authority`, naming both files (research R8, FR-001a). When `corpus.yaml` is present, `wings` may be absent; the existing "no wings" validation must not fire. Tests go in the existing authority unit tests.
 - [ ] T017 Guard every wing-model mining path against corpus campaigns. In `mneme/mempalace/refresh.py` (`_refresh_one`), `mneme/mempalace/provision.py` (`first_mine`), `mneme/mempalace/bootstrap.py` (`:105` loop) and `mneme/mempalace/conform.py` (`check_dir`, `:358-365`), when `.mneme/corpus.yaml` exists, never iterate `wing_dirs`. Those paths now either hand off to the corpus path (refresh, first_mine) or refuse with "corpus campaign — mining is driven by .mneme/corpus.yaml". The reason: a corpus campaign keeps a root `mempalace.yaml`, so `_existing_wing_dirs` returns the campaign root and a wing-model mine would mine the whole tree, the exact fail-open this feature removes. Unit tests in `tests/unit/test_corpus_guards.py` assert that no `mine <campaign root>` without `--files-from` is ever issued for a corpus campaign (check the stub log).
@@ -128,24 +130,25 @@ Every user story needs these.
   - Write the root `mempalace.yaml`, stamped, with `palace: <alias>` plus the union of rooms from the recipe kinds.
   - Write the TOC via `mneme/corpus/toc.py`.
   - Delete leftover per-wing `mempalace.yaml` and `.mempalaceignore` renders, but only files carrying mneme's stamp.
-  - Write `config.yaml` `mempalace: {canon_wings, index_wings, canon_wing}`, with `canon_wing` set to the first authoritative kind in recipe order (R8).
+  - Write `config.yaml` `mempalace: {canon_wings, index_wings}`. No `canon_wing` key: the CG change ships first (R8, plan Dependency 6).
   - Make `coherent()` and `render_faces()` cover the corpus artifacts.
   - The wing-model path is unchanged.
   - Tests in `tests/unit/test_mp_render_corpus.py`.
 - [ ] T021 [US1] Extend `mneme/mempalace/refresh.py` for corpus campaigns:
   - Refuse with an unknown result if `runner.supports_corpus()` is false (plan Dependency 1).
-  - Run the embedder guard, then for each kind call `runner.mine_files(campaign_dir, <minable files whose mined_as is this kind>, wing=kind)`.
+  - Run the embedder guard, then for each kind call `runner.mine_files(campaign_dir, <the resolved targets of minable files whose mined_as is this kind>, wing=kind)`. Always pass targets, never symlinks.
   - Update the corpus record after each successful kind. Keep the GH #31 skip record.
   - `--dry-run` prints the per-kind file lists and mines nothing.
   - A failed kind stops the run and writes no clean record (mirror `_refresh_one`).
 - [ ] T022 [US1] Re-home files mined under the wrong wing, in `mneme/mempalace/refresh.py`. mempalace's already-mined check matches on `source_file` and mtime only, never on wing (`Mempalace/mempalace/palace/mined.py:59`), so `mine --files-from --wing <kind>` skips a file already mined under an old wing (e.g. `docs/npcs/agatha.md` under the root wing `obelisk`). Before each kind's mine, call `runner.sources()`. Collect corpus files whose current wing differs from their `mined_as`. `runner.forget(<those>, apply=True)` them, then mine. Report the re-homed count, and list them in `--dry-run`. This applies only to files in the TOC. Undeclared sources are left for prune. Unit tests in `tests/unit/test_mp_refresh_corpus.py`, using a stub state that has a file under a foreign wing.
-- [ ] T023 [US1] Make `mneme/mempalace/bringup.py` use the corpus path when `corpus.yaml` exists: provision, then corpus render, then per-kind first mine, then backup. Otherwise it is unchanged.
-- [ ] T024 [P] [US1] Integration test `tests/integration/test_corpus_mining.py` for quickstart scenario 1:
+- [ ] T023 [US1] Replace re-pointed symlinks on refresh, in `mneme/mempalace/refresh.py`. For each corpus file whose current resolved `target` differs from the `target` in `mneme-corpus-mined.json` (a grounding promotion moved `docs/grounding/current`), `runner.forget([<old target>], apply=True)`, then mine the new target, in the same refresh. No prune and no confirmation: the declared membership is unchanged (spec Clarifications, 2026-10-23). Report "replaced N re-pointed files" and list them in `--dry-run`. Only old targets recorded for a still-declared path are forgotten; anything else is left for prune. Integration test in `tests/integration/test_corpus_mining.py`: build two generation dirs plus a `current` symlink, mine, re-point `current`, refresh, and `sources` then holds only the new generation's files.
+- [ ] T024 [US1] Make `mneme/mempalace/bringup.py` use the corpus path when `corpus.yaml` exists: provision, then corpus render, then per-kind first mine, then backup. Otherwise it is unchanged.
+- [ ] T025 [P] [US1] Integration test `tests/integration/test_corpus_mining.py` for quickstart scenario 1:
   - Set up the fixture campaign in a temp git repo, with decoys `docs/campaign_state_draft.md`, `docs/party_draft.md`, `docs/reviews/x.md` and `summaries/raw.md`, using the stub.
   - Assert wings `npcs`/`summaries`/`grounding` and that no decoy is mined.
   - Assert that a new `docs/new_generated/y.md` adds nothing.
   - Assert that `mined_as` puts a shared `docs/party.md` in exactly one wing.
-- [ ] T025 (Opus) Gate US1: ruff, pytest, diff review.
+- [ ] T026 (Opus) Gate US1: ruff, pytest, diff review.
 
 **Checkpoint**: MVP. Declared-corpus campaigns can no longer fail open.
 
@@ -157,26 +160,27 @@ Every user story needs these.
 
 **Independent Test**: quickstart scenarios 2 and 3.
 
-- [ ] T026 [US2] Implement `mneme/corpus/compare.py`:
+- [ ] T027 [US2] Implement `mneme/corpus/compare.py`:
   - `compare(toc, sources, record, campaign_dir) -> CorpusFindings`, covering undeclared-drawers, unmined, stale (TOC sha differs from record sha), missing, invalid, toc-stale and unknown, per the data-model state diagram.
   - `not_materialized` is never a finding.
   - Sources outside the campaign root are `out_of_scope`.
   - OK only when there are no findings (FR-017).
-- [ ] T027 [US2] Add a **wrong-wing** finding to `mneme/corpus/compare.py`: a corpus file whose drawers sit in a wing other than its `mined_as`, with remedy `mp refresh` (which re-homes it, T022). A file present in the right wing and in another wing reports both wrong-wing and, if undeclared elsewhere, nothing extra. Add the case to the state matrix in `tests/unit/test_corpus_compare.py`, and to the data-model state diagram in `specs/007-declared-campaign-corpus/data-model.md` (`WRONG-WING`, remedy `mp refresh`).
-- [ ] T028 [P] [US2] State-matrix unit tests `tests/unit/test_corpus_compare.py` (SC-004): one case per finding, combined findings, and "unknown when sources is None or the record is unreadable". Every non-matching case must be not-OK.
-- [ ] T029 [US2] Wire into `mneme/mempalace/conform.py`:
+- [ ] T028 [US2] Add a **wrong-wing** finding to `mneme/corpus/compare.py`: a corpus file whose drawers sit in a wing other than its `mined_as`, with remedy `mp refresh` (which re-homes it, T022). A file present in the right wing and in another wing reports both wrong-wing and, if undeclared elsewhere, nothing extra. Add the case to the state matrix in `tests/unit/test_corpus_compare.py`, and to the data-model state diagram in `specs/007-declared-campaign-corpus/data-model.md` (`WRONG-WING`, remedy `mp refresh`).
+- [ ] T029 [P] [US2] State-matrix unit tests `tests/unit/test_corpus_compare.py` (SC-004): one case per finding, combined findings, and "unknown when sources is None or the record is unreadable". Every non-matching case must be not-OK.
+- [ ] T030 [US2] Wire into `mneme/mempalace/conform.py`:
   - In `_campaign_rows`, when `corpus.yaml` exists, add a `corpus` row (new `State` values as needed in `mneme/mempalace/models.py`) whose note lists each finding with counts, files (truncated past 10 with a count), and remedy (`mp prune` / `mp refresh` / edit `corpus.yaml` / `mp render`), per FR-015/016.
   - Replace the `index` row for corpus campaigns with one derived from the same comparison.
   - The wing-model path is untouched.
-- [ ] T030 [US2] Extend `mneme/mempalace/prune.py` for corpus campaigns:
+- [ ] T031 [US2] Extend `mneme/mempalace/prune.py` for corpus campaigns:
   - The deletion set is `undeclared ∪ (missing − not_materialized)`, computed by `compare.py`.
   - The preview lists every source with its drawer count. `--confirm --expect N` is bound to N drawers.
   - Back up first (unless `--no-backup`), apply `runner.forget(apply=True)`, then re-verify with `runner.sources()` and fail if any deleted source remains.
   - Not-materialized sources are never in the set (FR-018, R4, R7).
+  - **Former-canon guard** (GM decision, 2026-10-23): refuse when the set includes drawers whose wing was `authoritative` before the corpus. Print each such wing with its file and drawer counts, and proceed only when every one is named with `--include-former-canon <wing>` (repeatable). The former wings come from `<store>/mneme-former-wings.json`, a derived record that mneme rewrites with `{wing: trust}` whenever it loads a wing-model authority that has a store (hook it into `authority.load` callers in `conform.py` and `refresh.py`). If the record is absent, **every** drawer wing that is not a declared kind is treated as former canon (fail closed). Tests in `tests/unit/test_mp_prune_corpus.py`: refused without the flag, proceeds with it, and the absent-record case.
   - Unit tests in `tests/unit/test_mp_prune_corpus.py`.
-- [ ] T031 [US2] Make `mp regenerate` corpus-aware in `mneme/mempalace/backup.py` (`regenerate`, `:258-278`). For a corpus campaign, after clearing the store, first-mine through the corpus path (per-kind `--files-from`, writing a fresh corpus record) instead of `provision.first_mine`'s wing loop. Integration test in `tests/integration/test_corpus_status_prune.py`: regenerate a corpus campaign with decoys present, and `sources` afterwards equals the TOC exactly.
-- [ ] T032 [P] [US2] Integration test `tests/integration/test_corpus_status_prune.py` for quickstart scenarios 2 and 3: every row of the scenario-2 table, then the prune preview, confirm and re-verify flow, and the skip-worktree survivor.
-- [ ] T033 (Opus) Gate US2: ruff, pytest, diff review.
+- [ ] T032 [US2] Make `mp regenerate` corpus-aware in `mneme/mempalace/backup.py` (`regenerate`, `:258-278`). For a corpus campaign, after clearing the store, first-mine through the corpus path (per-kind `--files-from`, writing a fresh corpus record) instead of `provision.first_mine`'s wing loop. Integration test in `tests/integration/test_corpus_status_prune.py`: regenerate a corpus campaign with decoys present, and `sources` afterwards equals the TOC exactly.
+- [ ] T033 [P] [US2] Integration test `tests/integration/test_corpus_status_prune.py` for quickstart scenarios 2 and 3: every row of the scenario-2 table, then the prune preview, confirm and re-verify flow, and the skip-worktree survivor.
+- [ ] T034 (Opus) Gate US2: ruff, pytest, diff review.
 
 **Checkpoint**: US1 + US2 make the palace provably exact.
 
@@ -188,11 +192,11 @@ Every user story needs these.
 
 **Independent Test**: quickstart scenario 4.
 
-- [ ] T034 [US3] Create `mneme/corpus/cli.py` with a Typer app and `check` plus `toc [--kind K] [--json] [--write]` (`contracts/cli.md`). `toc` applies verify steps 1–3 and exits non-zero on missing, stale or invalid. Register it in `mneme/cli.py` with `app.add_typer(corpus_app, name="corpus")`. Both take `--config` and `--dir` like `mneme mp`.
-- [ ] T035 [P] [US3] Add an MCP tool `corpus_files(campaign: str, kind: str) -> dict` in `mneme/mcp/server.py`, beside `get_status`. It returns `{files}` or `{error: "toc-missing"|"toc-stale"|"invalid"|"not-declared", detail}`.
-- [ ] T036 [P] [US3] Integration test `tests/integration/test_corpus_toc_readers.py` for quickstart scenario 4: the JSON file, `mneme corpus toc --json` and `corpus_files` return identical lists; all three refuse after `corpus.yaml` is edited; an undeclared kind gets "not declared", not `[]`.
-- [ ] T037 [P] [US3] Add a "Declared corpus" section to `mneme/recipes/instructions/manage-mempalace.md`: the `corpus.yaml` shape, the TOC, the consumer obligations (read the TOC, refuse when stale), and `mined_as`. The `mneme mp mcp` server serves it.
-- [ ] T038 (Opus) Gate US3: ruff, pytest, diff review.
+- [ ] T035 [US3] Create `mneme/corpus/cli.py` with a Typer app and `check` plus `toc [--kind K] [--json] [--write]` (`contracts/cli.md`). `toc` applies verify steps 1–3 and exits non-zero on missing, stale or invalid. Register it in `mneme/cli.py` with `app.add_typer(corpus_app, name="corpus")`. Both take `--config` and `--dir` like `mneme mp`.
+- [ ] T036 [P] [US3] Add an MCP tool `corpus_files(campaign: str, kind: str) -> dict` in `mneme/mcp/server.py`, beside `get_status`. It returns `{files}` or `{error: "toc-missing"|"toc-stale"|"invalid"|"not-declared", detail}`.
+- [ ] T037 [P] [US3] Integration test `tests/integration/test_corpus_toc_readers.py` for quickstart scenario 4: the JSON file, `mneme corpus toc --json` and `corpus_files` return identical lists; all three refuse after `corpus.yaml` is edited; an undeclared kind gets "not declared", not `[]`.
+- [ ] T038 [P] [US3] Add a "Declared corpus" section to `mneme/recipes/instructions/manage-mempalace.md`: the `corpus.yaml` shape, the TOC, the consumer obligations (read the TOC, refuse when stale), and `mined_as`. The `mneme mp mcp` server serves it.
+- [ ] T039 (Opus) Gate US3: ruff, pytest, diff review.
 
 ---
 
@@ -202,20 +206,20 @@ Every user story needs these.
 
 **Independent Test**: quickstart scenario 6, on a fixture first, then the live fleet.
 
-- [ ] T039 [US4] Add `corpus current CAMPAIGN` (files the palace holds, from `runner.sources()`, grouped by wing; read-only) and `corpus init CAMPAIGN` (a skeleton `corpus.yaml` listing the standard kinds as comments, no paths; refuses if the file exists) to `mneme/corpus/cli.py` (FR-020, R10).
-- [ ] T040 [US4] In `mneme/mempalace/conform.py`, a campaign with a mempalace authority but no `corpus.yaml` gets a `corpus` row `UNDECLARED (owed)` with the remedy `mneme corpus init`. Its other rows and wing-model mining are unaffected (FR-019).
-- [ ] T041 [US4] Define corpus-campaign behaviour for the wing-editing commands, and test each one:
+- [ ] T040 [US4] Add `corpus current CAMPAIGN` (files the palace holds, from `runner.sources()`, grouped by wing; read-only) and `corpus init CAMPAIGN` (a skeleton `corpus.yaml` listing the standard kinds as comments, no paths; refuses if the file exists) to `mneme/corpus/cli.py` (FR-020, R10).
+- [ ] T041 [US4] In `mneme/mempalace/conform.py`, a campaign with a mempalace authority but no `corpus.yaml` gets a `corpus` row `UNDECLARED (owed)` with the remedy `mneme corpus init`. Its other rows and wing-model mining are unaffected (FR-019). The owed state is **not** in `FAIL_STATES` (`mneme/mempalace/models.py:160`), so `mp status` still exits 0 (GM decision, 2026-10-23). A test asserts the exit code.
+- [ ] T042 [US4] Define corpus-campaign behaviour for the wing-editing commands, and test each one:
   - `mp bootstrap` refuses: the campaign already has a corpus authority.
   - `mp migrate` refuses: migration plans edit wings, and corpus campaigns have none (FR-001a).
   - `mp publish` / `mp adopt` may only move `recipe_version` and must never write `wings:` or `extra_exclusions:` into a corpus campaign's `.mneme/mempalace.yaml`. Adopting a recipe whose standard kinds collide with a campaign kind reports `shadowed-kind` instead of writing.
   - `mp faces` and `mp render --check` use the corpus render (T020).
   - The changes go in `mneme/mempalace/bootstrap.py`, `mneme/mempalace/migrate.py`, `mneme/mempalace/publish.py` and `mneme/mempalace/proposals.py`/`cli.py` (adopt). Each refusal names the command and the reason.
   - Tests in `tests/unit/test_corpus_wing_commands.py`.
-- [ ] T042 [P] [US4] Integration test `tests/integration/test_corpus_migration.py`, using a wing-model fixture palace with a root wing:
+- [ ] T043 [P] [US4] Integration test `tests/integration/test_corpus_migration.py`, using a wing-model fixture palace with a root wing:
   - Status shows undeclared-owed.
   - `corpus current` lists today's files.
   - After a `corpus.yaml` is written, render, then status shows the old extra drawers as `undeclared-drawers`, and nothing is deleted before the prune is confirmed.
-- [ ] T043 [P] [US4] Produce one **corpus worksheet** per campaign, a read-only reference document the GM uses to write that campaign's `corpus.yaml` by hand, at their own pace. Nothing is run against the campaign and nothing is written into it. This task has no code dependency and can run at any time. Write `specs/007-declared-campaign-corpus/worksheets/{obelisk,toee,out-of-the-abyss}.md`, each surveying the sparse checkout the GM works in (`~/obelisk/obelisk`, `~/toee/toee`, `~/out-of-the-abyss/out-of-the-abyss`; state the path and git HEAD surveyed). Each worksheet contains, all as **observations, never proposals**:
+- [ ] T044 [P] [US4] Produce one **corpus worksheet** per campaign, a read-only reference document the GM uses to write that campaign's `corpus.yaml` by hand, at their own pace. Nothing is run against the campaign and nothing is written into it. This task has no code dependency and can run at any time. Write `specs/007-declared-campaign-corpus/worksheets/{obelisk,toee,out-of-the-abyss}.md`, each surveying the sparse checkout the GM works in (`~/obelisk/obelisk`, `~/toee/toee`, `~/out-of-the-abyss/out-of-the-abyss`; state the path and git HEAD surveyed). Each worksheet contains, all as **observations, never proposals**:
   1. **What the palace mines today.** The current `.mneme/mempalace.yaml` wings (name, source, trust) and exclusions, and, if the palace is readable, the per-wing source counts. Note "no authority" for out-of-the-abyss. Flag every `authoritative` wing, because those drop out unless declared (e.g. `docs/chapters`).
   2. **Files at each standard kind's usual locations**, listed verbatim with counts: `docs/npcs/`, `docs/summaries/` and top-level `summaries/` (kept apart: published vs pipeline output), the four grounding files, `docs/party.md` / `docs/party/` / `docs/party_state.md` / per-PC files, `notes/` and `notes/sessions/`.
   3. **Look-alikes to decide on**: drafts (`*_draft*`, `*.candidate.*`), backups (`*.bak`, `*.old`), staging/extraction/review dirs (`*_extractions/`, `state_staging/`, `reviews/`, `summary_native/`, `archive/`), each with its path.
@@ -225,9 +229,10 @@ Every user story needs these.
   7. **A decision checklist** (one line per kind: which dirs/files, trust override?, `mined_as` for shared files), and a **blank `corpus.yaml` skeleton** with the standard kinds as empty entries and no paths filled in.
 
   The worksheet must not fill in membership or say "recommended". Opus reviews each one against the disk before handing it to the GM.
-- [ ] T044 (Opus) Gate US4: ruff, pytest, diff review.
-- [ ] T045 (GM) Live migration, one campaign at a time (obelisk, toee, out-of-the-abyss):
-  - The GM writes each `corpus.yaml` from its worksheet (T043), at their own pace and in any order. `mneme corpus init` is optional; the worksheet's skeleton is enough. No agent writes or converts a campaign on the GM's behalf.
+- [ ] T045 (Opus) Gate US4: ruff, pytest, diff review.
+- [ ] T046 (GM) Live migration, one campaign at a time (obelisk, toee, out-of-the-abyss):
+  - The GM writes each `corpus.yaml` from its worksheet (T044), at their own pace and in any order. `mneme corpus init` is optional; the worksheet's skeleton is enough. No agent writes or converts a campaign on the GM's behalf.
+  - **Prerequisite (plan Dependency 6):** the CampaignGenerator change (reads `canon_wings`; no query names a pre-corpus wing) has shipped. No campaign gets a `corpus.yaml` before then.
   - Opus runs `mp render` and `mp status` and shows the prune preview.
   - The GM alone runs `mp prune --confirm --expect N`, then `mp refresh`, until `corpus: OK` (SC-003, SC-007).
 
@@ -239,19 +244,19 @@ Every user story needs these.
 
 **Independent Test**: quickstart scenario 7.
 
-- [ ] T046 [US5] Implement `mneme/corpus/consumers.py`: load and validate `mneme/recipes/consumers.yaml` (`contracts/consumers-yaml.md`; unknown modes and unknown kinds are errors) and compute `compliant(c)` (palace/toc = yes, partial = partly, independent = no). Add `corpus consumers [--noncompliant]` to `mneme/corpus/cli.py`. Tests in `tests/unit/test_corpus_consumers.py`, including a test that the shipped file parses and contains 52 entries.
-- [ ] T047 [US5] Add one fleet-level `consumers` row to `mneme/mempalace/conform.py` `report()`, with the non-compliant count and the command to list them (FR-024). Shown once, not per campaign.
-- [ ] T048 (Opus, GM approves) Draft one follow-up issue per consumer repo: CampaignGenerator (including `documents[]`, `grounding_bundle.py` and `canon_wings`), `~/.claude/skills`, gm-assistant, and the `/campaign-recall` zvec-grep index. Show the drafts to the GM. File them via `mcp__github__issue_write` only after the GM approves. Once filed, the GM approves an edit adding the `issue:` fields to `mneme/recipes/consumers.yaml`.
+- [ ] T047 [US5] Implement `mneme/corpus/consumers.py`: load and validate `mneme/recipes/consumers.yaml` (`contracts/consumers-yaml.md`; unknown modes and unknown kinds are errors) and compute `compliant(c)` (palace/toc = yes, partial = partly, independent = no). Add `corpus consumers [--noncompliant]` to `mneme/corpus/cli.py`. Tests in `tests/unit/test_corpus_consumers.py`, including a test that the shipped file parses and contains 52 entries.
+- [ ] T048 [US5] Add one fleet-level `consumers` row to `mneme/mempalace/conform.py` `report()`, with the non-compliant count and the command to list them (FR-024). Shown once, not per campaign. Like the undeclared row, it is owed work, not a failure: exit code 0, with a test.
+- [ ] T049 (Opus, GM approves) Draft one follow-up issue per consumer repo: CampaignGenerator (including `documents[]`, `grounding_bundle.py`, `canon_wings`, and every query naming a pre-corpus wing; this issue is the T046 prerequisite), `~/.claude/skills`, gm-assistant, and the `/campaign-recall` zvec-grep index. Show the drafts to the GM. File them via `mcp__github__issue_write` only after the GM approves. Once filed, the GM approves an edit adding the `issue:` fields to `mneme/recipes/consumers.yaml`.
 
 ---
 
 ## Phase 8: Polish, review and release
 
-- [ ] T049 [P] Document `mneme corpus` and the corpus behaviour of `mp render/refresh/status/prune` in `README.md` under the `mneme mp` section.
-- [ ] T050 [P] Add a corpus scenario to `tests/integration/test_real_mempalace_e2e.py`, behind `MNEME_REAL_MEMPALACE_VENV`: real `mine --files-from`, `sources --json` and `forget` against a throwaway palace. This verifies the research R1–R4 behaviour against the real binary.
-- [ ] T051 (Opus) Full gate: `ruff check hypostasis mneme tests`, `pytest`, and the real-binary lane with `MNEME_REAL_MEMPALACE_VENV` set.
-- [ ] T052 (Opus) **Code review phase** (plan § Execution Model): run `/code-review` on the branch diff (`main...007-declared-campaign-corpus`). For each finding, either send it to a Sonnet implementer and re-gate (T051), or record why it is left as is in the PR description. Repeat until the review is clean.
-- [ ] T053 (Opus, GM approves) Push `007-declared-campaign-corpus`, then open the PR via `mcp__github__create_pull_request`. The PR body includes the code-review outcome, the T045 migration results, and the follow-up issues from T048.
+- [ ] T050 [P] Document `mneme corpus` and the corpus behaviour of `mp render/refresh/status/prune` in `README.md` under the `mneme mp` section.
+- [ ] T051 [P] Add a corpus scenario to `tests/integration/test_real_mempalace_e2e.py`, behind `MNEME_REAL_MEMPALACE_VENV`: real `mine --files-from`, `sources --json` and `forget` against a throwaway palace. This verifies the research R1–R4 behaviour against the real binary.
+- [ ] T052 (Opus) Full gate: `ruff check hypostasis mneme tests`, `pytest`, and the real-binary lane with `MNEME_REAL_MEMPALACE_VENV` set.
+- [ ] T053 (Opus) **Code review phase** (plan § Execution Model): run `/code-review` on the branch diff (`main...007-declared-campaign-corpus`). For each finding, either send it to a Sonnet implementer and re-gate (T052), or record why it is left as is in the PR description. Repeat until the review is clean.
+- [ ] T054 (Opus, GM approves) Push `007-declared-campaign-corpus`, then open the PR via `mcp__github__create_pull_request`. The PR body includes the code-review outcome, the T046 migration results, and the follow-up issues from T049.
 
 ---
 
@@ -267,9 +272,9 @@ Every user story needs these.
 - **US1 (Phase 3)**: needs Phase 2. This is the MVP.
 - **US2 (Phase 4)**: needs US1, because comparison needs corpus mining and the corpus record.
 - **US3 (Phase 5)**: needs only Phase 2 (the TOC). It can run in parallel with US1 and US2.
-- **US4 (Phase 6)**: T039–T042 need US2 (status rows). **T043 (the worksheets) has no dependency and can run immediately.** T045 (GM) needs US1, US2 and T009 merged and installed, and proceeds at the GM's pace, campaign by campaign.
+- **US4 (Phase 6)**: T040–T043 need US2 (status rows). **T044 (the worksheets) has no dependency and can run immediately.** T046 (GM) needs US1, US2 and T009 merged and installed, and proceeds at the GM's pace, campaign by campaign.
 - **US5 (Phase 7)**: needs only Phase 2 plus `consumers.yaml`. It can run in parallel with US1–US4.
-- **Polish (Phase 8)**: needs every story wanted in this release. T052 code review precedes T053.
+- **Polish (Phase 8)**: needs every story wanted in this release. T053 code review precedes T054.
 
 ### Within each story
 
@@ -280,23 +285,23 @@ which touch separate files. The Opus gate closes each phase.
 
 - Phase 1: T002 ∥ T003.
 - Phase 2: the mempalace chain (T004–T009) runs alongside the mneme chain (T010–T016). Within mneme, T010 ∥ T012. T013 → T014 → T015 are sequential (each builds on the last). T016 and T017 are independent of them.
-- After Phase 2, three implementers can run at once: US1 (T019–T024), US3 (T034–T037) and US5 (T046–T047).
-- Within US1: T019 ∥ T020. Within US2: T028 ∥ T032, once T026 and T030 land.
+- After Phase 2, three implementers can run at once: US1 (T019–T025), US3 (T035–T038) and US5 (T047–T048).
+- Within US1: T019 ∥ T020. Within US2: T029 ∥ T033, once T027 and T031 land.
 
 ### Parallel example: after Phase 2
 
 ```text
-Implementer A (Sonnet medium): US1  — T019, T020, T021, T022, T023, T024
-Implementer B (Sonnet medium): US3  — T034, T035, T036, T037
-Implementer C (Sonnet medium): US5  — T046, T047
-Opus: gates each story as it lands (T025, T038), then starts US2.
+Implementer A (Sonnet medium): US1  — T019, T020, T021, T022, T023, T024, T025
+Implementer B (Sonnet medium): US3  — T035, T036, T037, T038
+Implementer C (Sonnet medium): US5  — T047, T048
+Opus: gates each story as it lands (T026, T039), then starts US2.
 ```
 
 ## Implementation Strategy
 
 ### MVP first
 
-0. Any time, independently: T043, the per-campaign corpus worksheets, so the GM can start drafting `corpus.yaml` files before any code lands.
+0. Any time, independently: T044, the per-campaign corpus worksheets, so the GM can start drafting `corpus.yaml` files before any code lands.
 1. Phase 1 and Phase 2, including the merged mempalace PR (T008).
 2. Phase 3 (US1). **Stop and validate** with quickstart scenario 1: declared campaigns can no longer fail open.
 3. Phase 4 (US2), so the palace is provably exact and prunable.
@@ -310,6 +315,6 @@ Opus: gates each story as it lands (T025, T038), then starts US2.
 
 ## Notes
 
-- **GM checkpoints** (T008, T045, T048, T053 approval) are never delegated. A subagent brief must not include them.
+- **GM checkpoints** (T008, T046, T049, T054 approval) are never delegated. A subagent brief must not include them.
 - Every task's implementer brief names the files it may touch. A change outside those files is sent back.
 - Commit after each gated phase, on `007-declared-campaign-corpus` only.

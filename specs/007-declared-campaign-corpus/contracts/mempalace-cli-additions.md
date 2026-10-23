@@ -12,6 +12,7 @@ the hypostasis pin is bumped. All take the global `--palace P` before the subcom
   is not called, so ignore files and `SKIP_DIRS` do not apply.
 - `exclude_patterns` from `DIR/mempalace.yaml` still apply to pre-scanned files
   (`miner.py:2460`). mneme renders none for corpus campaigns.
+- mneme passes resolved targets, never symlinks (mempalace opens with `O_NOFOLLOW`).
 - A listed path that is missing, a symlink, not a regular file, or has an extension outside
   `READABLE_EXTENSIONS` is reported on the existing skip channel (`SKIP: <rel> (<reason>)`,
   parsed by `mine_report.parse_skips`). It is never silently dropped.

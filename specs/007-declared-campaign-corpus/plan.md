@@ -225,6 +225,10 @@ are selected when `corpus.yaml` is absent.
 4. **Skills follow-ups**: `~/.claude/skills`, both `gm-assistant` copies, and the zvec-grep
    index behind `/campaign-recall`. Each becomes a compliant consumer by reading the TOC.
 
+6. **CampaignGenerator first (GM decision, 2026-10-23).** CG reading `canon_wings`, and
+   every CG/skill query that names a pre-corpus wing (`narrative`, `chronicle`, `summaries`,
+   `notes`, `<campaign>`), is fixed **before any campaign gets a `corpus.yaml`**. mneme writes
+   no transitional `canon_wing`. This gates T045.
 5. **Host rollout (GM decision, 2026-10-23: risk accepted).** Once a campaign has a
    `corpus.yaml`, its `.mneme/mempalace.yaml` loses `wings:`, and a host on older mneme
    cannot load that campaign and would re-render the old per-wing files. No host-first

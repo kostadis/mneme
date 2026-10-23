@@ -40,7 +40,8 @@ A KindDecl may set both `dirs` and `files`. It must set at least one, or it is
 
 For each declared kind: the files it resolves to on this checkout, each classified as one of:
 
-- **minable**: a regular file that exists, is not a symlink, and has an extension mempalace
+- **minable**: a regular file that exists (or a symlink resolving to one inside the campaign;
+  then the resolved target is what is mined), and has an extension mempalace
   reads (`READABLE_EXTENSIONS`, `miner.py:140-181`).
 - **non-minable**: exists but has a non-readable extension (e.g. `.pdf`). Listed in the TOC
   with `minable: false`, so it is never reported as unmined.
@@ -58,7 +59,8 @@ file (FR-021).
 
 ### CorpusMinedRecord (derived, `<store>/mneme-corpus-mined.json`)
 
-`{schema, campaign, mined_at, corpus_sha256, files: {relpath: {kind, sha256}}}`. It is written
+`{schema, campaign, mined_at, corpus_sha256, files: {relpath: {kind, sha256, target}}}`, where
+`target` is the resolved path actually mined (equal to `relpath` unless it is a symlink). It is written
 after each successful corpus mine, per kind, and merged. It has the store's lifecycle:
 `regenerate` wipes it (R3). It is the only place "what content was embedded" is recorded,
 because mempalace keeps no content hash.
@@ -111,8 +113,9 @@ OK only when there are none (FR-017). `not_materialized` is informational, never
 3. Paths are relative and normalized, and must not escape the campaign root (`..`).
 4. Declared paths must not be gitignored. mneme asks `git check-ignore`, which also covers
    `.git/info/exclude`. mempalace does not read that file, but consumers using git do.
-5. Declared paths, and files inside declared dirs, must not be symlinks. mempalace skips
-   symlinks (`miner.py:2309`).
+5. A declared path, or a file inside a declared dir, may be a symlink only if it resolves to a
+   regular file inside the campaign. mneme mines the resolved target, since mempalace opens files
+   with `O_NOFOLLOW`. Anything else is `invalid: symlink-outside` / `symlink-not-file`.
 6. A file reachable from more than one kind needs exactly one `mined_as: true` among them,
    and the trust levels must agree. If they differ, the result is `invalid: trust-conflict`.
 7. When `corpus.yaml` exists, `.mneme/mempalace.yaml` must not carry `wings:` or

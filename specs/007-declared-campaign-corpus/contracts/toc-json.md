@@ -21,7 +21,7 @@ regenerated.
       "standard": true,
       "trust": "authoritative",
       "files": [
-        {"path": "docs/world_state.md", "sha256": "…", "minable": true, "mined_as": "grounding"},
+        {"path": "docs/world_state.md", "target": "docs/grounding/generations/g72/live/world_state.md", "sha256": "…", "minable": true, "mined_as": "grounding"},
         {"path": "docs/party.md",       "sha256": "…", "minable": true, "mined_as": "party"}
       ],
       "not_materialized": [],
@@ -34,8 +34,9 @@ regenerated.
 
 - A kind **absent** from `kinds` is not declared for this campaign. `files: []` means it is
   declared and empty (FR-013).
-- `files` is sorted by `path`. `path` is campaign-relative and POSIX. `sha256` is of the file
-  bytes.
+- `files` is sorted by `path`. `path` is campaign-relative and POSIX: it is the declared path,
+  which consumers open. `target` is present only when `path` is a symlink; it is the resolved
+  campaign-relative file that was hashed and mined. `sha256` is of the target's bytes.
 - `mined_as` names the wing (kind) that holds the file's drawers (R2). It equals the
   enclosing kind unless the file is shared across kinds.
 - `valid: false` with a non-empty `findings` list means the configuration is invalid. Each

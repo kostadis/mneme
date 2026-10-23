@@ -200,10 +200,10 @@ skip-worktree. The case still matters for out-of-the-abyss and future cones.
   drift.
 - The CampaignGenerator search face (`config.yaml` `mempalace:`) becomes
   `canon_wings: [<authoritative kinds>]`, `index_wings: [<other kinds>]`. Today it is a single
-  `canon_wing`. CG reads one canon wing today, so **this is a CG change**, tracked as a
-  consumer follow-up. Until CG is converted, mneme also writes `canon_wing:` as the first
-  authoritative kind in recipe order, so CG keeps working, and status reports the CG search
-  consumer as partially compliant.
+  `canon_wing`. CG reads one canon wing today, so **this is a CG change**. GM decision
+  (2026-10-23): no transitional `canon_wing` is written. CG reading `canon_wings`, and
+  fixing every query that names old wings, ships before any campaign gets a
+  `corpus.yaml`.
 - `.mcp.json` and the global alias faces are unchanged; they name the palace, not files.
 
 ---

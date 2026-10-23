@@ -33,6 +33,22 @@
   marks it explicitly with `mined_as` on one of the declarations. The file is listed under
   both kinds in the TOC. No mark, or more than one, is invalid until the GM fixes it;
   mneme never picks.
+- Q: Do the new owed rows (undeclared corpus, non-compliant consumers) make `mp status`
+  fail? → A: Never. Owed work exits 0, like a pending recipe upgrade. Real corpus findings
+  (undeclared drawers, unmined, stale, wrong-wing, missing, invalid) still fail.
+- Q: What does mneme write for CampaignGenerator's search while CG still reads a single
+  `canon_wing`? → A: Nothing transitional. CG learning `canon_wings` (and fixing every
+  query that names old wings) is a prerequisite: no campaign gets a `corpus.yaml` until
+  that CG change ships.
+- Q: What protects formerly-authoritative material from an unnoticed prune? → A: `mp
+  prune` refuses when its deletion set includes drawers from a wing that was
+  `authoritative` before the corpus, naming the wing and file count, and proceeds only
+  with `--include-former-canon <wing>`.
+- Q: Can a declared file be a symlink (out-of-the-abyss's grounding docs are)? → A: Yes,
+  if it resolves inside the campaign. mneme mines the real target. When a promotion
+  re-points the symlink, the next `mp refresh` deletes the old target's drawers and mines
+  the new one in the same step, with no prune or confirmation: the declared membership
+  did not change, only its content.
 
 ## Overview
 
@@ -263,9 +279,14 @@ one appears in status as owed work with the files it reads outside the TOC.
 - **A declared file is gitignored.** mempalace skips gitignored files when mining, and
   `mp prune` treats drawers from gitignored sources as orphans. A gitignored declared
   path is a contradiction, reported as an error naming the path — never mined-then-pruned.
-- **A declared path is a symlink.** mempalace's scanner skips symlinks, so a declared
-  symlink (or one inside a declared directory) would silently produce no drawers. It is
-  reported, not left to show up as "unmined" with no explanation.
+- **A declared path is a symlink.** mempalace refuses to open a file that is itself a
+  symlink (`O_NOFOLLOW`), but follows symlinked directories. A declared symlink whose
+  target resolves inside the campaign is allowed: mneme mines the resolved target and the
+  TOC records both paths. A symlink resolving outside the campaign, or to something that
+  is not a regular file, is invalid and reported, never left to show up as "unmined".
+- **A symlink is re-pointed** (a grounding promotion moves `docs/grounding/current` to a
+  new generation). On the next refresh the old target's drawers are deleted and the new
+  target is mined, in one step. Until that refresh, status reports the file as stale.
 - **Overlapping declarations.** A file reachable through two entries is mined once.
   Within one kind that is harmless. Across two kinds (e.g. `docs/party.md` declared as
   both party and grounding) the file belongs to both kinds in the TOC, but is mined under
@@ -363,8 +384,9 @@ one appears in status as owed work with the files it reads outside the TOC.
 - **FR-015**: The corpus dimension MUST distinguish, with counts and the files involved:
   **undeclared** (drawers from files outside the corpus), **unmined** (corpus files with
   no drawers), **stale** (corpus files changed since mined), **missing** (declared paths
-  not present), and **invalid** (gitignored, symlinked, unknown-kind or conflicting
-  declarations).
+  not present), **wrong-wing** (corpus files whose drawers sit outside their mining kind),
+  and **invalid** (gitignored, symlinks resolving outside the campaign, unknown-kind or
+  conflicting declarations). A re-pointed symlink counts as stale.
 - **FR-016**: Each non-ok corpus finding MUST name its remedy: `mp prune` for undeclared,
   `mp refresh` for unmined and stale, a configuration edit for missing and invalid.
 - **FR-017**: The corpus dimension MUST be ok only when the palace's drawer sources equal
@@ -470,5 +492,6 @@ one appears in status as owed work with the files it reads outside the TOC.
   inventory; each consumer's conversion is a tracked follow-up, and until it lands that
   consumer is shown as non-compliant owed work.
 - mempalace's current behaviour holds: its scanner skips symlinks
-  (`Mempalace/mempalace/miner.py`, the symlink skip in `scan_project`) and it honours
-  `.gitignore` itself when mining.
+  (`Mempalace/mempalace/miner.py`, the symlink skip in `scan_project`), its reader opens
+  files with `O_NOFOLLOW` (`_read_text_no_follow`), and it honours `.gitignore` itself
+  when mining.
