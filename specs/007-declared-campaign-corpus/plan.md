@@ -225,6 +225,11 @@ are selected when `corpus.yaml` is absent.
 4. **Skills follow-ups**: `~/.claude/skills`, both `gm-assistant` copies, and the zvec-grep
    index behind `/campaign-recall`. Each becomes a compliant consumer by reading the TOC.
 
+5. **Host rollout (GM decision, 2026-10-23: risk accepted).** Once a campaign has a
+   `corpus.yaml`, its `.mneme/mempalace.yaml` loses `wings:`, and a host on older mneme
+   cannot load that campaign and would re-render the old per-wing files. No host-first
+   rule or version guard is built. The GM upgrades both hosts.
+
 Items 3 and 4 do not block this feature. Until each lands, it shows as non-compliant owed
 work (FR-024, SC-009).
 
