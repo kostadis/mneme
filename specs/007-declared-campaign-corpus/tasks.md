@@ -56,23 +56,23 @@ Every user story needs these.
 
 ### mempalace (`~/src/Mempalace-007`, contract `contracts/mempalace-cli-additions.md`)
 
-- [ ] T004 Add `mine --files-from FILE` in `mempalace/cli/parser.py` and `mempalace/cli/cmd_mine.py`:
+- [X] T004 Add `mine --files-from FILE` in `mempalace/cli/parser.py` and `mempalace/cli/cmd_mine.py`:
   - Read newline-separated paths (relative to DIR or absolute under it; `-` means stdin) and pass them as `miner.mine(files=…)` (`miner.py:2362`).
   - Report each missing, symlinked, non-regular or non-`READABLE_EXTENSIONS` path on the existing `SKIP: <rel> (<reason>)` channel.
   - Reject the flag combined with `--include-ignored` or `--no-gitignore`.
   - Tests go in the repo's existing mine tests.
-- [ ] T005 Add `mempalace sources [--wing W] --json` (new `mempalace/cli/cmd_sources.py`, registered in `mempalace/cli/parser.py`):
+- [X] T005 Add `mempalace sources [--wing W] --json` (new `mempalace/cli/cmd_sources.py`, registered in `mempalace/cli/parser.py`):
   - Read-only. Print a JSON array of `{wing, source_file, source_mtime, drawers}`, one per distinct `(wing, source_file)`.
   - Use `facet_counts("source_file", …)` where the backend supports it, otherwise `sync._iter_drawer_metadata` (`sync.py:313-330`).
   - Exit non-zero with no JSON if the store cannot be opened.
   - Tests included.
-- [ ] T006 Add `mempalace forget --sources-from FILE [--wing W] [--apply]` (new `mempalace/cli/cmd_forget.py`, registered in `mempalace/cli/parser.py`):
+- [X] T006 Add `mempalace forget --sources-from FILE [--wing W] [--apply]` (new `mempalace/cli/cmd_forget.py`, registered in `mempalace/cli/parser.py`):
   - Dry run by default.
   - Delete only drawers whose `source_file` is listed, via the existing `delete(where={"source_file": …})` path.
   - Print `Sources: N`, `Drawers: M`, and one `  <path>  (<count>)` line per source, every source listed.
   - Exit non-zero on any failure.
   - Tests included.
-- [ ] T007 (Opus) Gate the mempalace worktree: run its test suite and linter, read the diff against `contracts/mempalace-cli-additions.md`, then push `feat/corpus-cli` and open a PR into `kostadis-dev` via `mcp__github__create_pull_request`.
+- [X] T007 (Opus) Gate the mempalace worktree: run its test suite and linter, read the diff against `contracts/mempalace-cli-additions.md`, then push `feat/corpus-cli` and open a PR into `kostadis-dev` via `mcp__github__create_pull_request`.
 - [ ] T008 (GM) Review and merge the mempalace PR into `kostadis-dev`. mneme work that calls the new verbs is blocked until this lands.
 - [ ] T009 Bump the mempalace pin in `hypostasis.example.yaml` (the `components.mempalace.pin` line) to the merged `kostadis-dev` commit, and update its comment to name feature 007's CLI additions. In the task report, tell the GM that each host's `~/.config/hypostasis/hypostasis.yaml` needs the same pin and a `hypostasis install`. This task does not touch host configs.
 
