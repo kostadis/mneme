@@ -16,9 +16,9 @@ def _write_authority(campaign_dir, body):
 # ── recipe ────────────────────────────────────────────────────────────────────
 
 
-def test_recipe_current_loads_v2_standard():
-    rec = recipe.current()
-    assert rec.version == "2.0.0"  # v2 is the new standard (GH #24)
+def test_recipe_v2_standard():
+    rec = recipe.load("2.0.0")
+    assert rec.version == "2.0.0"  # v2 is the 6-wing standard (GH #24); current() is v3 (007)
     # notes/ and summaries/ are WINGS in v2, no longer baseline exclusions
     assert "summaries/" not in rec.mechanical.baseline_exclusions
     assert "notes/" not in rec.mechanical.baseline_exclusions

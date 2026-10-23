@@ -41,9 +41,9 @@ verified on its own.
 
 **Purpose**: Workspaces and skeletons.
 
-- [ ] T001 (Opus) Create the mempalace worktree: `git -C ~/src/Mempalace worktree add -b feat/corpus-cli ~/src/Mempalace-007 kostadis-dev`. Mempalace work always branches from and merges back to `kostadis-dev`, never `main` (`~/src/CLAUDE.md`).
-- [ ] T002 [P] Create the empty package `mneme/corpus/__init__.py` with a module docstring naming feature 007 and stating that the corpus is campaign-level, not mempalace-specific (plan § Structure Decision).
-- [ ] T003 [P] Create `mneme/recipes/mempalace.recipe.v3.yaml`. Copy v2's `mechanical:` and `scaffold:` unchanged, set `version: "3.0.0"`, and add a `kinds:` section: `npcs`, `summaries`, `party` and `grounding` with `default_trust: authoritative`, `prep` with `default_trust: reference`, each with a `rooms_hint` list. The header comment states that v3 adds kinds for declared-corpus campaigns and that wing-model campaigns keep working (research R6).
+- [X] T001 (Opus) Create the mempalace worktree: `git -C ~/src/Mempalace worktree add -b feat/corpus-cli ~/src/Mempalace-007 kostadis-dev`. Mempalace work always branches from and merges back to `kostadis-dev`, never `main` (`~/src/CLAUDE.md`).
+- [X] T002 [P] Create the empty package `mneme/corpus/__init__.py` with a module docstring naming feature 007 and stating that the corpus is campaign-level, not mempalace-specific (plan § Structure Decision).
+- [X] T003 [P] Create `mneme/recipes/mempalace.recipe.v3.yaml`. Copy v2's `mechanical:` and `scaffold:` unchanged, set `version: "3.0.0"`, and add a `kinds:` section: `npcs`, `summaries`, `party` and `grounding` with `default_trust: authoritative`, `prep` with `default_trust: reference`, each with a `rooms_hint` list. The header comment states that v3 adds kinds for declared-corpus campaigns and that wing-model campaigns keep working (research R6).
 
 ---
 
@@ -78,17 +78,17 @@ Every user story needs these.
 
 ### mneme foundations
 
-- [ ] T010 [P] Extend the test double `tests/fixtures/stub_mempalace.py` and update its docstring:
+- [X] T010 [P] Extend the test double `tests/fixtures/stub_mempalace.py` and update its docstring:
   - `mine … --files-from F --wing W` logs the argv and appends `(W, abs path)` pairs to a state file named by `$MNEME_STUB_SOURCES_STATE`.
   - `sources --json` prints that state as the contract's JSON. `$MNEME_STUB_SOURCES=rc1` exits 1, and `garbage` prints non-JSON.
   - `forget --sources-from F [--apply]` reports per the contract. With `--apply` it also removes those sources from the state file.
-- [ ] T011 Add runner methods to `mneme/mempalace/runner.py`:
+- [X] T011 Add runner methods to `mneme/mempalace/runner.py`:
   - `mine_files(root, files, wing, palace, dry_run)` writes the list to a temp file and passes `--files-from`, then returns `MineResult` with skips parsed as today.
   - `sources(palace, wing=None) -> list[SourceRecord] | None` returns None (unknown) on rc≠0 or unparseable output, and never raises on a read.
   - `forget(sources, palace, apply)` returns a parsed report and raises `MempalaceError` on a failed apply.
   - Add `supports_corpus()`, which probes `mempalace --help` once for the three verbs.
   - Unit tests in `tests/unit/test_mp_runner_corpus.py`, against the stub.
-- [ ] T012 [P] Add the recipe kinds:
+- [X] T012 [P] Add the recipe kinds:
   - Add `KindDef(name, default_trust, rooms_hint)` to `mneme/mempalace/models.py` and `kinds: tuple[KindDef, ...] = ()` to `Recipe`.
   - Parse `kinds:` in `mneme/mempalace/recipe.py` `_parse`. v1/v2 yield no kinds.
   - Tests in `tests/unit/test_mp_recipe_v3.py`: v3 loads five kinds with the ratified trusts, v2 loads none, and `current()` returns v3.

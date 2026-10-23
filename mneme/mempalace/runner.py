@@ -8,10 +8,12 @@ configured venv (`<venv>/bin/mempalace`) and overridable for tests.
 from __future__ import annotations
 
 import functools
+import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -62,6 +64,31 @@ class MineResult:
     """What a successful `mempalace mine` reported as skipped (GH #31). Callers may ignore it."""
 
     skips: tuple[SkipNotice, ...] = ()
+
+
+@dataclass(frozen=True)
+class SourceRecord:
+    """One distinct `(wing, source_file)` in the store (`mempalace sources --json`, 007 R3)."""
+
+    wing: str
+    source_file: str  # absolute, as mempalace stored it
+    source_mtime: float | None
+    drawers: int
+
+
+@dataclass(frozen=True)
+class ForgetReport:
+    """The parsed `mempalace forget` report: sources and drawers to delete (or deleted)."""
+
+    sources: int
+    drawers: int
+    paths: tuple[str, ...] = ()  # the "<path>" of each `  <path>  (<count>)` line
+
+
+_FORGET_SOURCES_RE = re.compile(r"^\s*Sources:\s+(\d+)", re.MULTILINE)
+_FORGET_DRAWERS_RE = re.compile(r"^\s*Drawers:\s+(\d+)", re.MULTILINE)
+_FORGET_LINE_RE = re.compile(r"^\s+(\S.*?)\s+\((\d+)\)\s*$", re.MULTILINE)
+_CORPUS_VERBS = ("sources", "forget")
 
 
 class MempalaceError(Exception):
@@ -157,6 +184,7 @@ class MempalaceRunner:
         self.runner = runner
         # The hypostasis-declared overlay (e.g. MEMPALACE_BACKEND), exposed for assertions.
         self.env: dict[str, str] = dict(env or {})
+        self._corpus_ok: bool | None = None
 
     @classmethod
     def for_venv(
@@ -211,6 +239,101 @@ class MempalaceRunner:
             detail = (out.stderr or out.stdout or "").strip()[-300:] or "no output"
             raise MempalaceError(f"mempalace mine {path} failed (rc {out.returncode}): {detail}")
         return MineResult(tuple(parse_skips(f"{out.stdout or ''}\n{out.stderr or ''}")))
+
+    def mine_files(
+        self,
+        root: Path,
+        files: Sequence[Path | str],
+        wing: str,
+        palace: Path | str | None = None,
+        dry_run: bool = False,
+    ) -> MineResult:
+        """Mine exactly ``files`` under ``root`` into ``wing`` (`mine --files-from`, 007 R1).
+        Pass resolved targets, never symlinks. Raises on failure; skips parsed as `mine`."""
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
+            fh.write("".join(f"{f}\n" for f in files))
+        try:
+            sub = ["mine", str(root), "--files-from", fh.name, "--wing", wing]
+            if dry_run:
+                sub.append("--dry-run")
+            out = self._call(self._with_palace(palace, *sub))
+        finally:
+            Path(fh.name).unlink(missing_ok=True)
+        if out.returncode != 0:
+            detail = (out.stderr or out.stdout or "").strip()[-300:] or "no output"
+            raise MempalaceError(
+                f"mempalace mine --files-from {root} failed (rc {out.returncode}): {detail}"
+            )
+        return MineResult(tuple(parse_skips(f"{out.stdout or ''}\n{out.stderr or ''}")))
+
+    def sources(
+        self, palace: Path | str | None = None, wing: str | None = None
+    ) -> list[SourceRecord] | None:
+        """Every `(wing, source_file)` in the store, or None when it cannot be read: rc != 0
+        or unparseable output is unknown, never an empty list (FR-017, 007 R3). Never raises."""
+        sub = ["sources", "--json"] + (["--wing", wing] if wing else [])
+        out = self._call(self._with_palace(palace, *sub))
+        if out.returncode != 0:
+            return None
+        try:
+            rows = json.loads(out.stdout or "")
+            return [
+                SourceRecord(
+                    str(r["wing"]),
+                    str(r["source_file"]),
+                    None if r.get("source_mtime") is None else float(r["source_mtime"]),
+                    int(r["drawers"]),
+                )
+                for r in rows
+            ]
+        except (ValueError, TypeError, KeyError):
+            return None
+
+    def forget(
+        self,
+        sources: Sequence[Path | str],
+        palace: Path | str | None = None,
+        apply: bool = False,
+        wing: str | None = None,
+    ) -> ForgetReport:
+        """`forget --sources-from F [--wing W] [--apply]` (007 R4). Dry run by default; a failed
+        or unparseable run raises `MempalaceError` so a caller never assumes it worked."""
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
+            fh.write("".join(f"{s}\n" for s in sources))
+        try:
+            sub = ["forget", "--sources-from", fh.name]
+            if wing:
+                sub += ["--wing", wing]
+            if apply:
+                sub.append("--apply")
+            out = self._call(self._with_palace(palace, *sub))
+        finally:
+            Path(fh.name).unlink(missing_ok=True)
+        if out.returncode != 0:
+            detail = (out.stderr or out.stdout or "").strip()[-300:] or "no output"
+            raise MempalaceError(f"mempalace forget failed (rc {out.returncode}): {detail}")
+        text = out.stdout or ""
+        ns, nd = _FORGET_SOURCES_RE.search(text), _FORGET_DRAWERS_RE.search(text)
+        if ns is None or nd is None:
+            first = text.strip()[:120] or "no output"
+            raise MempalaceError(f"mempalace forget: no report ({first})")
+        paths = tuple(m.group(1) for m in _FORGET_LINE_RE.finditer(text))
+        return ForgetReport(int(ns.group(1)), int(nd.group(1)), paths)
+
+    def supports_corpus(self) -> bool:
+        """True iff `mempalace --help` lists the `sources` and `forget` verbs (007 Dependency 1).
+        `mine --files-from` is probed from `mine --help`. Probed once per runner."""
+        if self._corpus_ok is not None:
+            return self._corpus_ok
+        top = self._call(["--help"])
+        mine = self._call(["mine", "--help"])
+        self._corpus_ok = (
+            top.returncode == 0
+            and mine.returncode == 0
+            and all(v in (top.stdout or "") for v in _CORPUS_VERBS)
+            and "--files-from" in (mine.stdout or "")
+        )
+        return self._corpus_ok
 
     def status(self, palace: Path | str | None = None) -> bool:
         """True iff `mempalace --palace <p> status` answers cleanly (the store is openable)."""

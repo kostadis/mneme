@@ -39,12 +39,22 @@ class MechanicalRules:
 
 
 @dataclass(frozen=True)
+class KindDef:
+    """A standard corpus kind (feature 007). Its name becomes the wing name."""
+
+    name: str
+    default_trust: str
+    rooms_hint: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Recipe:
     """The shared best practice — owned by mneme, versioned (FR-007/015)."""
 
     version: str
     mechanical: MechanicalRules
     scaffold: tuple[ScaffoldPattern, ...] = ()
+    kinds: tuple[KindDef, ...] = ()  # v3+; v1/v2 yield none (feature 007, R6)
 
 
 # ---------------------------------------------------------------------------

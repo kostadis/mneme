@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import MechanicalRules, Recipe, ScaffoldPattern, WingTemplate
+from .models import KindDef, MechanicalRules, Recipe, ScaffoldPattern, WingTemplate
 
 RECIPES_DIR = Path(__file__).resolve().parent.parent / "recipes"
 _FILE_RE = re.compile(r"^mempalace\.recipe\.v(\d+)\.yaml$")
@@ -51,7 +51,18 @@ def _parse(raw: dict, source: Path) -> Recipe:
         )
         scaffold.append(ScaffoldPattern(id=str(praw.get("id", "")), wings=wings))
 
-    return Recipe(version=version, mechanical=mechanical, scaffold=tuple(scaffold))
+    kinds = tuple(
+        KindDef(
+            name=str(k.get("name", "")),
+            default_trust=str(k.get("default_trust", "")),
+            rooms_hint=tuple(str(r) for r in (k.get("rooms_hint") or ())),
+        )
+        for k in (raw.get("kinds") or ())
+    )
+
+    return Recipe(
+        version=version, mechanical=mechanical, scaffold=tuple(scaffold), kinds=kinds
+    )
 
 
 def load_file(path: Path) -> Recipe:
