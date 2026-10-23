@@ -468,6 +468,114 @@ def _campaign_rows(
     return rows
 
 
+FLEET = "(fleet)"
+
+
+def _glob_match(path: str, pattern: str) -> bool:
+    """Glob semantics on campaign-relative POSIX paths; `**` spans directories."""
+    from pathlib import PurePosixPath
+
+    if hasattr(PurePosixPath, "full_match"):  # Python 3.13+
+        return PurePosixPath(path).full_match(pattern)
+    out, i = "", 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out += "(?:.*/)?"
+            i += 3
+        elif pattern.startswith("**", i):
+            out += ".*"
+            i += 2
+        elif pattern[i] == "*":
+            out += "[^/]*"
+            i += 1
+        elif pattern[i] == "?":
+            out += "[^/]"
+            i += 1
+        else:
+            out += re.escape(pattern[i])
+            i += 1
+    return re.fullmatch(out, path) is not None
+
+
+def _consumers_fleet_row() -> tuple[ConformanceRow, tuple]:
+    """007 FR-024: ONE fleet-level row. Non-compliant consumers are owed work (never a
+    failure); an unreadable inventory IS a failure (a broken GM record must not pass)."""
+    from mneme.corpus import consumers as _consumers
+
+    try:
+        allc = _consumers.load(_consumers.DEFAULT)
+    except _consumers.ConsumersError as e:
+        return ConformanceRow(
+            FLEET, "consumers", State.INVALID_CONFIG,
+            note="consumers.yaml is invalid: " + "; ".join(e.problems),
+        ), ()
+    bad = _consumers.noncompliant(allc)
+    if not bad:
+        return ConformanceRow(
+            FLEET, "consumers", State.CONFORMANT,
+            note=f"all {len(allc)} known consumers are compliant",
+        ), ()
+    partial = sum(1 for c in bad if _consumers.compliance(c) == "partial")
+    return ConformanceRow(
+        FLEET, "consumers", State.CONSUMERS_OWED, observed=str(len(bad)),
+        note=f"{len(bad)} non-compliant consumers ({partial} partial) "
+             "-> mneme corpus consumers --noncompliant",
+    ), bad
+
+
+def _campaign_files(root: Path) -> list[str]:
+    import os
+
+    out: list[str] = []
+    for dp, dns, fns in os.walk(root):
+        dns[:] = [d for d in dns if d != ".git"]
+        base = Path(dp).relative_to(root)
+        out.extend((base / f).as_posix() for f in fns)
+    return out
+
+
+def _consumers_campaign_row(ref, recipe, consumers) -> ConformanceRow | None:
+    """Per corpus campaign: for each non-compliant consumer with `reads`, (a) files its reads
+    match that the resolved corpus lacks, (b) corpus files of its kinds its reads miss. An
+    extra `consumers` row (owed, never a failure); None when nothing differs or the corpus
+    cannot be resolved (the `corpus` row already reports that)."""
+    from mneme.corpus import api as _api
+
+    try:
+        doc = _api.fresh(ref.path, recipe)
+    except _cconfig.CorpusConfigError:
+        return None
+    if not doc.get("valid", False):
+        return None
+    in_corpus = {f["path"] for k in doc["kinds"].values() for f in k.get("files", [])}
+    on_disk = None
+    parts: list[str] = []
+    for c in consumers:
+        if not c.reads:
+            continue
+        if on_disk is None:
+            on_disk = _campaign_files(ref.path)
+        matched = {p for p in on_disk if any(_glob_match(p, r) for r in c.reads)}
+        outside = sorted(matched - in_corpus)
+        missed = sorted(
+            f["path"] for kind in c.kinds
+            for f in (_toc.files_for(doc, kind) or [])
+            if not any(_glob_match(f["path"], r) for r in c.reads)
+        )
+        for label, files in (
+            ("reads outside the corpus", outside), ("corpus files it does not read", missed),
+        ):
+            if files:
+                more = f" (+{len(files) - _SHOWN} more)" if len(files) > _SHOWN else ""
+                parts.append(f"{c.name} {label}: {', '.join(files[:_SHOWN])}{more}")
+    if not parts:
+        return None
+    return ConformanceRow(
+        ref.name, "consumers", State.CONSUMERS_OWED, observed=str(len(parts)),
+        note="OWED: " + " | ".join(parts),
+    )
+
+
 def check_dir(
     campaign_dir, *, runner: MempalaceRunner | None = None, entity=None,
     check_index: bool = True,
@@ -524,13 +632,20 @@ def report(
     rows: list[ConformanceRow] = []
     for ref in refs:
         rows.extend(_campaign_rows(ref, recipe, runner, entity, prober))
+    fleet, consumers = _consumers_fleet_row()
+    rows.append(fleet)
+    for ref in refs:
+        if consumers and has_corpus(ref.path):
+            diff = _consumers_campaign_row(ref, recipe, consumers)
+            if diff is not None:
+                rows.append(diff)
     return ConformanceReport(rows=tuple(rows))
 
 
 def format_row(row: ConformanceRow) -> str:
     if row.state in FAIL_STATES:
         flag = "FAIL"
-    elif row.state is State.CORPUS_UNDECLARED:
+    elif row.state in (State.CORPUS_UNDECLARED, State.CONSUMERS_OWED):
         flag = "todo"  # owed work: neither green nor a failure
     elif not row.ok:
         flag = "??  "  # unverified: not ok, but not a (non-strict) failure

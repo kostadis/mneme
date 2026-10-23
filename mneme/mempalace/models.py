@@ -177,6 +177,9 @@ class State(StrEnum):
     # 007 US4 — a wing-model campaign that has not declared a corpus yet: owed work, never a
     # failure (not in FAIL_STATES, not a --strict failure; GM decision 2026-10-23).
     CORPUS_UNDECLARED = "corpus_undeclared"
+    # 007 US5 — non-compliant consumers of campaign files (FR-024): owed work, never a failure
+    # (not in FAIL_STATES, not a --strict failure).
+    CONSUMERS_OWED = "consumers_owed"
 
 
 # States that count as a genuine FAIL (non-zero exit). A deliberate, recorded
