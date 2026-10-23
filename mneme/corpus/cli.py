@@ -20,6 +20,7 @@ from mneme.mempalace.runner import MempalaceRunner
 
 from . import api as _api
 from . import config as _cconfig
+from . import consumers as _consumers
 from . import toc as _toc
 
 app = typer.Typer(no_args_is_help=True, help="Declared campaign corpus: check, resolve, inspect.")
@@ -175,4 +176,35 @@ def init(
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_skeleton(campaign))
     typer.echo(f"wrote {target} (edit it, then `mneme corpus check {campaign}`)")
+    raise typer.Exit(EXIT_OK)
+
+
+EXIT_INVALID = 2
+
+
+@app.command()
+def consumers(
+    noncompliant: bool = typer.Option(False, "--noncompliant",
+                                      help="Only partial and non-compliant consumers"),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON"),
+) -> None:
+    """List the known consumers of campaign files and how compliant each is (FR-023).
+    Exit 0, or 2 when consumers.yaml is invalid."""
+    try:
+        rows = _consumers.load(_consumers.DEFAULT)
+    except _consumers.ConsumersError as e:
+        typer.echo("error: consumers.yaml is invalid", err=True)
+        for p in e.problems:
+            typer.echo(f"  - {p}", err=True)
+        raise typer.Exit(EXIT_INVALID) from None
+    if noncompliant:
+        rows = _consumers.noncompliant(rows)
+    if as_json:
+        typer.echo(json.dumps([
+            {"name": c.name, "repo": c.repo, "entry": c.entry, "kinds": list(c.kinds),
+             "mode": c.mode, "compliance": _consumers.compliance(c)} for c in rows], indent=2))
+    else:
+        for c in rows:
+            typer.echo(f"{c.name} [{c.repo}] {c.entry} kinds={','.join(c.kinds)} "
+                       f"mode={c.mode} {_consumers.compliance(c)}")
     raise typer.Exit(EXIT_OK)
