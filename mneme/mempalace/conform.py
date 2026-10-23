@@ -9,12 +9,20 @@ an undispositioned one is "needs a decision" and IS (FR-027). mneme never guesse
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from hypostasis.models import ConfigEntity
+from mneme.corpus import compare as _compare
+from mneme.corpus import config as _cconfig
+from mneme.corpus import resolve as _cresolve
+from mneme.corpus import toc as _toc
+from mneme.corpus.config import has_corpus
 
 from . import authority as _authority
+from . import corpus_record as _crec
 from . import discover as _discover
+from . import former_wings as _former
 from . import mine_record as _record
 from . import ownership as _ownership
 from . import recipe as _recipe
@@ -56,7 +64,9 @@ def _scaffold_matches(cfg: CampaignMempalaceConfig, recipe: Recipe) -> bool:
     return False
 
 
-def _recipe_row(cfg: CampaignMempalaceConfig, recipe: Recipe) -> ConformanceRow:
+def _recipe_row(
+    cfg: CampaignMempalaceConfig, recipe: Recipe, *, corpus: bool = False
+) -> ConformanceRow:
     # 1) version behind current → upgrade available (pending by default; deliberate if recorded)
     if cfg.recipe_version != recipe.version:
         disp = cfg.disposition_for(DIV_VERSION_BEHIND)
@@ -72,7 +82,7 @@ def _recipe_row(cfg: CampaignMempalaceConfig, recipe: Recipe) -> ConformanceRow:
             note="upgrade available, not yet adopted",
         )
     # 2) scaffold deviation (advisory) → needs a decision only when undispositioned
-    if not _scaffold_matches(cfg, recipe):
+    if not corpus and not _scaffold_matches(cfg, recipe):  # a corpus campaign has no wings
         disp = cfg.disposition_for(DIV_SCAFFOLD_NOMATCH)
         if disp and disp.kind == "deliberate":
             return ConformanceRow(
@@ -235,6 +245,111 @@ def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow
     )
 
 
+_SHOWN = 10  # files named per finding in a status note (display only; the data is complete)
+
+_CODE_STATE = {
+    _compare.INVALID: State.CORPUS_INVALID,
+    _compare.UNKNOWN: State.CORPUS_UNKNOWN,
+    _compare.MISSING: State.CORPUS_MISSING,
+    _compare.UNDECLARED: State.UNDECLARED_DRAWERS,
+    _compare.OUT_OF_SCOPE: State.OUT_OF_SCOPE,
+    _compare.UNMINED: State.UNMINED,
+    _compare.STALE: State.CORPUS_STALE,
+    _compare.WRONG_WING: State.WRONG_WING,
+    _compare.TOC_STALE: State.TOC_STALE,
+}
+
+
+def _finding_text(f: _compare.CorpusFinding, campaign: str) -> str:
+    names = ", ".join(f.files[:_SHOWN])
+    more = f" (+{len(f.files) - _SHOWN} more)" if len(f.files) > _SHOWN else ""
+    head = f.code.upper()
+    if f.code in (_compare.INVALID, _compare.UNKNOWN):
+        body = "; ".join(f.files[:_SHOWN]) + more
+    elif f.code == _compare.TOC_STALE:
+        body = f.detail
+    else:
+        drawers = f" ({f.drawers} drawers)" if f.drawers else ""
+        body = f"{f.count} file(s){drawers}: {names}{more}"
+        if f.detail:
+            body += f" [{f.detail}]"
+    remedy = f.remedy
+    if re.fullmatch(r"mneme mp \w+", remedy):
+        remedy += f" {campaign}"
+    return f"{head}: {body} -> {remedy}"
+
+
+def _corpus_findings(ref, cfg, rec, runner) -> _compare.CorpusFindings:
+    """Resolve the declaration fresh and compare it with the palace. Never raises: whatever
+    cannot be read is a finding (invalid / unknown), never a silent OK (FR-017)."""
+    try:
+        ccfg = _cconfig.load(ref.path, rec)
+    except _cconfig.CorpusConfigError as e:
+        return _compare.CorpusFindings((_compare.CorpusFinding(
+            _compare.INVALID, tuple(f.line() for f in e.findings),
+            remedy="edit .mneme/corpus.yaml (`mneme corpus check`)",
+        ),), verified=False)
+    resolved = _cresolve.resolve(ccfg, ref.path, rec)
+    toc_check = _toc.verify(ref.path, _toc.build(resolved, ccfg, rec))
+    sources = None
+    why = None
+    if cfg.store is None:
+        why = "no store pointer, so the palace cannot be read"
+    elif not Path(cfg.store.path).is_dir():
+        why = "the store is not provisioned (`mneme mp bringup`)"
+    elif not runner.supports_corpus():
+        why = "this mempalace lacks the corpus verbs (`sources`, `forget`, `mine --files-from`)"
+    else:
+        sources = runner.sources(cfg.store.path)
+        if sources is None:
+            why = "`mempalace sources` failed or returned unparseable output"
+    record = None
+    rec_err = None
+    if cfg.store is not None:
+        try:
+            record = _crec.read(cfg.store.path)
+        except _crec.CorpusRecordError as e:
+            rec_err = str(e)
+    return _compare.compare(
+        resolved, sources, record, toc_check, ref.path,
+        record_error=rec_err, sources_error=why,
+    )
+
+
+def _corpus_rows(ref, cfg, rec, runner) -> tuple[ConformanceRow, ConformanceRow]:
+    """007 US2: the `corpus` row, and the `index` row derived from the SAME comparison
+    (a corpus campaign's `sync --dry-run` scope would be a different question)."""
+    res = _corpus_findings(ref, cfg, rec, runner)
+    if res.ok:
+        corpus = ConformanceRow(
+            ref.name, "corpus", State.CONFORMANT,
+            note="palace equals the declared corpus; every drawer is current",
+        )
+    else:
+        corpus = ConformanceRow(
+            ref.name, "corpus", _CODE_STATE[res.findings[0].code],
+            observed=",".join(res.codes),
+            note=" | ".join(_finding_text(f, ref.name) for f in res.findings),
+        )
+    drawer_codes = {_compare.UNDECLARED, _compare.OUT_OF_SCOPE, _compare.UNMINED,
+                    _compare.STALE, _compare.WRONG_WING, _compare.MISSING}
+    if not res.verified:
+        index = ConformanceRow(
+            ref.name, "index", State.INDEX_UNVERIFIED,
+            note="unverified: the corpus comparison could not read the palace",
+        )
+    elif any(c in drawer_codes for c in res.codes):
+        index = ConformanceRow(
+            ref.name, "index", State.STALE,
+            note="palace differs from the corpus — see the corpus row",
+        )
+    else:
+        index = ConformanceRow(
+            ref.name, "index", State.BUILT, note="palace drawer sources equal the corpus",
+        )
+    return corpus, index
+
+
 def _gaps_row(ref: CampaignRef, cfg) -> ConformanceRow | None:
     """GH #31 — files the LAST mneme-run mine skipped (Principle I: unknown is not green).
     Only for campaigns with a store pointer; reads the record in the store folder."""
@@ -304,7 +419,10 @@ def _campaign_rows(
     except RecipeError:
         rec = recipe  # fall back to current for the comparison
 
-    rows = [_recipe_row(cfg, recipe)]
+    corpus = has_corpus(ref.path)
+    rows = [_recipe_row(cfg, recipe, corpus=corpus)]
+    if entity is not None and not corpus and (warn := _former.try_record(cfg)):
+        rows.append(ConformanceRow(ref.name, "former-wings", State.CONFORMANT, note=warn))
 
     drifted = _render.coherent(cfg, rec, ref.path)
     if drifted:
@@ -319,7 +437,9 @@ def _campaign_rows(
             ConformanceRow(ref.name, "render", State.CONFORMANT, note="derived files coherent")
         )
 
-    if check_index:
+    if corpus:
+        rows.extend(_corpus_rows(ref, cfg, rec, runner))
+    elif check_index:
         rows.append(_index_row(ref, cfg, runner))
     rows.extend(_store_backup_rows(ref, cfg, entity, runner, prober))
     if entity is not None and (gaps := _gaps_row(ref, cfg)) is not None:
@@ -353,7 +473,7 @@ def check_dir(
     from pathlib import Path
 
     from hypostasis import config as _config
-    from mneme.corpus.config import CORPUS_REFUSAL, has_corpus
+    from mneme.corpus.config import CORPUS_REFUSAL
 
     from . import authority as _auth
     from .discover import CampaignRef, _existing_wing_dirs

@@ -102,13 +102,18 @@ def test_check_dir_returns_a_failing_row_and_does_not_mine(world):
     assert not mine_lines(log)
 
 
-def test_regenerate_refuses_before_deleting_the_store(world, tmp_path):
+def test_regenerate_validates_before_deleting_the_store(world, tmp_path):
+    # T032: regenerate now first-mines a corpus campaign, but an invalid declaration is
+    # still refused BEFORE the store is deleted.
     runner, root, camp, log = world
+    (camp / ".mneme" / "corpus.yaml").write_text(
+        "campaign: corp\nkinds:\n  sumaries:\n    dirs: [docs]\n"
+    )
     entity = entity_for(root, mempalace=tmp_path / "mp")
     store = tmp_path / "mp" / "palaces" / "corp"
     store.mkdir(parents=True)
     (store / "keep").write_text("precious")
-    with pytest.raises(MempalaceError, match="corpus campaign"):
+    with pytest.raises(MempalaceError, match="nothing was deleted"):
         backup.regenerate(entity, "corp", runner=runner)
     assert (store / "keep").read_text() == "precious"
     assert not mine_lines(log)

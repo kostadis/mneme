@@ -19,6 +19,7 @@ from mneme.corpus.config import has_corpus
 from . import authority as _authority
 from . import discover as _discover
 from . import embedder_guard as _guard
+from . import former_wings as _former
 from . import mine_record as _record
 from . import recipe as _recipe
 from .corpus_mine import CorpusMine, mine_corpus
@@ -129,6 +130,11 @@ def _refresh_one(
         result.skipped = True
         return result
     store: Path | None = None
+    fw_warn: str | None = None
+
+    def _warn(new: str | None) -> str | None:
+        return "; ".join(w for w in (fw_warn, new) if w) or None
+
     names: dict[str, str] = {}  # wing source -> wing name (for the GH #31 record)
     if entity is not None and not ref.has_authority:
         # spec 002 US1: no configuration ⇒ skipped (not failed, not mined).
@@ -140,6 +146,8 @@ def _refresh_one(
             cfg = _guard_store(ref, entity, prober)
             store = cfg.store.path
             names = {(w.source or "."): w.name for w in cfg.wings}
+            if not dry_run:  # 007 FR-018a: remember the wings for prune's former-canon guard
+                fw_warn = _former.try_record(cfg)
         except MempalaceError as e:
             result.failed = True
             result.error = str(e)
@@ -160,13 +168,17 @@ def _refresh_one(
             result.error = str(e)
             result.skips = tuple(skips)  # earlier wings' skips are still real
             if store is not None and not dry_run:  # no stale "clean" record behind a failure
-                result.record_warning = _record.try_write(
+                result.record_warning = _warn(_record.try_write(
                     store, ref.name, wing_names, result.skips, status="failed", error=str(e)
-                )
+                ))
             return result
     result.skips = tuple(skips)
     if store is not None and not dry_run:  # GH #31: remember this mine's gaps for `mp status`
-        result.record_warning = _record.try_write(store, ref.name, wing_names, result.skips)
+        result.record_warning = _warn(
+            _record.try_write(store, ref.name, wing_names, result.skips)
+        )
+    else:
+        result.record_warning = _warn(None)
     return result
 
 

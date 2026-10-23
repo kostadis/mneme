@@ -18,7 +18,9 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
-from mneme.corpus.config import CORPUS_REFUSAL, has_corpus
+from mneme.corpus import config as _cconfig
+from mneme.corpus import resolve as _cresolve
+from mneme.corpus.config import has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
@@ -26,6 +28,7 @@ from . import embedder_guard as _guard
 from . import health as _health
 from . import mine_record as _mine_record
 from . import provision as _provision
+from . import recipe as _recipe
 from .models import FAIL_STATES, BindingsBackup, ConformanceRow, State
 from .runner import MempalaceError, MempalaceRunner
 
@@ -269,14 +272,29 @@ def regenerate(
     ref = _discover.resolve(entity, campaign, campaign_dir)
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     store = _authority.require_store(cfg).path
-    if has_corpus(ref.path):  # 007: refuse BEFORE the store is deleted, not after
-        raise MempalaceError(CORPUS_REFUSAL)
+    runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
+    if has_corpus(ref.path):
+        # 007 T032: validate BEFORE the store is deleted (a bad declaration or an old
+        # mempalace must not cost the user their palace), then first-mine through the corpus.
+        try:
+            rec = _recipe.load(cfg.recipe_version)
+            ccfg = _cconfig.load(ref.path, rec)
+        except (_recipe.RecipeError, _cconfig.CorpusConfigError) as e:
+            raise MempalaceError(f"{e} — nothing was deleted") from None
+        resolved = _cresolve.resolve(ccfg, ref.path, rec)
+        if not resolved.valid:
+            why = "; ".join(f.line() for f in resolved.findings)
+            raise MempalaceError(f"invalid corpus ({why}) — nothing was deleted")
+        if not runner.supports_corpus():
+            raise MempalaceError(
+                "mempalace too old for corpus mining (needs `mine --files-from`, `sources`, "
+                "`forget`) — nothing was deleted"
+            )
     # GH #26: verify the embedder answers BEFORE deleting — else a down endpoint leaves
     # the user with no store and a failed mine.
     _guard.require_embedder_answers(entity, prober)
     if store.is_dir():
         shutil.rmtree(store)
-    runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
     # store was just cleared ⇒ the GH #26 guard sees EMPTY and allows (this IS the remedy).
     return _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
 

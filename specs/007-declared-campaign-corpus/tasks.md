@@ -164,27 +164,27 @@ Every user story needs these.
 
 **Independent Test**: quickstart scenarios 2 and 3.
 
-- [ ] T027 [US2] Implement `mneme/corpus/compare.py`:
+- [X] T027 [US2] Implement `mneme/corpus/compare.py`:
   - `compare(toc, sources, record, campaign_dir) -> CorpusFindings`, covering undeclared-drawers, unmined, stale (TOC sha differs from record sha), missing, invalid, toc-stale and unknown, per the data-model state diagram.
   - `not_materialized` is never a finding.
   - Sources outside the campaign root are `out_of_scope`.
   - OK only when there are no findings (FR-017).
-- [ ] T028 [US2] Add a **wrong-wing** finding to `mneme/corpus/compare.py`: a corpus file whose drawers sit in a wing other than its `mined_as`, with remedy `mp refresh` (which re-homes it, T022). A file present in the right wing and in another wing reports both wrong-wing and, if undeclared elsewhere, nothing extra. Add the case to the state matrix in `tests/unit/test_corpus_compare.py`. The data-model state diagram already lists `WRONG-WING`.
-- [ ] T029 [P] [US2] State-matrix unit tests `tests/unit/test_corpus_compare.py` (SC-004): one case per finding, combined findings, and "unknown when sources is None or the record is unreadable". Every non-matching case must be not-OK.
-- [ ] T030 [US2] Wire into `mneme/mempalace/conform.py`:
+- [X] T028 [US2] Add a **wrong-wing** finding to `mneme/corpus/compare.py`: a corpus file whose drawers sit in a wing other than its `mined_as`, with remedy `mp refresh` (which re-homes it, T022). A file present in the right wing and in another wing reports both wrong-wing and, if undeclared elsewhere, nothing extra. Add the case to the state matrix in `tests/unit/test_corpus_compare.py`. The data-model state diagram already lists `WRONG-WING`.
+- [X] T029 [P] [US2] State-matrix unit tests `tests/unit/test_corpus_compare.py` (SC-004): one case per finding, combined findings, and "unknown when sources is None or the record is unreadable". Every non-matching case must be not-OK.
+- [X] T030 [US2] Wire into `mneme/mempalace/conform.py`:
   - In `_campaign_rows`, when `corpus.yaml` exists, add a `corpus` row (new `State` values as needed in `mneme/mempalace/models.py`) whose note lists each finding with counts, files (truncated past 10 with a count), and remedy (`mp prune` / `mp refresh` / edit `corpus.yaml` / `mp render`), per FR-015/016.
   - Replace the `index` row for corpus campaigns with one derived from the same comparison.
   - The wing-model path is untouched.
-- [ ] T031 [US2] Extend `mneme/mempalace/prune.py` for corpus campaigns:
+- [X] T031 [US2] Extend `mneme/mempalace/prune.py` for corpus campaigns:
   - The deletion set is `undeclared ∪ (missing − not_materialized)`, computed by `compare.py`.
   - The preview lists every source with its drawer count. `--confirm --expect N` is bound to N drawers.
   - Back up first (unless `--no-backup`), apply `runner.forget(apply=True)`, then re-verify with `runner.sources()` and fail if any deleted source remains.
   - Not-materialized sources are never in the set (FR-018, R4, R7).
   - **Former-canon guard** (GM decision, 2026-10-23): refuse when the set includes drawers whose wing was `authoritative` before the corpus. Print each such wing with its file and drawer counts, and proceed only when every one is named with `--include-former-canon <wing>` (repeatable). The former wings come from `<store>/mneme-former-wings.json`, a derived record that mneme rewrites with `{wing: trust}` whenever it loads a wing-model authority that has a store (hook it into `authority.load` callers in `conform.py` and `refresh.py`). Write the record in `mneme/mempalace/former_wings.py` (data-model § FormerWingsRecord, FR-018a). If the record is absent, **every wing holding undeclared drawers** is treated as former canon (fail closed). That is keyed on which sources are undeclared, not on wing names, so an old wing named like a kind (obelisk's old `summaries` wing) is still caught. Tests in `tests/unit/test_mp_prune_corpus.py`: refused without the flag, proceeds with it, and the absent-record case.
   - Unit tests in `tests/unit/test_mp_prune_corpus.py`.
-- [ ] T032 [US2] Make `mp regenerate` corpus-aware in `mneme/mempalace/backup.py` (`regenerate`, `:258-278`). For a corpus campaign, after clearing the store, first-mine through the corpus path (per-kind `--files-from`, writing a fresh corpus record) instead of `provision.first_mine`'s wing loop. Integration test in `tests/integration/test_corpus_status_prune.py`: regenerate a corpus campaign with decoys present, and `sources` afterwards equals the TOC exactly.
-- [ ] T033 [P] [US2] Integration test `tests/integration/test_corpus_status_prune.py` for quickstart scenarios 2 and 3: every row of the scenario-2 table, then the prune preview, confirm and re-verify flow, and the skip-worktree survivor.
-- [ ] T034 (Opus) Gate US2: ruff, pytest, diff review.
+- [X] T032 [US2] Make `mp regenerate` corpus-aware in `mneme/mempalace/backup.py` (`regenerate`, `:258-278`). For a corpus campaign, after clearing the store, first-mine through the corpus path (per-kind `--files-from`, writing a fresh corpus record) instead of `provision.first_mine`'s wing loop. Integration test in `tests/integration/test_corpus_status_prune.py`: regenerate a corpus campaign with decoys present, and `sources` afterwards equals the TOC exactly.
+- [X] T033 [P] [US2] Integration test `tests/integration/test_corpus_status_prune.py` for quickstart scenarios 2 and 3: every row of the scenario-2 table, then the prune preview, confirm and re-verify flow, and the skip-worktree survivor.
+- [X] T034 (Opus) Gate US2: ruff, pytest, diff review.
 
 **Checkpoint**: US1 + US2 make the palace provably exact.
 

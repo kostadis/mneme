@@ -47,6 +47,13 @@ _verbose_opt = typer.Option(
 )
 
 
+# 007 FR-018a — prune's former-canon guard; one flag per wing, repeatable.
+_former_canon_opt = typer.Option(
+    None, "--include-former-canon",
+    help="Corpus campaigns: allow deleting drawers of this former-canon wing (repeatable)",
+)
+
+
 def _load_or_exit(config_path: str) -> ConfigEntity:
     try:
         return cfg.load(config_path)
@@ -122,6 +129,7 @@ def prune(
     no_backup: bool = typer.Option(
         False, "--no-backup", help="With --confirm: skip the bindings backup taken first"
     ),
+    include_former_canon: list[str] = _former_canon_opt,
     verbose: bool = _verbose_opt,
     config: str = _config_opt,
 ) -> None:
@@ -157,6 +165,7 @@ def prune(
             backup=not no_backup,
             verbose=verbose,
             emit=emit,
+            include_former_canon=tuple(include_former_canon or ()),
         )
     except _prune.PruneAbort as e:
         typer.echo(f"FAIL prune: {e}", err=True)
