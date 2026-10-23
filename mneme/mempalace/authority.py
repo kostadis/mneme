@@ -263,7 +263,8 @@ def to_yaml(cfg: CampaignMempalaceConfig) -> str:
         # makes it impossible to write a host-local location into a tracked file (FR-010,
         # SC-005) — the guarantee is structural, not a convention someone must remember.
         doc["store"] = {"alias": cfg.store.alias}
-    doc["wings"] = [
+    if cfg.wings:  # a corpus campaign's authority carries no `wings:` (007 FR-001a)
+        doc["wings"] = [
             {
                 "name": w.name,
                 "source": w.source,

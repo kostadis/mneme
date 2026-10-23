@@ -126,8 +126,8 @@ Every user story needs these.
 
 **Independent Test**: quickstart scenario 1. A fixture campaign with decoys, after render and refresh, has `sources` equal to the six declared files and nothing else.
 
-- [ ] T019 [P] [US1] Implement `mneme/mempalace/corpus_record.py`, sibling of `mine_record.py`, same atomic-write and error style. It reads and writes `<store>/mneme-corpus-mined.json` (`{schema, campaign, mined_at, corpus_sha256, files: {relpath: {kind, sha256, target}}}`, with `target` the resolved path actually mined; T023 depends on it) and merges per kind after each successful kind mine (research R3).
-- [ ] T020 [US1] Extend `mneme/mempalace/render.py` for corpus campaigns (`corpus.yaml` present):
+- [X] T019 [P] [US1] Implement `mneme/mempalace/corpus_record.py`, sibling of `mine_record.py`, same atomic-write and error style. It reads and writes `<store>/mneme-corpus-mined.json` (`{schema, campaign, mined_at, corpus_sha256, files: {relpath: {kind, sha256, target}}}`, with `target` the resolved path actually mined; T023 depends on it) and merges per kind after each successful kind mine (research R3).
+- [X] T020 [US1] Extend `mneme/mempalace/render.py` for corpus campaigns (`corpus.yaml` present):
   - Write the root `mempalace.yaml`, stamped, with `palace: <alias>` plus the union of rooms from the recipe kinds.
   - Write the TOC via `mneme/corpus/toc.py`.
   - Delete leftover per-wing `mempalace.yaml` and `.mempalaceignore` renders, but only files carrying mneme's stamp.
@@ -135,7 +135,7 @@ Every user story needs these.
   - Make `coherent()` and `render_faces()` cover the corpus artifacts.
   - The wing-model path is unchanged.
   - Tests in `tests/unit/test_mp_render_corpus.py`.
-- [ ] T021 [US1] Extend `mneme/mempalace/refresh.py` for corpus campaigns:
+- [X] T021 [US1] Extend `mneme/mempalace/refresh.py` for corpus campaigns:
   - Refuse with an unknown result if `runner.supports_corpus()` is false (plan Dependency 1).
   - Run the embedder guard, then for each kind call `runner.mine_files(campaign_dir, <the resolved targets of minable files whose mined_as is this kind>, wing=kind)`. Always pass targets, never symlinks.
   - Update the corpus record after each successful kind. Keep the GH #31 skip record.
@@ -144,15 +144,15 @@ Every user story needs these.
   - **Re-mine on content change** (analysis U4): mempalace skips a file whose source_file and mtime match a mined group, so a same-mtime edit would be silently skipped while the record's new sha read as mined. For every file whose current sha256 differs from the record (or that has no record), `runner.forget([target], apply=True)` first, then mine it. Write a file's sha to the record only for files mined in this run, or already recorded with the same sha.
   - Refresh resolves the corpus itself, with the same `resolve.py` the readers use, and rewrites the TOC snapshot afterwards (analysis U7).
   - **Write isolation** (FR-009): refresh writes only to the store, the mneme records and the TOC snapshot, never campaign content. A test asserts that the campaign tree is byte-identical apart from `.mneme/corpus.toc.json`.
-- [ ] T022 [US1] Re-home files mined under the wrong wing, in `mneme/mempalace/refresh.py`. mempalace's already-mined check matches on `source_file` and mtime only, never on wing (`Mempalace/mempalace/palace/mined.py:59`), so `mine --files-from --wing <kind>` skips a file already mined under an old wing (e.g. `docs/npcs/agatha.md` under the root wing `obelisk`). Before each kind's mine, call `runner.sources()`. Collect corpus files whose current wing differs from their `mined_as`. `runner.forget(<those>, apply=True)` them, then mine. Report the re-homed count, and list them in `--dry-run`. This applies only to files in the TOC. Undeclared sources are left for prune. Unit tests in `tests/unit/test_mp_refresh_corpus.py`, using a stub state that has a file under a foreign wing.
-- [ ] T023 [US1] Replace re-pointed symlinks on refresh, in `mneme/mempalace/refresh.py`. For each corpus file whose current resolved `target` differs from the `target` in `mneme-corpus-mined.json` (a grounding promotion moved `docs/grounding/current`), `runner.forget([<old target>], apply=True)`, then mine the new target, in the same refresh. No prune and no confirmation: the declared membership is unchanged (spec Clarifications, 2026-10-23). Report "replaced N re-pointed files" and list them in `--dry-run`. Only old targets recorded for a still-declared path are forgotten; anything else is left for prune. Integration test in `tests/integration/test_corpus_mining.py`: build two generation dirs plus a `current` symlink, mine, re-point `current`, refresh, and `sources` then holds only the new generation's files.
-- [ ] T024 [US1] Make `mneme/mempalace/bringup.py` use the corpus path when `corpus.yaml` exists: write the mempalace authority with no `wings:` if the campaign has none (out-of-the-abyss has no `.mneme/` today), provision, corpus render, per-kind first mine, then backup. Otherwise it is unchanged. Test: bringup from `corpus.yaml` alone yields drawer sources equal to the resolved corpus (SC-003, out-of-the-abyss case).
-- [ ] T025 [P] [US1] Integration test `tests/integration/test_corpus_mining.py` for quickstart scenario 1:
+- [X] T022 [US1] Re-home files mined under the wrong wing, in `mneme/mempalace/refresh.py`. mempalace's already-mined check matches on `source_file` and mtime only, never on wing (`Mempalace/mempalace/palace/mined.py:59`), so `mine --files-from --wing <kind>` skips a file already mined under an old wing (e.g. `docs/npcs/agatha.md` under the root wing `obelisk`). Before each kind's mine, call `runner.sources()`. Collect corpus files whose current wing differs from their `mined_as`. `runner.forget(<those>, apply=True)` them, then mine. Report the re-homed count, and list them in `--dry-run`. This applies only to files in the TOC. Undeclared sources are left for prune. Unit tests in `tests/unit/test_mp_refresh_corpus.py`, using a stub state that has a file under a foreign wing.
+- [X] T023 [US1] Replace re-pointed symlinks on refresh, in `mneme/mempalace/refresh.py`. For each corpus file whose current resolved `target` differs from the `target` in `mneme-corpus-mined.json` (a grounding promotion moved `docs/grounding/current`), `runner.forget([<old target>], apply=True)`, then mine the new target, in the same refresh. No prune and no confirmation: the declared membership is unchanged (spec Clarifications, 2026-10-23). Report "replaced N re-pointed files" and list them in `--dry-run`. Only old targets recorded for a still-declared path are forgotten; anything else is left for prune. Integration test in `tests/integration/test_corpus_mining.py`: build two generation dirs plus a `current` symlink, mine, re-point `current`, refresh, and `sources` then holds only the new generation's files.
+- [X] T024 [US1] Make `mneme/mempalace/bringup.py` use the corpus path when `corpus.yaml` exists: write the mempalace authority with no `wings:` if the campaign has none (out-of-the-abyss has no `.mneme/` today), provision, corpus render, per-kind first mine, then backup. Otherwise it is unchanged. Test: bringup from `corpus.yaml` alone yields drawer sources equal to the resolved corpus (SC-003, out-of-the-abyss case).
+- [X] T025 [P] [US1] Integration test `tests/integration/test_corpus_mining.py` for quickstart scenario 1:
   - Set up the fixture campaign in a temp git repo, with decoys `docs/campaign_state_draft.md`, `docs/party_draft.md`, `docs/reviews/x.md` and `summaries/raw.md`, using the stub.
   - Assert wings `npcs`/`summaries`/`grounding` and that no decoy is mined.
   - Assert that a new `docs/new_generated/y.md` adds nothing.
   - Assert that `mined_as` puts a shared `docs/party.md` in exactly one wing.
-- [ ] T026 (Opus) Gate US1: ruff, pytest, diff review.
+- [X] T026 (Opus) Gate US1: ruff, pytest, diff review.
 
 **Checkpoint**: MVP. Declared-corpus campaigns can no longer fail open.
 

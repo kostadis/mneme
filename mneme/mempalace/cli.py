@@ -249,7 +249,15 @@ def render(
             raise typer.Exit(EXIT_RUNTIME)
         typer.echo(f"{campaign}: derived files coherent with authority")
         raise typer.Exit(EXIT_OK)
-    written = _render.write_all(cfg_obj, rec, ref.path)
+    from mneme.corpus.config import CorpusConfigError, has_corpus
+
+    try:
+        written = _render.write_all(cfg_obj, rec, ref.path)
+        if has_corpus(ref.path):  # 007: the CG search face is part of the corpus render
+            written.append(_render.render_config_yaml(cfg_obj, ref.path, rec))
+    except CorpusConfigError as e:
+        typer.echo(f"FAIL render: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
     for w in written:
         typer.echo(f"rendered {w.relative_to(ref.path)}")
 
@@ -586,6 +594,8 @@ def faces(
     config: str = _config_opt,
 ) -> None:
     """Re-render the four faces (cli/cg_search/global_alias/mcp) from an existing authority."""
+    from mneme.corpus import config as _cconfig
+
     from . import bringup as _bringup
     from . import discover as _discover
     from .authority import AuthorityError
@@ -596,7 +606,7 @@ def faces(
     except (AuthorityError,) as e:
         typer.echo(f"FAIL faces: {'; '.join(e.problems)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
-    except _discover.DiscoveryError as e:
+    except (_discover.DiscoveryError, _cconfig.CorpusConfigError) as e:
         typer.echo(f"FAIL faces: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     for w in written:

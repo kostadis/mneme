@@ -8,6 +8,7 @@ hand-edited derived file. Reuses `hypostasis.render.subtree_sha256` for hashing.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
@@ -15,6 +16,9 @@ from pathlib import Path
 import yaml
 
 from hypostasis.render import subtree_sha256
+from mneme.corpus import config as _cconfig
+from mneme.corpus import resolve as _cresolve
+from mneme.corpus import toc as _toc
 
 from .models import CampaignMempalaceConfig, Recipe, RenderedArtifact
 
@@ -115,9 +119,116 @@ def stamped_text(artifact: RenderedArtifact) -> str:
     return _stamp(artifact.source_sha256, artifact.content)
 
 
+# ---------------------------------------------------------------------------
+# 007 — corpus campaigns (`.mneme/corpus.yaml` present). Wings are derived from the declared
+# kinds: one root `mempalace.yaml` (palace pointer + rooms), the TOC snapshot, and no per-wing
+# renders. The wing-model path above is unchanged.
+# ---------------------------------------------------------------------------
+
+ROOT_YAML = "mempalace.yaml"
+
+
+def corpus_rooms(recipe: Recipe) -> list[dict]:
+    """The union of the recipe kinds' room hints, in recipe order."""
+    seen: set[str] = set()
+    rooms: list[dict] = []
+    for k in recipe.kinds:
+        for name in k.rooms_hint:
+            if name not in seen:
+                seen.add(name)
+                rooms.append({"name": name, "description": f"{name} content", "keywords": []})
+    return rooms
+
+
+def corpus_kind_order(ccfg: _cconfig.CorpusConfig, recipe: Recipe) -> list[str]:
+    """Declared kinds: standard ones in recipe order, then campaign kinds as declared."""
+    std = [k.name for k in recipe.kinds if k.name in ccfg.kinds]
+    return std + [n for n in ccfg.kinds if n not in std]
+
+
+def corpus_wing_split(ccfg: _cconfig.CorpusConfig, recipe: Recipe) -> tuple[list[str], list[str]]:
+    """``(canon_wings, index_wings)``: kinds with effective trust `authoritative`, the rest."""
+    order = corpus_kind_order(ccfg, recipe)
+    canon = [n for n in order if ccfg.kinds[n].trust == "authoritative"]
+    return canon, [n for n in order if n not in canon]
+
+
+def _corpus_digest(cfg: CampaignMempalaceConfig, recipe: Recipe, ccfg) -> str:
+    return subtree_sha256({
+        "campaign": cfg.campaign,
+        "recipe_version": recipe.version,
+        "alias": cfg.store.alias if cfg.store is not None else None,
+        "corpus_sha256": ccfg.corpus_sha256,
+        "rooms": corpus_rooms(recipe),
+    })
+
+
+def _corpus_root_yaml(cfg: CampaignMempalaceConfig, recipe: Recipe) -> str:
+    doc: dict = {}
+    if cfg.store is not None:
+        doc["palace"] = cfg.store.alias  # the CLI walk-up pointer (FR-016)
+    doc["rooms"] = corpus_rooms(recipe)
+    return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False)
+
+
+def _load_corpus(recipe: Recipe, campaign_dir: Path) -> _cconfig.CorpusConfig:
+    return _cconfig.load(campaign_dir, recipe)
+
+
+def leftover_wing_renders(campaign_dir: Path) -> list[Path]:
+    """Per-wing `mempalace.yaml` / `.mempalaceignore` files mneme's wing model stamped, under
+    ``campaign_dir`` (relative paths). The root `mempalace.yaml` is the corpus render, not a
+    leftover. Unstamped files are the campaign's own and are never listed."""
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(campaign_dir):
+        dirnames[:] = [d for d in dirnames if d != ".git"]
+        for name in filenames:
+            rel = (Path(dirpath) / name).relative_to(campaign_dir)
+            if name == IGNORE_RELPATH or (name == ROOT_YAML and rel != Path(ROOT_YAML)):
+                if read_stamp(campaign_dir / rel) is not None:
+                    found.append(rel)
+    return sorted(found)
+
+
+def write_corpus(cfg: CampaignMempalaceConfig, recipe: Recipe, dest_root: Path) -> list[Path]:
+    """Corpus render: stamped root `mempalace.yaml`, the TOC snapshot (+ `.gitignore` line),
+    and removal of leftover stamped wing-model renders. Raises CorpusConfigError."""
+    ccfg = _load_corpus(recipe, dest_root)
+    art = RenderedArtifact(
+        target=Path(ROOT_YAML), source_sha256=_corpus_digest(cfg, recipe, ccfg),
+        content=_corpus_root_yaml(cfg, recipe),
+    )
+    written: list[Path] = []
+    root = dest_root / art.target
+    root.write_text(stamped_text(art))
+    written.append(root)
+    for rel in leftover_wing_renders(dest_root):
+        (dest_root / rel).unlink()
+    resolved = _cresolve.resolve(ccfg, dest_root, recipe)
+    written.append(_toc.write(dest_root, _toc.build(resolved, ccfg, recipe)))
+    return written
+
+
+def coherent_corpus(cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: Path) -> list[Path]:
+    """Stale/missing/leftover corpus artifacts (relative paths); empty means coherent."""
+    try:
+        ccfg = _load_corpus(recipe, campaign_dir)
+    except _cconfig.CorpusConfigError:
+        return [Path(ROOT_YAML)]  # cannot be judged: never reported coherent
+    drifted: list[Path] = []
+    if read_stamp(campaign_dir / ROOT_YAML) != _corpus_digest(cfg, recipe, ccfg):
+        drifted.append(Path(ROOT_YAML))
+    resolved = _cresolve.resolve(ccfg, campaign_dir, recipe)
+    if not _toc.verify(campaign_dir, _toc.build(resolved, ccfg, recipe)).ok:
+        drifted.append(_toc.TOC_RELPATH)
+    return drifted + leftover_wing_renders(campaign_dir)
+
+
 def write_all(cfg: CampaignMempalaceConfig, recipe: Recipe, dest_root: Path) -> list[Path]:
     """Write every derived artifact under ``dest_root`` (a working copy, never the
     active checkout for an upgrade). Returns the written paths."""
+    if _cconfig.has_corpus(dest_root):
+        return write_corpus(cfg, recipe, dest_root)
     written: list[Path] = []
     for art in render(cfg, recipe):
         target = dest_root / art.target
@@ -132,6 +243,8 @@ def coherent(cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: Path) -
 
     Empty ⇒ all derived files are coherent with the authority (Principle V).
     """
+    if _cconfig.has_corpus(campaign_dir):
+        return coherent_corpus(cfg, recipe, campaign_dir)
     digest = source_hash(cfg, recipe)
     drifted: list[Path] = []
     for art in render(cfg, recipe):
@@ -158,12 +271,23 @@ def _canon_and_index_wings(cfg: CampaignMempalaceConfig) -> tuple[str, list[str]
     return canon, index
 
 
-def render_config_yaml(cfg: CampaignMempalaceConfig, campaign_dir: Path) -> Path:
-    """Merge the `mempalace:` section into the campaign's config.yaml (CG search face)."""
+def render_config_yaml(
+    cfg: CampaignMempalaceConfig, campaign_dir: Path, recipe: Recipe | None = None
+) -> Path:
+    """Merge the `mempalace:` section into the campaign's config.yaml (CG search face).
+    A corpus campaign gets `canon_wings` + `index_wings` and NO `canon_wing` (007 R8)."""
     path = campaign_dir / CONFIG_YAML
     doc = {}
     if path.is_file():
         doc = yaml.safe_load(path.read_text()) or {}
+    if _cconfig.has_corpus(campaign_dir):
+        from . import recipe as _recipe
+
+        rec = recipe or _recipe.load(cfg.recipe_version)
+        canon_wings, index_wings = corpus_wing_split(_load_corpus(rec, campaign_dir), rec)
+        doc["mempalace"] = {"canon_wings": canon_wings, "index_wings": index_wings}
+        path.write_text(yaml.safe_dump(doc, sort_keys=False))
+        return path
     canon, index = _canon_and_index_wings(cfg)
     doc["mempalace"] = {"canon_wing": canon, "index_wings": index}
     path.write_text(yaml.safe_dump(doc, sort_keys=False))
@@ -242,7 +366,7 @@ def render_faces(
     """Render ALL faces from the one authority (FR-002a): the stamped wing yamls +
     .mempalaceignore (incl. the root `palace:` pointer), plus the three merge faces."""
     written = write_all(cfg, recipe, campaign_dir)
-    written.append(render_config_yaml(cfg, campaign_dir))
+    written.append(render_config_yaml(cfg, campaign_dir, recipe))
     if cfg.store is not None:
         written.append(render_global_alias(cfg, config_json))
         written.append(render_mcp(cfg, campaign_dir, env))
@@ -264,7 +388,14 @@ def faces_coherent(
     want = str(cfg.store.path)
     # cli_pointer: the root wing's mempalace.yaml carries palace: alias
     root = next((w.source for w in cfg.wings if w.source in (".", "")), None)
-    if root is not None:
+    if _cconfig.has_corpus(campaign_dir):  # the corpus render's root yaml carries the pointer
+        try:
+            doc = yaml.safe_load((campaign_dir / ROOT_YAML).read_text().split("\n", 1)[-1]) or {}
+            if doc.get("palace") != cfg.store.alias:
+                bad.append("cli_pointer: root mempalace.yaml palace: != authority alias")
+        except OSError:
+            bad.append("cli_pointer: root mempalace.yaml missing")
+    elif root is not None:
         rp = campaign_dir / (root if root not in (".", "") else "") / "mempalace.yaml"
         try:
             doc = yaml.safe_load(rp.read_text().split("\n", 1)[-1]) or {}

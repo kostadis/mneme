@@ -14,6 +14,7 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
+from mneme.corpus import config as _cconfig
 
 from . import authority as _authority
 from . import bootstrap as _bootstrap
@@ -22,7 +23,7 @@ from . import embedder_guard as _guard
 from . import provision as _provision
 from . import recipe as _recipe
 from . import render as _render
-from .models import BringUpReport, BringUpStep, StorePointer
+from .models import BringUpReport, BringUpStep, CampaignMempalaceConfig, StorePointer
 from .runner import MempalaceError, MempalaceRunner
 
 
@@ -43,10 +44,29 @@ def _plan_config(campaign: str, campaign_dir: Path, recipe, mempalace_root: Path
         cfg = _authority.load(campaign_dir, mempalace_root=mempalace_root)
         if cfg.store is None:
             cfg = replace(cfg, store=_default_store(campaign, mempalace_root))
+    elif _cconfig.has_corpus(campaign_dir):
+        # 007: the corpus file declares the wings, so the authority carries none (FR-001a).
+        # Its `campaign:` must equal corpus.yaml's (rule 1), so take the name from there.
+        name = _corpus_campaign(campaign_dir) or campaign
+        cfg = CampaignMempalaceConfig(
+            campaign=name, recipe_version=recipe.version, wings=(),
+            store=_default_store(name, mempalace_root),
+        )
     else:
         cfg = _bootstrap.starter_config(campaign, campaign_dir, recipe)
         cfg = replace(cfg, store=_default_store(campaign, mempalace_root))
     return cfg
+
+
+def _corpus_campaign(campaign_dir: Path) -> str | None:
+    import yaml
+
+    try:
+        raw = yaml.safe_load(_cconfig.corpus_path(campaign_dir).read_text())
+    except (OSError, yaml.YAMLError):
+        return None
+    name = str(raw.get("campaign") or "").strip() if isinstance(raw, dict) else ""
+    return name or None
 
 
 def bringup(
@@ -77,6 +97,14 @@ def bringup(
         for name in ("render_faces", "provision", "first_mine", "backup"):
             steps.append(BringUpStep(name, "skipped", note="dry-run"))
         return BringUpReport(campaign, tuple(steps))
+
+    if _cconfig.has_corpus(ref.path):  # 007: an invalid declaration writes nothing either
+        try:
+            _cconfig.load(ref.path, rec)
+        except _cconfig.CorpusConfigError as e:
+            steps.append(BringUpStep("configure", "skipped", note="nothing written: bad corpus"))
+            steps.append(BringUpStep("first_mine", "failed", note=str(e)))
+            return BringUpReport(campaign, tuple(steps))
 
     try:  # GH #26: guard BEFORE any write, so a refused bring-up leaves no file changes
         _guard.require_writable(entity, cfg.store.path, prober)

@@ -54,29 +54,37 @@ def test_authority_without_wings_loads_for_a_corpus_campaign(world):
     assert cfg.campaign == "corp" and cfg.wings == ()
 
 
-def test_refresh_refuses_and_never_mines(world):
+def only_files_from(lines, camp):
+    """Every mine of the corpus campaign names its files; none is a wing-model `mine <root>`."""
+    return all("--files-from" in ln for ln in lines if str(camp) in ln)
+
+
+def test_refresh_mines_by_file_list_never_the_root(world):
     runner, root, camp, log = world
     res = {r.campaign: r for r in refresh.refresh(entity_for(root), runner=runner)}
-    assert res["corp"].failed and CORPUS_REFUSAL in res["corp"].error
-    assert not res["corp"].skipped
+    assert not res["corp"].failed and not res["corp"].skipped
+    assert res["corp"].wings == ["npcs"]
     lines = mine_lines(log)
-    assert lines  # the other (wing-model) campaigns still mine
-    assert not any(str(camp) in ln for ln in lines)
+    assert any(str(camp) in ln for ln in lines)  # it is refreshed now
+    assert only_files_from(lines, camp)
+    assert any(" mine " in f" {ln} " and str(camp) not in ln for ln in lines)  # others still mine
 
 
-def test_refresh_one_corpus_campaign_issues_no_stub_call_at_all(world):
+def test_refresh_one_corpus_campaign_never_issues_a_plain_mine(world):
     runner, root, camp, log = world
     (r,) = refresh.refresh(entity_for(root), campaign="corp", runner=runner)
-    assert r.failed and CORPUS_REFUSAL in r.line()
-    assert not log.exists() or log.read_text() == ""
+    assert not r.failed and r.line().startswith("corp")
+    lines = mine_lines(log)
+    assert lines and only_files_from(lines, camp)
 
 
-def test_first_mine_refuses(world):
+def test_first_mine_mines_by_file_list_never_the_root(world):
     runner, root, camp, log = world
     cfg = authority.load(camp)
-    with pytest.raises(MempalaceError, match="mining is driven by .mneme/corpus.yaml"):
-        provision.first_mine(cfg, camp, runner)
-    assert not log.exists() or log.read_text() == ""
+    _, mined = provision.first_mine(cfg, camp, runner)
+    assert mined == ["npcs"]
+    lines = mine_lines(log)
+    assert lines and only_files_from(lines, camp)
 
 
 def test_consolidate_refuses_instead_of_folding_the_root_as_a_wing(world):
