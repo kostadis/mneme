@@ -127,7 +127,7 @@ def adopt(
 ) -> str:
     """Manual per-campaign gate: stage the upgrade for ONE campaign on its own branch."""
     rec = _recipe.current()
-    ref = _discover.find(entity, campaign)  # 005 — adopt targets the campaign's own tree
+    ref = _discover.resolve(entity, campaign)  # 005 — adopt targets the campaign's own tree
     wc = _clone_workcopy(entity, state_dir, git_runner, root=ref.tree)
     branch = f"mneme/adopt-{campaign}-{rec.version}"
     wc.checkout_branch(branch)
@@ -143,7 +143,7 @@ def adopt_in_place(entity: ConfigEntity, campaign: str) -> tuple[list[Path], Tar
     mneme-managed files (never campaign content), and leaves them UNCOMMITTED for the
     human to review. Returns (written_paths, target_diff)."""
     rec = _recipe.current()
-    ref = _discover.find(entity, campaign)
+    ref = _discover.resolve(entity, campaign)
     if not ref.has_authority:
         raise _workcopy.WorkingCopyError(
             f"{campaign} has no .mneme/mempalace.yaml — bootstrap it first"

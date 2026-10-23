@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from hypostasis import config as _config
 from hypostasis.models import ConfigEntity, MnemeIdentity
 
 from . import authority as _authority
@@ -111,6 +112,20 @@ def foreign_refusal(entity: ConfigEntity, ref: CampaignRef) -> str:
     )
 
 
+def _alias_of(entity: ConfigEntity, ref: CampaignRef) -> str | None:
+    """The ref's store alias, or None if it has no authority / it won't load (Principle VI).
+
+    Loaded against THIS host's palace root (006): a legacy ``store.path`` is judged against
+    the derived location under that root, so the wrong root would drop the campaign out."""
+    if not ref.has_authority:
+        return None
+    try:
+        cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
+    except _authority.AuthorityError:
+        return None
+    return cfg.store.alias if cfg.store is not None else None
+
+
 def alias_conflicts(entity: ConfigEntity) -> dict[str, list[str]]:
     """Store aliases claimed by more than one campaign (006, FR-016/016a).
 
@@ -120,15 +135,28 @@ def alias_conflicts(entity: ConfigEntity) -> dict[str, list[str]]:
     Tolerant: a campaign whose authority won't load contributes nothing (Principle VI)."""
     by_alias: dict[str, list[str]] = {}
     for ref in discover(entity):
-        if not ref.has_authority:
-            continue
-        try:
-            cfg = _authority.load(ref.path)
-        except _authority.AuthorityError:
-            continue
-        if cfg.store is not None:
-            by_alias.setdefault(cfg.store.alias, []).append(ref.name)
+        alias = _alias_of(entity, ref)
+        if alias is not None:
+            by_alias.setdefault(alias, []).append(ref.name)
     return {a: sorted(c) for a, c in sorted(by_alias.items()) if len(c) > 1}
+
+
+def _alias_clash(entity: ConfigEntity, ref: CampaignRef) -> tuple[str, list[str]] | None:
+    """(alias, campaign names) if ``ref`` shares its store alias with another campaign.
+
+    006 FR-016a — judged from the ref's OWN authority, so a ``--dir`` workspace outside every
+    declared tree is still checked against the discovered campaigns. Same-path refs are the
+    same campaign (reached by ``--dir`` and by discovery), never a conflict with itself."""
+    alias = _alias_of(entity, ref)
+    if alias is None:
+        return None
+    me = ref.path.resolve()
+    others = [
+        r for r in discover(entity) if r.path.resolve() != me and _alias_of(entity, r) == alias
+    ]
+    if not others:
+        return None
+    return alias, sorted([ref.name, *(r.name for r in others)])
 
 
 def find(entity: ConfigEntity, campaign: str) -> CampaignRef:
@@ -178,12 +206,12 @@ def resolve(entity: ConfigEntity, campaign: str | None, campaign_dir=None) -> Ca
     ref = ref_for_dir(entity, campaign_dir) if campaign_dir else find(entity, campaign)
     if ref.owner_state is OwnerState.FOREIGN:
         raise DiscoveryError(foreign_refusal(entity, ref))
-    conflicts = alias_conflicts(entity)
-    for alias, camps in conflicts.items():
-        if ref.name in camps:
-            raise DiscoveryError(
-                f"store alias '{alias}' is claimed by {len(camps)} campaigns "
-                f"({', '.join(camps)}) — they would share one store. Give each campaign its "
-                "own `store.alias` in .mneme/mempalace.yaml before continuing."
-            )
+    clash = _alias_clash(entity, ref)
+    if clash is not None:
+        alias, camps = clash
+        raise DiscoveryError(
+            f"store alias '{alias}' is claimed by {len(camps)} campaigns "
+            f"({', '.join(camps)}) — they would share one store. Give each campaign its "
+            "own `store.alias` in .mneme/mempalace.yaml before continuing."
+        )
     return ref
