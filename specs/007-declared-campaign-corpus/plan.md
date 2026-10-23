@@ -10,7 +10,8 @@ A campaign's palace today mines whatever its wings sweep in, minus a blocklist, 
 wing on `.` (`render.py:81-92`, recipe v2 scaffold). It fails open. toee mines its draft
 grounding docs as canon, and obelisk's published NPCs and summaries are swept into the root
 wing beside backups and reviews. Separately, around 50 consumers pick campaign files for
-themselves, and only four go through the palace (research R9).
+themselves: of the 52 GM-reviewed consumers, 49 pick their own files, 2 search the palace,
+and 1 does both (research R9).
 
 This feature makes the corpus **declared, by kind**. `.mneme/corpus.yaml` is the GM's one
 authority (FR-001a). It maps each kind to a directory or a list of files. The standard kinds
@@ -47,8 +48,8 @@ The wing model keeps working, unchanged, for campaigns without `corpus.yaml` (FR
 used via its CLI only. No new runtime dependency.
 
 **Storage**: Files only. `.mneme/corpus.yaml` (tracked authority). `.mneme/corpus.toc.json`
-(derived, host-local, gitignored). `<store>/mneme-corpus-mined.json` (derived, store
-lifecycle). `mneme/recipes/mempalace.recipe.v3.yaml` and `mneme/recipes/consumers.yaml`
+(derived snapshot, host-local, gitignored; consumers never read it). `<store>/mneme-corpus-mined.json`
+and `<store>/mneme-former-wings.json` (derived, store lifecycle). `mneme/recipes/mempalace.recipe.v3.yaml` and `mneme/recipes/consumers.yaml`
 (mneme-owned).
 
 **Testing**: pytest (`tests/unit`, `tests/integration`). `tests/fixtures/stub_mempalace.py`
@@ -73,7 +74,7 @@ status run.
 - Campaigns without `corpus.yaml` behave exactly as today.
 
 **Scale/Scope**: Three managed campaigns (obelisk, toee, out-of-the-abyss; the last has no
-authority yet). Five standard kinds. Roughly 50 consumers inventoried, about 46 of them
+authority yet). Five standard kinds. 52 consumers inventoried (GM-reviewed), 49 of them
 non-compliant at the start.
 
 ## Constitution Check
@@ -100,8 +101,7 @@ non-compliant at the start.
   `mempalace.yaml`, CG search face) is derived and stamped. The two existing second
   authorities, **CG `documents[]`** and **CG `grounding_bundle.py`'s hardcoded names**, are not
   introduced by this feature. They are surfaced as non-compliant consumers, and their
-  conversion removes them (R9). The transitional `canon_wing` written beside `canon_wings`
-  (R8) is derived, not authoritative.
+  conversion removes them (R9).
 - **VI. Federated, input[∞]** ✅ — Per-campaign, per-kind mining. One invalid campaign or
   failed kind is one finding, not a wedged fleet run.
 - **VII. Logical Datasets** ✅ — This feature is Principle VII applied to campaign content.
@@ -178,15 +178,22 @@ mneme/
 ├── mempalace/
 │   ├── runner.py            # ADD mine(files_from=, wing=), sources(), forget()
 │   ├── render.py            # CHANGE: corpus campaigns render root mempalace.yaml (palace +
-│   │                        #   rooms), the TOC, canon_wings/index_wings (+ transitional
-│   │                        #   canon_wing); remove stale per-wing renders
+│   │                        #   rooms), the TOC snapshot, canon_wings/index_wings;
+│   │                        #   remove stale per-wing renders
 │   ├── authority.py         # CHANGE: dual-authority check when corpus.yaml exists
 │   ├── refresh.py           # CHANGE: per-kind --files-from mines; write mined record
 │   ├── corpus_record.py     # NEW: <store>/mneme-corpus-mined.json (sibling of mine_record)
 │   ├── prune.py             # CHANGE: corpus deletion set → forget; sparse-safe
 │   ├── conform.py           # ADD corpus row + fleet consumers row; corpus campaigns'
 │   │                        #   index row from compare.py
-│   ├── bringup.py           # CHANGE: corpus-aware first mine
+│   ├── bringup.py           # CHANGE: corpus-aware first mine (oota is brought up this way)
+│   ├── provision.py         # CHANGE: first_mine refuses the wing loop for corpus campaigns
+│   ├── backup.py            # CHANGE: regenerate first-mines through the corpus path
+│   ├── bootstrap.py         # CHANGE: refuses corpus campaigns; wing loop guarded
+│   ├── migrate.py           # CHANGE: refuses corpus campaigns
+│   ├── publish.py           # CHANGE: adopt/publish never write wings into corpus campaigns
+│   ├── proposals.py         # CHANGE: same, for proposal staging
+│   ├── former_wings.py      # NEW: <store>/mneme-former-wings.json (FR-018a)
 │   └── recipe.py            # CHANGE: parse recipe v3 `kinds:`
 ├── recipes/
 │   ├── mempalace.recipe.v3.yaml   # NEW: kinds (name, default_trust, rooms_hint)
@@ -225,17 +232,19 @@ are selected when `corpus.yaml` is absent.
 4. **Skills follow-ups**: `~/.claude/skills`, both `gm-assistant` copies, and the zvec-grep
    index behind `/campaign-recall`. Each becomes a compliant consumer by reading the TOC.
 
-6. **CampaignGenerator first (GM decision, 2026-10-23).** CG reading `canon_wings`, and
+5. **CampaignGenerator first (GM decision, 2026-10-23).** CG reading `canon_wings`, and
    every CG/skill query that names a pre-corpus wing (`narrative`, `chronicle`, `summaries`,
    `notes`, `<campaign>`), is fixed **before any campaign gets a `corpus.yaml`**. mneme writes
-   no transitional `canon_wing`. This gates T045.
-5. **Host rollout (GM decision, 2026-10-23: risk accepted).** Once a campaign has a
+   no transitional `canon_wing`. This gates T046.
+6. **Host rollout (GM decision, 2026-10-23: risk accepted).** Once a campaign has a
    `corpus.yaml`, its `.mneme/mempalace.yaml` loses `wings:`, and a host on older mneme
    cannot load that campaign and would re-render the old per-wing files. No host-first
    rule or version guard is built. The GM upgrades both hosts.
 
-Items 3 and 4 do not block this feature. Until each lands, it shows as non-compliant owed
-work (FR-024, SC-009).
+Items 3 and 4 do not block this feature's implementation, with one exception: the part of
+item 3 named in item 5 (CG reads `canon_wings`, and no query names a pre-corpus wing) blocks
+the live migration (T046). Until each lands, it shows as non-compliant owed work (FR-024,
+SC-009).
 
 ## Execution Model
 

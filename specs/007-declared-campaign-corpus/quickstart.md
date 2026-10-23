@@ -46,12 +46,14 @@ Using the palace from Scenario 1, set up each condition and run `mneme mp status
 
 ## Scenario 4: consumers read one list (US3, SC-008)
 
-1. `mneme corpus toc C --kind grounding --json`, and read `.mneme/corpus.toc.json` directly
-   with `python3 -c 'import json; …'`. **Expect**: the same file list.
-2. In the MCP server, call `corpus_files(C, "grounding")`. **Expect**: the same list.
-3. Edit `corpus.yaml` and ask again. **Expect**: all three refuse with "TOC stale" until
-   `mp render`.
-4. Ask for an undeclared kind. **Expect**: "not declared for this campaign", not `[]`.
+1. `mneme corpus toc C --kind grounding --json`. In the MCP server, call
+   `corpus_files(C, "grounding")`. **Expect**: the same file list.
+2. Add `docs/npcs/new.md` and ask for `npcs` again, with no render. **Expect**: both
+   readers include it immediately.
+3. Hand-edit `.mneme/corpus.toc.json`'s file list. **Expect**: both readers are unaffected;
+   `mp status` reports `toc-stale` with remedy `mp render`.
+4. Break `corpus.yaml` (an unknown kind). **Expect**: both readers refuse with the finding.
+5. Ask for an undeclared kind. **Expect**: "not declared for this campaign", not `[]`.
 
 ## Scenario 5: validation catches the edge cases (Edge Cases, FR-003a)
 

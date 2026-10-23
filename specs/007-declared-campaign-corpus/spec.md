@@ -49,6 +49,22 @@
   re-points the symlink, the next `mp refresh` deletes the old target's drawers and mines
   the new one in the same step, with no prune or confirmation: the declared membership
   did not change, only its content.
+- Q: How do consumers know their file list is current (a TOC stamped only with the
+  corpus.yaml hash misses files added to a declared folder, and hand edits to the TOC)?
+  → A: **Re-resolve on read.** Consumers get their files from `mneme corpus toc` or the
+  `corpus_files` MCP tool, which resolve the corpus from `corpus.yaml` and the disk on
+  every call. The TOC file is a derived snapshot for inspection and status, never a
+  consumer input.
+- Q: How does status report a non-compliant consumer's files? → A: `consumers.yaml`
+  gains per-consumer `reads:` paths (a GM-reviewed edit); status diffs them against each
+  campaign's resolved corpus.
+- Q: out-of-the-abyss has no authority and no palace. → A: It is brought up straight from
+  its `corpus.yaml` (never a wing-model palace). SC-003 covers obelisk and toee; for
+  out-of-the-abyss the criterion is that its first mine equals the resolved corpus.
+- Q: What does `mneme corpus current` list? → A: What the palace holds (`mempalace
+  sources`), the set a prune acts on.
+- Q: The reviewed `consumers.yaml` uses `other:`/`note:` and a `partial` entry without
+  `kinds_toc`. → A: The contract changes to fit the file.
 
 ## Overview
 
@@ -180,15 +196,16 @@ the declared files it is missing, and the remedy for each.
 
 A consumer that needs to know which files are true for a campaign — a Claude skill, a
 CampaignGenerator load, an index builder — asks for a kind by name ("party", "summaries")
-and reads one published list instead of choosing files or hardcoding paths for itself.
+and gets one list from mneme, resolved fresh on every call, instead of choosing files or
+hardcoding paths for itself.
 
 **Why this priority**: Making the palace exact (Stories 1–2) fixes every consumer that
 searches through the palace. Consumers that bypass the palace still pick their own
 files; this story gives them the same answer to consume.
 
-**Independent Test**: Render the corpus for a campaign, then read the published list and
-verify it names exactly the files the palace was mined from, with a content fingerprint
-for each, and that re-rendering after a declaration change updates it.
+**Independent Test**: Ask mneme for a campaign's files of one kind through the CLI and the
+MCP tool, and verify both name exactly the declared files on disk right now — including a
+file added to a declared folder a moment ago — with a content fingerprint for each.
 
 **Acceptance Scenarios**:
 
@@ -201,15 +218,15 @@ for each, and that re-rendering after a declaration change updates it.
 3. **Given** the GM changes the declaration, **When** mneme renders, **Then** the TOC
    is regenerated; a TOC that no longer matches its declaration is reported stale by
    status.
-4. **Given** a consumer reads the TOC, **When** it compares a file's current content
-   to the recorded fingerprint, **Then** it can tell whether the file changed since the
-   corpus was resolved.
+4. **Given** a file is added to a declared folder, **When** a consumer next asks mneme
+   for that kind, **Then** the new file is included, with no render in between.
 5. **Given** a consumer that reads campaign files directly, **When** it acts on a
-   campaign, **Then** it takes its file set from the TOC — for the kinds it needs —
-   and does not choose, glob or hardcode files of its own.
-6. **Given** a consumer that reads files directly, **When** the TOC is missing, stale
-   or reports the corpus invalid, **Then** the consumer refuses to act and names the
-   problem, rather than falling back to files of its own choosing.
+   campaign, **Then** it takes its file set from mneme (`mneme corpus toc` or the
+   `corpus_files` MCP tool) — for the kinds it needs — and never reads the TOC file
+   directly, globs, or hardcodes files of its own.
+6. **Given** a consumer that reads files directly, **When** mneme reports the corpus
+   invalid or cannot answer, **Then** the consumer refuses to act and names the problem,
+   rather than falling back to files of its own choosing.
 
 ---
 
@@ -234,8 +251,8 @@ model mines is presented as a proposal the GM edits, not applied.
    **Then** the corpus dimension reports **undeclared** as owed work, not as an error that
    blocks other dimensions.
 2. **Given** an undeclared campaign, **When** the GM asks mneme for the current mined
-   file set, **Then** mneme lists the files the existing wing model resolves to, grouped
-   by wing, and writes nothing to the authority.
+   file set, **Then** mneme lists the files the palace holds, grouped by wing, and writes
+   nothing to the authority. A campaign with no palace reports "no palace".
 3. **Given** the GM writes a corpus declaration, **When** mneme next renders, **Then** the
    old root wing and blocklist-based mining are replaced by mining from the declaration,
    and the change is visible in status as undeclared drawers to prune.
@@ -309,8 +326,10 @@ one appears in status as owed work with the files it reads outside the TOC.
 - **A declared file is renamed or moved.** The old path becomes a missing declaration and
   its drawers become undeclared; both are reported. mneme does not guess that the new
   file is the same document.
-- **Hand-edited TOC.** The TOC is derived. If its contents do not match what the
-  declaration resolves to, status reports it stale; it is regenerated, never trusted.
+- **Hand-edited or outdated TOC file.** The TOC file is a derived snapshot that no
+  consumer reads. If it differs from a fresh resolution (a hand edit, or a file added to a
+  declared folder since the last render), status reports `toc-stale` with remedy
+  `mp render`; consumers are unaffected because they always resolve fresh.
 - **Empty corpus.** A declaration that resolves to zero files is reported as an error,
   not mined into an empty palace.
 - **Embedder mismatch.** Mining a declared corpus goes through the existing
@@ -372,8 +391,11 @@ one appears in status as owed work with the files it reads outside the TOC.
 - **FR-011**: The TOC MUST be marked as derived and do-not-edit, and MUST record
   which version of the configuration it was resolved from, so a stale TOC is
   detectable.
-- **FR-012**: The TOC MUST be readable by any consumer without running mneme, and a
-  consumer MUST be able to read one kind's files without reading the others.
+- **FR-012**: mneme MUST give consumers a kind's files by resolving the corpus afresh
+  on every request (`mneme corpus toc`, the `corpus_files` MCP tool), so a file added to
+  a declared folder is included without a render. A consumer MUST be able to ask for one
+  kind without the others. The TOC file is a snapshot for inspection and status only;
+  consumers MUST NOT read it directly.
 - **FR-013**: The TOC MUST distinguish a kind that is declared but resolves to no
   files from a kind that is not declared for the campaign.
 
@@ -388,21 +410,30 @@ one appears in status as owed work with the files it reads outside the TOC.
   and **invalid** (gitignored, symlinks resolving outside the campaign, unknown-kind or
   conflicting declarations). A re-pointed symlink counts as stale.
 - **FR-016**: Each non-ok corpus finding MUST name its remedy: `mp prune` for undeclared,
-  `mp refresh` for unmined and stale, a configuration edit for missing and invalid.
+  `mp refresh` for unmined, stale and wrong-wing, `mp render` for toc-stale, and a
+  configuration edit for missing and invalid. For missing, `mp prune` additionally removes
+  the drawers of the missing (non-sparse) file.
 - **FR-017**: The corpus dimension MUST be ok only when the palace's drawer sources equal
   the resolved corpus and every drawer is current. Anything mneme cannot verify MUST be
   reported unknown, never ok.
-- **FR-018**: `mneme mp prune` MUST treat drawers from undeclared files as prunable,
-  under its existing preview / `--confirm --expect N` / backup protocol, and MUST NOT
-  prune drawers whose declared source is merely absent from this host's sparse checkout.
+- **FR-018**: `mneme mp prune` MUST treat drawers from undeclared files, and from
+  declared files that are missing (not merely sparse-absent), as prunable, under its
+  existing preview / `--confirm --expect N` / backup protocol, and MUST NOT prune drawers
+  whose declared source is merely absent from this host's sparse checkout.
+- **FR-018a**: `mneme mp prune` MUST refuse when its deletion set includes drawers from
+  a wing that was `authoritative` before the corpus, naming each such wing with its file
+  and drawer counts, and proceed only when the GM names every one with
+  `--include-former-canon <wing>`. When mneme cannot tell which wings were authoritative,
+  it MUST treat every wing holding undeclared drawers as former canon.
 
 **Migration**
 
 - **FR-019**: A campaign with no corpus configuration MUST be reported as owing one,
   without blocking its other status dimensions or its existing mining.
 - **FR-020**: mneme MUST be able to list, for a campaign with no corpus configuration,
-  the files its current wing model resolves to, as read-only input to the GM's
-  configuration. It MUST NOT write a corpus configuration on the GM's behalf.
+  the files its palace currently holds, grouped by wing, as read-only input to the GM's
+  configuration (a campaign with no palace reports so). It MUST NOT write a corpus
+  configuration on the GM's behalf.
 
 **Consumers**
 
@@ -410,14 +441,15 @@ one appears in status as owed work with the files it reads outside the TOC.
   TOC. The palace is itself a TOC consumer: mining reads the TOC (FR-007), so consumers
   that search through the palace are compliant by construction. A consumer that reads
   files directly MUST read them from the TOC, by kind.
-- **FR-022**: A consumer that reads files directly MUST refuse to act when the TOC is
-  missing, stale, or reports the corpus invalid, and MUST NOT fall back to choosing files
-  itself.
+- **FR-022**: A consumer that reads files directly MUST refuse to act when mneme reports
+  the corpus invalid or cannot answer, and MUST NOT fall back to choosing files itself.
 - **FR-023**: mneme MUST maintain an inventory of the known consumers of each campaign's
   files, recording which kinds each uses and classifying each as compliant
   (palace-backed or TOC-backed) or non-compliant (chooses its own files).
 - **FR-024**: `mneme mp status` MUST surface every non-compliant consumer as owed work,
-  naming the consumer and the files it reads outside the TOC.
+  naming the consumer and, per campaign, the files it reads outside the resolved corpus
+  and the corpus files of its kinds it misses. The paths each consumer reads are recorded
+  in the GM-reviewed inventory (`reads:`).
 
 ### Key Entities
 
@@ -436,8 +468,8 @@ one appears in status as owed work with the files it reads outside the TOC.
   content fingerprint per file and the declaration version it came from. A cache of the
   declaration, never a second authority.
 - **Corpus finding**: One status result for a campaign's corpus dimension — undeclared,
-  unmined, stale, missing, invalid, unknown or ok — with the files involved and its
-  remedy.
+  unmined, stale, wrong-wing, missing, invalid, toc-stale, unknown or ok — with the files
+  involved and its remedy.
 - **Consumer**: Anything that answers questions about a campaign from its files (the
   mempalace MCP server, CampaignGenerator search and loads, Claude skills, external
   indexes), classified by where it takes its file set from.
@@ -450,20 +482,21 @@ one appears in status as owed work with the files it reads outside the TOC.
   from declared files, verified by status and independently by listing drawer sources.
 - **SC-002**: Adding any number of new files outside the declared entries and refreshing
   produces zero new drawers.
-- **SC-003**: For each of the three existing campaigns (obelisk, toee, out-of-the-abyss),
-  status on the current palace identifies every undeclared source — including toee's
-  draft grounding files — before the GM runs any prune.
+- **SC-003**: For obelisk and toee, status on the current palace identifies every
+  undeclared source — including toee's draft grounding files — before the GM runs any
+  prune. out-of-the-abyss, which has no palace, is brought up from its `corpus.yaml` and
+  its first mine's drawer sources equal its resolved corpus exactly.
 - **SC-004**: A corpus finding never reports ok when the palace and corpus differ, across
-  a test matrix covering each finding type (undeclared, unmined, stale, missing, invalid,
-  unknown).
+  a test matrix covering each finding type (undeclared, unmined, stale, wrong-wing,
+  missing, invalid, toc-stale, unknown).
 - **SC-005**: The GM can answer "which files is this campaign's palace built from?" from
   one place, without reading wing configs, exclusion lists or `.gitignore`.
+- **SC-006**: Every known consumer of each campaign appears in the consumer inventory with
+  a classification; none is unclassified.
 - **SC-007**: All three existing campaigns can be configured with their files where they
   are today — zero files moved or renamed to satisfy the configuration.
 - **SC-008**: Two consumers asking for the same kind of the same campaign receive
   identical file lists, in every case tested.
-- **SC-006**: Every known consumer of each campaign appears in the consumer inventory with
-  a classification; none is unclassified.
 - **SC-009**: Once the consumer follow-ups land, zero known consumers are non-compliant:
   none globs, hardcodes or otherwise chooses campaign files outside the TOC.
 
@@ -479,9 +512,9 @@ one appears in status as owed work with the files it reads outside the TOC.
   a downstream publication target, not a corpus source.
 - A declared directory admits all of its contents, recursively. Finer filtering inside a
   declared directory is out of scope; the GM lists files instead.
-- The TOC is derived per host from the tracked declaration and the checked-out
-  files. Whether it is committed to git is a planning decision, constrained by feature
-  006's rule that anything tracked must be true on every host.
+- The TOC file is a derived, host-local snapshot (gitignored, per feature 006's rule that
+  anything tracked must be true on every host). Consumers never read it; they ask mneme,
+  which resolves fresh.
 - The existing wing model keeps working for campaigns that have not declared a corpus;
   removing it is a later step once every campaign has a declaration.
 - The recipe (`mneme/recipes/`) gains a corpus-based scaffold; whether that is a new

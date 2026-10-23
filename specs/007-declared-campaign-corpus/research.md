@@ -126,18 +126,21 @@ checkouts (R7).
 ## R5. The TOC: location, format, tracking
 
 **Decision**:
-- Path: `<campaign>/.mneme/corpus.toc.json`. JSON, so any consumer in any language can read
-  it without mneme (FR-012).
+- Path: `<campaign>/.mneme/corpus.toc.json`. A **snapshot** for inspection and status.
+  GM decision (2026-10-23): consumers **re-resolve on read** through `mneme corpus toc` /
+  `corpus_files`, never by reading this file, so a file added to a declared folder or a hand
+  edit to the snapshot cannot mislead a consumer (Principle V).
 - **Not tracked in git.** On render, mneme appends it to the campaign's `.gitignore`. It is
   host-local: it records what *this* checkout resolves to, sparse gaps and per-file hashes
   included. Feature 006's rule is that anything tracked must be true on every host, which a
   per-host resolution is not.
 - Gitignoring it does not interact with mining or prune. `.mneme/` is a baseline exclusion
   (`recipe v2 baseline_exclusions`), and corpus mining no longer scans the tree (R1).
-- **Stamp**: the TOC carries `corpus_sha256`, the sha256 of the exact bytes of
-  `.mneme/corpus.yaml`, plus the `recipe_version` it was resolved against. A consumer
-  verifies freshness by hashing `corpus.yaml` itself. That rule is in the contract, so
-  checking freshness requires no mneme code (FR-011, FR-022).
+- **Stamp**: the snapshot carries `corpus_sha256` (sha256 of the exact bytes of
+  `.mneme/corpus.yaml`) and `recipe_version`. Status compares the snapshot with a fresh
+  resolution and reports `toc-stale` when they differ (FR-011).
+- *Rejected*: a stamp-only freshness check by consumers. It passes when a file is added to
+  a declared folder, or when the snapshot's file list is hand-edited (analysis C1).
 
 **Alternatives considered**:
 - *Tracked TOC*. **Rejected**: two hosts with different sparse cones would write different

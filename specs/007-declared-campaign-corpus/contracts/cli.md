@@ -8,8 +8,8 @@ All commands take the existing `--config/-c` and `--dir/-d`.
 |---|---|---|
 | `mneme corpus init CAMPAIGN` | Skeleton `.mneme/corpus.yaml` listing the standard kinds as comments, no paths. Refuses if the file exists. | `corpus.yaml` (new only) |
 | `mneme corpus check CAMPAIGN` | Validate the configuration and print the resolution per kind (files, not-materialized, missing, findings). Exit 0 iff valid. | nothing |
-| `mneme corpus toc CAMPAIGN [--kind K] [--json] [--write]` | Print the TOC (or one kind). Applies the consumer freshness checks. `--write` regenerates the TOC file. | TOC with `--write` only |
-| `mneme corpus current CAMPAIGN` | Files the current palace holds, from `mempalace sources`, grouped by wing. Read-only input for writing `corpus.yaml` (FR-020). | nothing |
+| `mneme corpus toc CAMPAIGN [--kind K] [--json] [--write]` | Resolve the corpus **now** (never from the snapshot) and print it, or one kind. Exit non-zero if the configuration is invalid. `--write` also refreshes the snapshot file. This is the consumer entry point (FR-012). | snapshot with `--write` only |
+| `mneme corpus current CAMPAIGN` | Files the current palace holds, from `mempalace sources`, grouped by wing; "no palace" when there is none. Read-only input for writing `corpus.yaml` (FR-020). | nothing |
 | `mneme corpus consumers [--noncompliant]` | The consumer inventory with compliance per consumer. | nothing |
 
 ## Changed `mneme mp` commands (corpus campaigns only; the wing model is unchanged)
@@ -24,6 +24,5 @@ All commands take the existing `--config/-c` and `--dir/-d`.
 
 ## `mneme mp mcp`
 
-New tool: `corpus_files(campaign, kind)` → the kind's files from the TOC, after the freshness
-checks. It returns an explicit error for a stale TOC, an invalid configuration or an
-undeclared kind.
+New tool: `corpus_files(campaign, kind)` → the kind's files, resolved fresh on every call (same logic as
+`mneme corpus toc`). It returns an explicit error for an invalid configuration or an undeclared kind.

@@ -42,22 +42,20 @@ regenerated.
 - `valid: false` with a non-empty `findings` list means the configuration is invalid. Each
   finding is `{code, path?, detail}`.
 
-## Consumer obligations (FR-021, FR-022)
+## Consumer obligations (FR-012, FR-021, FR-022)
 
-A consumer that reads campaign files directly MUST, before acting:
+The file above is a **snapshot** written by `mp render`, for inspection and for status's
+`toc-stale` check. **Consumers never read it.** A consumer that reads campaign files
+directly MUST, before acting:
 
-1. Read `.mneme/corpus.toc.json`. If it is missing → refuse: "no corpus TOC — run
-   `mneme mp render <campaign>`".
-2. Hash `.mneme/corpus.yaml` and compare with `corpus_sha256`. If they differ → refuse: "TOC
-   stale".
-3. If `valid` is false → refuse and print `findings`.
-4. Take the files for each kind it needs from `kinds.<kind>.files[].path`, and nothing else.
-   No globbing, probing or hardcoded paths for corpus material.
-5. Optionally compare each file's sha256 to detect an edit since resolution, and refuse or
-   warn as that consumer's own contract specifies.
+1. Ask mneme: `mneme corpus toc CAMPAIGN --kind K --json` (exit 0 → the same JSON shape as
+   above, restricted to that kind) or the `corpus_files(campaign, kind)` tool in
+   `mneme mp mcp`. Both resolve `corpus.yaml` against the disk **on every call**, so a file
+   added to a declared folder appears without a render.
+2. If mneme exits non-zero, returns an error, or reports `valid: false` → refuse and print
+   what mneme said. Never fall back to globbing.
+3. Take the files from `kinds.<kind>.files[].path`, and nothing else. Open `path` (the
+   declared path); `target` is informational.
 
 A consumer asking for a kind that is not declared gets a distinct answer ("not declared for
 this campaign"), not an empty list.
-
-Convenience readers that apply 1–3 for you: `mneme corpus toc CAMPAIGN [--kind K] --json`,
-and the `corpus_files(campaign, kind)` tool in `mneme mp mcp`.

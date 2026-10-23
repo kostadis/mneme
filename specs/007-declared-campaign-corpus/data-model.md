@@ -53,9 +53,18 @@ A file's **mining kind** is its single declaring kind, or the kind whose declara
 
 ### CorpusTOC (derived, `<campaign>/.mneme/corpus.toc.json`, host-local, gitignored)
 
-The published resolution of the corpus. The schema is in `contracts/toc-json.md`. It is
-stamped with `corpus_sha256` + `recipe_version`. Every consumer of campaign files reads this
-file (FR-021).
+A snapshot of the last rendered resolution, for inspection and status. The schema is in
+`contracts/toc-json.md`. It is stamped with `corpus_sha256` + `recipe_version`. **Consumers
+never read it**: `mneme corpus toc` and the `corpus_files` MCP tool resolve fresh on every
+call (FR-012, FR-021). Status compares it with a fresh resolution and reports `toc-stale`
+when they differ.
+
+### FormerWingsRecord (derived, `<store>/mneme-former-wings.json`)
+
+`{schema, campaign, recorded_at, wings: {name: trust}}`. Rewritten whenever mneme loads a
+wing-model authority that has a store, so it holds the last pre-corpus wings. It feeds
+prune's former-canon guard (FR-018a). It has the store's lifecycle. When absent, every
+wing holding undeclared drawers is treated as former canon (fail closed).
 
 ### CorpusMinedRecord (derived, `<store>/mneme-corpus-mined.json`)
 
@@ -78,7 +87,11 @@ campaign-relative path. A source outside the campaign root counts as `out_of_sco
 | `repo` | str | `CampaignGenerator`, `~/.claude/skills`, `gm-assistant`, … |
 | `entry` | str | `file:line` evidence |
 | `kinds` | list[kind] | Kinds it reads |
-| `mode` | `palace` \| `toc` \| `independent` \| `partial` | `palace`/`toc` = compliant; `independent` = non-compliant; `partial` = some kinds via the TOC (e.g. CG search during the R8 transition) |
+| `mode` | `palace` \| `toc` \| `independent` \| `partial` | `palace`/`toc` = compliant; `independent` = non-compliant; `partial` = compliant for part of what it reads (through the palace or the TOC), independent for the rest |
+| `reads` | list[path pattern] | The campaign paths it reads, as it reads them (e.g. `docs/party.md`, `summaries/*/session-summary.md`). GM-reviewed. Status diffs these against each campaign's resolved corpus (FR-024) |
+| `kinds_toc` | list[kind], optional | For `partial` via the TOC: which kinds come from the TOC |
+| `other` | str, optional | Non-corpus files it reads (e.g. `docs/chapters`, rules text) |
+| `note` | str, optional | Free-text remark from review |
 | `issue` | str, optional | Follow-up issue tracking its conversion |
 
 ## Corpus finding states (status `corpus` row, FR-015)
@@ -91,13 +104,14 @@ campaign-relative path. A source outside the campaign root counts as `out_of_sco
    parse/validate fails ─────────────▶ INVALID   (dual-authority, unknown-kind, shadowed-kind,
                                                   ambiguous-mining-kind, gitignored, symlink,
                                                   empty-declaration, missing trust)
-   declared path absent, untracked ──▶ MISSING   (config edit)
+   declared path absent, untracked ──▶ MISSING   (config edit; mp prune drops its drawers)
    sources/record unreadable ────────▶ UNKNOWN   (never OK, FR-017)
    otherwise compare sets:
      sources − TOC ──────────────────▶ UNDECLARED-DRAWERS  (mp prune)
      TOC(minable) − sources ─────────▶ UNMINED   (mp refresh)
-     sha256(TOC) ≠ sha256(record) ───▶ STALE     (mp refresh)
-     TOC stamp ≠ corpus.yaml bytes ──▶ TOC-STALE (mp render)
+     sha256(now) ≠ sha256(record) ───▶ STALE     (mp refresh; includes re-pointed symlinks)
+     drawer wing ≠ mined_as ─────────▶ WRONG-WING (mp refresh re-homes)
+     TOC snapshot ≠ fresh resolution ▶ TOC-STALE (mp render)
    none of the above ────────────────▶ OK
 ```
 
@@ -120,4 +134,5 @@ OK only when there are none (FR-017). `not_materialized` is informational, never
    and the trust levels must agree. If they differ, the result is `invalid: trust-conflict`.
 7. When `corpus.yaml` exists, `.mneme/mempalace.yaml` must not carry `wings:` or
    `extra_exclusions:` (`invalid: dual-authority`).
-8. A declaration that resolves to zero files in total is `invalid: empty-corpus`.
+8. A declaration that resolves to zero files in total is `invalid: empty-corpus`. (Checked at
+   resolution, not at config load.)
