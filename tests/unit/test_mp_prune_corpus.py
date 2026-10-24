@@ -166,7 +166,7 @@ def test_try_record_never_creates_a_missing_store(tmp_path):
     assert former_wings.try_record(Cfg()) is None and not (tmp_path / "nope").exists()
 
 
-def test_wing_model_status_and_refresh_record_the_wings(tmp_path, monkeypatch):
+def test_wing_model_refresh_records_the_wings_and_status_does_not(tmp_path, monkeypatch):
     import subprocess
     import sys
 
@@ -189,8 +189,7 @@ def test_wing_model_status_and_refresh_record_the_wings(tmp_path, monkeypatch):
     cfg.store.path.mkdir(parents=True)
     runner = MempalaceRunner("mempalace", stub)
     conform.report(entity, "full", runner=runner)
+    assert former_wings.read(cfg.store.path) is None  # status is read-only (B2)
+    refresh.refresh(entity, campaign="full", runner=runner)
     rec = former_wings.read(cfg.store.path)
     assert rec is not None and set(rec.wings) == {w.name for w in cfg.wings}
-    former_wings.record_path(cfg.store.path).unlink()
-    refresh.refresh(entity, campaign="full", runner=runner)
-    assert former_wings.read(cfg.store.path) is not None

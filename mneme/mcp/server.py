@@ -74,7 +74,7 @@ def corpus_files(entity: ConfigEntity, campaign: str, kind: str) -> dict:
     (same code as `mneme corpus toc`; never the snapshot). Consumers MUST take their files from
     here and refuse on ``error``. A DiscoveryError (unknown/foreign/alias-clash) propagates."""
     ref = _discover.resolve(entity, campaign)
-    answer = _corpus_api.consult(ref.path, _recipe.current(), kind)
+    answer = _corpus_api.consult(ref.path, _corpus_api.campaign_recipe(ref.path), kind)
     if "error" in answer:
         return {"campaign": campaign, "kind": kind, "error": answer["error"],
                 "detail": answer["detail"]}

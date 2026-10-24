@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
+from mneme.mempalace import recipe as _recipe
 from mneme.mempalace.models import Recipe
 
 from . import resolve as _resolve
@@ -17,6 +20,17 @@ from .config import CorpusConfigError, has_corpus, load
 
 INVALID = "invalid"
 NOT_DECLARED = "not-declared"
+
+
+def campaign_recipe(campaign_dir: Path) -> Recipe:
+    """The recipe the campaign's authority adopted (what mining, prune, regenerate and status
+    resolve with), so every reader validates `corpus.yaml` identically. Read tolerantly: no
+    authority, or an unreadable/uninstalled version, falls back to the current recipe."""
+    try:
+        raw = yaml.safe_load((Path(campaign_dir) / ".mneme" / "mempalace.yaml").read_text())
+        return _recipe.load(str(raw["recipe_version"]))
+    except (OSError, yaml.YAMLError, TypeError, KeyError, ValueError, _recipe.RecipeError):
+        return _recipe.current()
 
 
 def fresh(campaign_dir: Path, recipe: Recipe) -> dict:

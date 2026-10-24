@@ -15,6 +15,7 @@ from pathlib import Path
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
 from mneme.corpus import config as _cconfig
+from mneme.corpus import resolve as _cresolve
 
 from . import authority as _authority
 from . import bootstrap as _bootstrap
@@ -100,10 +101,14 @@ def bringup(
 
     if _cconfig.has_corpus(ref.path):  # 007: an invalid declaration writes nothing either
         try:
-            _cconfig.load(ref.path, rec)
+            ccfg = _cconfig.load(ref.path, rec)
+            resolved = _cresolve.resolve(ccfg, ref.path, rec)  # the disk too, like regenerate
+            why = "; ".join(f.line() for f in resolved.findings) if not resolved.valid else ""
         except _cconfig.CorpusConfigError as e:
+            why = str(e)
+        if why:
             steps.append(BringUpStep("configure", "skipped", note="nothing written: bad corpus"))
-            steps.append(BringUpStep("first_mine", "failed", note=str(e)))
+            steps.append(BringUpStep("first_mine", "failed", note=why))
             return BringUpReport(campaign, tuple(steps))
 
     try:  # GH #26: guard BEFORE any write, so a refused bring-up leaves no file changes

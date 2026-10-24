@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from mneme.corpus import consumers
@@ -112,3 +114,37 @@ def test_wing_model_campaign_is_skipped_for_the_diff(tmp_path, monkeypatch):
 @pytest.mark.parametrize("pat,hit", [("a/**/c.md", "a/c.md"), ("a/**/c.md", "a/b/b/c.md")])
 def test_double_star_middle(pat, hit):
     assert conform._glob_match(hit, pat)
+
+
+GLOBS = [  # (pattern, path, expected) — explicit, so the test never depends on the Python version
+    ("[Gg]*.vtt", "Gx.vtt", True), ("[Gg]*.vtt", "gx.vtt", True), ("[Gg]*.vtt", "x.vtt", False),
+    ("[Gg]*.vtt", "d/Gx.vtt", False),
+    ("summaries/*/x.md", "summaries/001/x.md", True),
+    ("summaries/*/x.md", "summaries/x.md", False),
+    ("summaries/*/x.md", "summaries/a/b/x.md", False),
+    ("docs/**", "docs/a.md", True), ("docs/**", "docs/a/b/c.md", True), ("docs/**", "docs", False),
+    ("docs/**", "notes/a.md", False),
+    ("docs/**/*.md", "docs/a.md", True), ("docs/**/*.md", "docs/x/y/a.md", True),
+    ("docs/**/*.md", "docs/a.txt", False),
+    ("**/*.md", "a.md", True), ("**/*.md", "x/y/a.md", True), ("**/*.md", "a.txt", False),
+    ("notes/**", "notes/t/x.md", True), ("notes/**", "notes", False),
+    ("a/**/b", "a/b", True), ("a/**/b", "a/x/y/b", True), ("a/**/b", "a", False),
+]
+
+
+@pytest.mark.parametrize("pat,path,want", GLOBS)
+def test_glob_table(pat, path, want):
+    assert conform._glob_match(path, pat) is want
+    from pathlib import PurePosixPath
+
+    if hasattr(PurePosixPath, "full_match"):  # where the stdlib has it, we must agree
+        assert PurePosixPath(path).full_match(pat) is want
+
+
+def test_every_real_consumers_pattern_loads_and_matches_a_sample():
+
+    for c in consumers.load(consumers.DEFAULT):
+        for pat in c.reads:
+            sample = pat.replace("**", "x/y").replace("*", "a").replace("?", "a")
+            sample = re.sub(r"\[([^\]!])[^\]]*\]", r"\1", sample)
+            assert conform._glob_match(sample, pat), (c.name, pat, sample)

@@ -9,12 +9,11 @@ file added to a declared folder or a hand edit to this snapshot cannot mislead t
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from mneme import __version__
+from mneme import atomic as _atomic
 from mneme.mempalace.models import Recipe
 
 from .config import CorpusConfig
@@ -90,16 +89,7 @@ def write(campaign_dir: Path, toc: dict) -> Path:
     """Write the snapshot atomically, then make sure the campaign's `.gitignore` lists it
     (it is host-local and must never be tracked, R5). Returns the TOC path."""
     path = toc_path(campaign_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".corpus.toc.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as fh:
-            json.dump(toc, fh, indent=2)
-            fh.write("\n")
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    _atomic.write_json(path, toc)
     _ensure_gitignored(campaign_dir)
     return path
 

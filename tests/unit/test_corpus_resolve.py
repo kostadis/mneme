@@ -265,3 +265,18 @@ def test_inherited_git_dir_is_ignored(camp, monkeypatch, tmp_path):
     monkeypatch.setenv("GIT_DIR", str(tmp_path / "nowhere"))
     res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [docs]\n")
     assert res.git == resolve.GIT_WORK_TREE
+
+
+def test_dangling_link_in_a_declared_dir_to_a_sparse_target_is_not_materialized(camp):
+    """Same classification as a declared `files` link (review A3): not a finding."""
+    write(camp, "docs/far/x.md")
+    write(camp, "docs/keep/a.md")
+    git(camp, "add", "-A")
+    git(camp, "commit", "-qm", "i")
+    git(camp, "update-index", "--skip-worktree", "docs/far/x.md")
+    (camp / "docs/far/x.md").unlink()
+    (camp / "docs/keep/current.md").symlink_to("../far/x.md")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [docs/keep]\n")
+    assert res.valid, codes(res)
+    assert res.kinds["npcs"].not_materialized == ("docs/keep/current.md",)
+    assert [f.path for f in res.kinds["npcs"].files] == ["docs/keep/a.md"]

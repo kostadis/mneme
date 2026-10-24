@@ -152,8 +152,9 @@ def test_malformed_yaml_and_non_mapping(tmp_path):
     assert codes == ["malformed"]
 
 
-def test_recipe_without_kinds_rejects_every_standard_kind(tmp_path):
+def test_recipe_without_kinds_makes_the_corpus_invalid(tmp_path):
     _write(tmp_path, GOOD)
     with pytest.raises(config.CorpusConfigError) as ei:
         config.load(tmp_path, recipe.load("2.0.0"))
-    assert "unknown-kind" in {f.code for f in ei.value.findings}
+    assert {f.code for f in ei.value.findings} == {"recipe-no-kinds"}
+    assert "defines no kinds" in str(ei.value)

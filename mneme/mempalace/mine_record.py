@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
-import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+from mneme import atomic as _atomic
 
 from .mine_report import WingSkips
 
@@ -62,18 +62,7 @@ def write(
     doc["status"] = status
     if error:
         doc["error"] = error[:500]
-    store = Path(store)
-    store.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=store, prefix=f".{FILENAME}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as fh:
-            json.dump(doc, fh, indent=2)
-            fh.write("\n")
-        os.replace(tmp, record_path(store))
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
-    return record_path(store)
+    return _atomic.write_json(record_path(store), doc)
 
 
 def read(store: Path) -> MineRecord | None:

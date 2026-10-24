@@ -175,3 +175,21 @@ def test_findings_combine_and_keep_full_lists(tmp_path):
     assert set(res.codes) == {C.UNDECLARED, C.UNMINED, C.MISSING, C.TOC_STALE}
     assert res.get(C.UNMINED).count == 12  # truncation is display-only
     assert not res.ok
+
+
+def test_symlink_and_its_target_both_declared_are_both_held(tmp_path):
+    """A symlink and its target declared together share one real file's drawers; neither
+    declared path is unmined or stale (review A1)."""
+    real = _src(tmp_path, "chapters/ch9.md", wing="summaries")
+    (tmp_path / "current.md").symlink_to("chapters/ch9.md")
+    r = ResolvedCorpus("corp", {"summaries": ResolvedKind("summaries", True, "authoritative", (
+        _f("chapters/ch9.md", "summaries", target=None),
+        _f("current.md", "summaries", target="chapters/ch9.md"),
+    )), "npcs": ResolvedKind("npcs", True, "authoritative")})
+    # the link's mined_path is its target
+    rec = CorpusRecord("t", "corp", "x", {
+        p: {"kind": "summaries", "sha256": SHA, "target": t}
+        for p, t in (("chapters/ch9.md", "chapters/ch9.md"), ("current.md", "chapters/ch9.md"))
+    })
+    res = run(tmp_path, r, [real], rec)
+    assert res.ok, [(f.code, f.files) for f in res.findings]

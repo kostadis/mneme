@@ -98,3 +98,17 @@ def test_invalid_config_isolated_in_report(tmp_path):
     assert bad.state == State.INVALID_CONFIG and bad.ok is False
     # full still reported fine alongside
     assert _states(report, "full")["recipe"] == State.CONFORMANT
+
+
+def test_status_never_writes_the_former_wings_record(tmp_path):
+    """`mp status` is read-only (007 B2): only refresh records the wings for prune's guard."""
+    from mneme.mempalace import authority, former_wings
+
+    mp = tmp_path / "mp"
+    root = make_campaigns(tmp_path / "campaigns")
+    add_store_pointer(root)
+    ent = entity_for(root, mempalace=mp)
+    cfg = authority.load(root / "full", mempalace_root=mp)
+    cfg.store.path.mkdir(parents=True)
+    conform.report(ent, campaign="full", runner=runner_clean())
+    assert former_wings.read(cfg.store.path) is None

@@ -9,6 +9,7 @@ an undispositioned one is "needs a decision" and IS (FR-027). mneme never guesse
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from pathlib import Path
 
@@ -22,7 +23,6 @@ from mneme.corpus.config import has_corpus
 from . import authority as _authority
 from . import corpus_record as _crec
 from . import discover as _discover
-from . import former_wings as _former
 from . import mine_record as _record
 from . import ownership as _ownership
 from . import recipe as _recipe
@@ -279,18 +279,25 @@ def _finding_text(f: _compare.CorpusFinding, campaign: str) -> str:
     return f"{head}: {body} -> {remedy}"
 
 
-def _corpus_findings(ref, cfg, rec, runner) -> _compare.CorpusFindings:
+def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFindings:
     """Resolve the declaration fresh and compare it with the palace. Never raises: whatever
-    cannot be read is a finding (invalid / unknown), never a silent OK (FR-017)."""
+    cannot be read is a finding (invalid / unknown), never a silent OK (FR-017). The campaign
+    is resolved exactly once per status run: its TOC document goes into ``docs`` (None when
+    the declaration is invalid) for the consumers row to reuse."""
     try:
         ccfg = _cconfig.load(ref.path, rec)
     except _cconfig.CorpusConfigError as e:
+        if docs is not None:
+            docs[ref.name] = None
         return _compare.CorpusFindings((_compare.CorpusFinding(
             _compare.INVALID, tuple(f.line() for f in e.findings),
             remedy="edit .mneme/corpus.yaml (`mneme corpus check`)",
         ),), verified=False)
     resolved = _cresolve.resolve(ccfg, ref.path, rec)
-    toc_check = _toc.verify(ref.path, _toc.build(resolved, ccfg, rec))
+    doc = _toc.build(resolved, ccfg, rec)
+    if docs is not None:
+        docs[ref.name] = doc
+    toc_check = _toc.verify(ref.path, doc)
     sources = None
     why = None
     if cfg.store is None:
@@ -316,10 +323,10 @@ def _corpus_findings(ref, cfg, rec, runner) -> _compare.CorpusFindings:
     )
 
 
-def _corpus_rows(ref, cfg, rec, runner) -> tuple[ConformanceRow, ConformanceRow]:
+def _corpus_rows(ref, cfg, rec, runner, docs=None) -> tuple[ConformanceRow, ConformanceRow]:
     """007 US2: the `corpus` row, and the `index` row derived from the SAME comparison
     (a corpus campaign's `sync --dry-run` scope would be a different question)."""
-    res = _corpus_findings(ref, cfg, rec, runner)
+    res = _corpus_findings(ref, cfg, rec, runner, docs)
     if res.ok:
         corpus = ConformanceRow(
             ref.name, "corpus", State.CONFORMANT,
@@ -392,7 +399,7 @@ _GAPS_SHOWN = 5
 
 def _campaign_rows(
     ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None, prober=None,
-    *, mp_root=None, check_index: bool = True,
+    *, mp_root=None, check_index: bool = True, docs: dict | None = None,
 ) -> list[ConformanceRow]:
     if not ref.has_authority:
         return [
@@ -421,8 +428,6 @@ def _campaign_rows(
 
     corpus = has_corpus(ref.path)
     rows = [_recipe_row(cfg, recipe, corpus=corpus)]
-    if entity is not None and not corpus and (warn := _former.try_record(cfg)):
-        rows.append(ConformanceRow(ref.name, "former-wings", State.CONFORMANT, note=warn))
 
     if not corpus:  # 007 FR-019: owed work, listed but never a failure
         rows.append(
@@ -447,7 +452,7 @@ def _campaign_rows(
         )
 
     if corpus:
-        rows.extend(_corpus_rows(ref, cfg, rec, runner))
+        rows.extend(_corpus_rows(ref, cfg, rec, runner, docs))
     elif check_index:
         rows.append(_index_row(ref, cfg, runner))
     rows.extend(_store_backup_rows(ref, cfg, entity, runner, prober))
@@ -472,29 +477,22 @@ FLEET = "(fleet)"
 
 
 def _glob_match(path: str, pattern: str) -> bool:
-    """Glob semantics on campaign-relative POSIX paths; `**` spans directories."""
-    from pathlib import PurePosixPath
+    """Glob semantics on campaign-relative POSIX paths, identical on every supported Python
+    (it mirrors `PurePosixPath.full_match`): `*`, `?` and `[...]` stay inside one segment; a
+    whole-segment `**` spans zero or more directories, but a trailing `**` needs at least one
+    more segment (`docs/**` does not match `docs`)."""
+    segs, pats = path.split("/"), pattern.split("/")
 
-    if hasattr(PurePosixPath, "full_match"):  # Python 3.13+
-        return PurePosixPath(path).full_match(pattern)
-    out, i = "", 0
-    while i < len(pattern):
-        if pattern.startswith("**/", i):
-            out += "(?:.*/)?"
-            i += 3
-        elif pattern.startswith("**", i):
-            out += ".*"
-            i += 2
-        elif pattern[i] == "*":
-            out += "[^/]*"
-            i += 1
-        elif pattern[i] == "?":
-            out += "[^/]"
-            i += 1
-        else:
-            out += re.escape(pattern[i])
-            i += 1
-    return re.fullmatch(out, path) is not None
+    def go(i: int, j: int) -> bool:
+        if j == len(pats):
+            return i == len(segs)
+        if pats[j] == "**":
+            if j == len(pats) - 1:
+                return i < len(segs)
+            return any(go(k, j + 1) for k in range(i, len(segs) + 1))
+        return i < len(segs) and fnmatch.fnmatchcase(segs[i], pats[j]) and go(i + 1, j + 1)
+
+    return go(0, 0)
 
 
 def _consumers_fleet_row() -> tuple[ConformanceRow, tuple]:
@@ -534,18 +532,13 @@ def _campaign_files(root: Path) -> list[str]:
     return out
 
 
-def _consumers_campaign_row(ref, recipe, consumers) -> ConformanceRow | None:
+def _consumers_campaign_row(ref, consumers, doc) -> ConformanceRow | None:
     """Per corpus campaign: for each non-compliant consumer with `reads`, (a) files its reads
     match that the resolved corpus lacks, (b) corpus files of its kinds its reads miss. An
     extra `consumers` row (owed, never a failure); None when nothing differs or the corpus
-    cannot be resolved (the `corpus` row already reports that)."""
-    from mneme.corpus import api as _api
-
-    try:
-        doc = _api.fresh(ref.path, recipe)
-    except _cconfig.CorpusConfigError:
-        return None
-    if not doc.get("valid", False):
+    did not resolve (``doc`` is the TOC document `_corpus_findings` already built, or None;
+    the `corpus` row reports an invalid declaration)."""
+    if doc is None or not doc.get("valid", False):
         return None
     in_corpus = {f["path"] for k in doc["kinds"].values() for f in k.get("files", [])}
     on_disk = None
@@ -630,13 +623,14 @@ def report(
     else:
         refs = _discover.discover(entity)
     rows: list[ConformanceRow] = []
+    docs: dict = {}  # corpus campaign name -> its TOC document, resolved once in the status row
     for ref in refs:
-        rows.extend(_campaign_rows(ref, recipe, runner, entity, prober))
+        rows.extend(_campaign_rows(ref, recipe, runner, entity, prober, docs=docs))
     fleet, consumers = _consumers_fleet_row()
     rows.append(fleet)
     for ref in refs:
         if consumers and has_corpus(ref.path):
-            diff = _consumers_campaign_row(ref, recipe, consumers)
+            diff = _consumers_campaign_row(ref, consumers, docs.get(ref.name))
             if diff is not None:
                 rows.append(diff)
     return ConformanceReport(rows=tuple(rows))

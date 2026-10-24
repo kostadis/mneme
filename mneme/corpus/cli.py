@@ -51,7 +51,7 @@ def check(
 ) -> None:
     """Validate the configuration and print the resolution per kind. Exit 0 iff valid."""
     path = _campaign_dir(config, campaign, campaign_dir)
-    answer = _api.consult(path, _recipe.current())
+    answer = _api.consult(path, _api.campaign_recipe(path))
     if "error" in answer:
         raise _refuse(answer)
     for name, k in answer["toc"]["kinds"].items():
@@ -76,7 +76,7 @@ def toc(
     """Resolve the corpus NOW (never from the snapshot) and print it. Non-zero if the
     configuration is invalid or the kind is not declared."""
     path = _campaign_dir(config, campaign, campaign_dir)
-    recipe = _recipe.current()
+    recipe = _api.campaign_recipe(path)
     answer = _api.consult(path, recipe, kind)
     if "error" in answer:
         raise _refuse(answer)

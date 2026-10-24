@@ -74,17 +74,21 @@ def _real(root: Path, rel: str) -> str:
     return os.path.realpath(root / rel)
 
 
-def _skipped(target: str, notices: tuple[SkipNotice, ...]) -> bool:
-    """Did mempalace report skipping ``target``? Its names are printed (and truncated to 50
-    chars) by mempalace, so match on the path, its tail, or its truncated basename."""
+def _skipped(target: str, notices: tuple[SkipNotice, ...], peers: list[str]) -> bool:
+    """Did mempalace report skipping ``target``? `--files-from` skips name the path relative
+    to the mine dir (or an absolute one); only the chunk-cap notice carries a bare basename,
+    truncated to 50 chars. A bare name counts only when it is unique among ``peers`` (the
+    kind's targets): an ambiguous one is unknown, never a skip of every same-named file."""
     base = os.path.basename(target)
     for n in notices:
         name = n.name.strip()
-        if name and (
-            name == target or target.endswith("/" + name) or name == base[:50]
-            or name == target[-50:]
-        ):
+        if not name:
+            continue
+        if name == target or ("/" in name and target.endswith("/" + name)):
             return True
+        if "/" not in name and name == base[:50]:
+            if sum(1 for p in peers if os.path.basename(p)[:50] == name) == 1:
+                return True
     return False
 
 
@@ -151,6 +155,10 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
     if sources is None and store is not None and not Path(store).exists():
         sources = []
     by_real = _by_real_path(sources) if sources is not None else {}
+    # a re-pointed link's old target may still be a corpus file (another kind mines it): its
+    # drawers then belong to that file's own checks and a blind forget would delete them
+    in_corpus = {_real(campaign_dir, f.mined_path) for k in resolved.kinds.values()
+                 for f in k.files}
     skips: list[tuple[str, SkipNotice]] = []
     mined_kinds: list[str] = []
 
@@ -174,10 +182,11 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
             # T023: a symlink that was re-pointed since the last mine
             if rec and rec.get("target") and rec["target"] != f.mined_path:
                 old_real = _real(campaign_dir, rec["target"])
-                forget_all.append(str(campaign_dir / rec["target"]))
-                if old_real != str(campaign_dir / rec["target"]):
-                    forget_all.append(old_real)
-                forget_all.extend(s.source_file for s in by_real.get(old_real, []))
+                if old_real not in in_corpus:
+                    forget_all.append(str(campaign_dir / rec["target"]))
+                    if old_real != str(campaign_dir / rec["target"]):
+                        forget_all.append(old_real)
+                    forget_all.extend(s.source_file for s in by_real.get(old_real, []))
                 out.replaced.append(f.path)
             # T021: content changed since the recorded mine (or never recorded)
             elif not rec or rec.get("sha256") != f.sha256:
@@ -216,7 +225,7 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
         if store is not None:
             entries = {
                 f.path: {"kind": kind, "sha256": f.sha256, "target": f.mined_path}
-                for f in files if not _skipped(f.mined_path, notices)
+                for f in files if not _skipped(f.mined_path, notices, targets)
             }
             out.record_warning = _crec.try_merge_kind(
                 store, campaign, cfg.corpus_sha256, kind, entries

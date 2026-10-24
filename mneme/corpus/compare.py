@@ -90,11 +90,15 @@ def classify(
     out-of-scope by the REAL path it points at (symlinks are mined as their target)."""
     root = Path(campaign_dir)
     real_root = os.path.realpath(root)
-    # real path -> (declared path, mined_as, minable)
-    declared: dict[str, tuple[str, str | None, bool]] = {}
+    # real path -> [(declared path, mined_as, minable)]: a symlink and its target (or two
+    # links to one file) are distinct declared paths served by the same drawers
+    declared: dict[str, list[tuple[str, str | None, bool]]] = {}
     for rk in resolved.kinds.values():
         for f in rk.files:
-            declared.setdefault(_real(root, f.mined_path), (f.path, f.mined_as, f.minable))
+            ent = (f.path, f.mined_as, f.minable)
+            lst = declared.setdefault(_real(root, f.mined_path), [])
+            if ent not in lst:
+                lst.append(ent)
     nm = [_real(root, p) for rk in resolved.kinds.values() for p in rk.not_materialized]
     miss = [_real(root, p) for rk in resolved.kinds.values() for p in rk.missing]
     out = _Sets()
@@ -102,13 +106,13 @@ def classify(
         if not _under(real, real_root):
             out.out_of_scope.extend(group)
         elif real in declared:
-            path, mined_as, minable = declared[real]
-            if mined_as is None or not minable:
-                continue  # a declared file mempalace cannot mine: not ours to judge
-            out.held.setdefault(path, []).extend(group)
-            bad = [s for s in group if s.wing != mined_as]
-            if bad:
-                out.wrong.setdefault(path, []).extend(bad)
+            for i, (path, mined_as, minable) in enumerate(declared[real]):
+                if mined_as is None or not minable:
+                    continue  # a declared file mempalace cannot mine: not ours to judge
+                out.held.setdefault(path, []).extend(group)
+                bad = [s for s in group if s.wing != mined_as]
+                if bad and i == 0:  # one real file, one wing finding
+                    out.wrong.setdefault(path, []).extend(bad)
         elif any(_under(real, n) for n in nm):
             out.spared.extend(group)
         elif any(_under(real, m) for m in miss):

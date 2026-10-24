@@ -1,21 +1,22 @@
 """The wings a campaign had before it declared a corpus, remembered in the store (007, FR-018a).
 
 `<store>/mneme-former-wings.json` is `{schema, campaign, recorded_at, wings: {name: trust}}`,
-rewritten whenever mneme loads a wing-model authority that has a store, so it holds the LAST
-pre-corpus wings. It is a derived cache with the store's lifecycle (a sibling of
-`mine_record.py`'s record) and feeds `mp prune`'s former-canon guard. Writing is best effort
-(`try_record`): a failure is a warning string, never a status or refresh failure.
+rewritten whenever `mp refresh` loads a wing-model authority that has a store (never by the
+read-only `mp status`), so it holds the LAST pre-corpus wings. It is a derived cache with
+the store's lifecycle (a sibling of `mine_record.py`'s record) and feeds `mp prune`'s
+former-canon guard. Writing is best effort (`try_record`): a failure is a warning string,
+never a status or refresh failure.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
 import json
-import os
-import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from mneme import atomic as _atomic
 
 FILENAME = "mneme-former-wings.json"
 SCHEMA = 1
@@ -47,17 +48,7 @@ def write(
     stamp = (now or _dt.datetime.now(_dt.UTC)).astimezone(_dt.UTC).isoformat(timespec="seconds")
     doc = {"schema": SCHEMA, "campaign": campaign, "recorded_at": stamp,
            "wings": {str(k): str(v) for k, v in sorted(wings.items())}}
-    store.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=store, prefix=f".{FILENAME}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as fh:
-            json.dump(doc, fh, indent=2, sort_keys=True)
-            fh.write("\n")
-        os.replace(tmp, record_path(store))
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
-    return record_path(store)
+    return _atomic.write_json(record_path(store), doc, sort_keys=True)
 
 
 def read(store: Path) -> FormerWings | None:

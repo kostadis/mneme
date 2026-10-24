@@ -218,6 +218,11 @@ def _authority_campaign(campaign_dir: Path) -> str | None:
 def load(campaign_dir: Path, recipe: Recipe) -> CorpusConfig:
     """Parse + validate the campaign's corpus declaration against ``recipe``'s standard
     kinds. Raises CorpusConfigError (every finding at once) on any violation."""
+    if not recipe.kinds:  # a corpus needs the recipe's standard kinds to validate against
+        raise CorpusConfigError([Finding(
+            "recipe-no-kinds",
+            f"recipe v{recipe.version.split('.')[0]} defines no kinds; adopt v3 or later "
+            "(`mneme mp adopt`)")])
     path = corpus_path(campaign_dir)
     try:
         data = path.read_bytes()

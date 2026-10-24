@@ -213,6 +213,14 @@ class _Walker:
         target = self._rel_real(real) if is_link else None
         entries.append(_Entry(kind, rel, target, _sha256(Path(real)), _is_minable(target or rel)))
 
+    def _sparse_link(self, rel: str) -> bool:
+        """A dangling symlink whose target is skip-worktree (R7), not a broken link."""
+        full = self.root / rel
+        if not (os.path.islink(full) and not os.path.exists(full)):
+            return False
+        real = os.path.realpath(full)
+        return self._inside(real) and self.git.skip_worktree(self._rel_real(real))
+
     def declared_file(self, kind: str, rel: str, ents: list[_Entry], nm: set[str], miss: set[str]):
         full = self.root / rel
         if os.path.lexists(full):
@@ -220,11 +228,9 @@ class _Walker:
                 self.findings.append(Finding("not-a-file", "declared under `files` but is a "
                                              "directory (use `dirs`)", path=rel))
                 return
-            if os.path.islink(full) and not os.path.exists(full):  # dangling link
-                real = os.path.realpath(full)
-                if self._inside(real) and self.git.skip_worktree(self._rel_real(real)):
-                    nm.add(rel)  # target is outside this host's sparse cone
-                    return
+            if self._sparse_link(rel):
+                nm.add(rel)  # target is outside this host's sparse cone
+                return
             self.file_entry(kind, rel, ents)
             return
         self._absent(rel, nm, miss)
@@ -253,12 +259,14 @@ class _Walker:
             self.findings.append(Finding("not-a-directory", "declared under `dirs` but "
                                          "is not a directory", path=rel))
             return
-        self._walk(kind, rel, {real}, ents)
+        self._walk(kind, rel, {real}, ents, nm)
         for p in self.git.tracked_under(rel):  # partially sparse folder
             if self.git.skip_worktree(p) and not os.path.lexists(self.root / p):
                 nm.add(p)
 
-    def _walk(self, kind: str, rel: str, ancestors: set[str], ents: list[_Entry]) -> None:
+    def _walk(
+        self, kind: str, rel: str, ancestors: set[str], ents: list[_Entry], nm: set[str]
+    ) -> None:
         try:
             names = sorted(os.listdir(self.root / rel))
         except OSError as e:
@@ -276,7 +284,9 @@ class _Walker:
                                                  f"resolves outside the campaign: {real}",
                                                  path=child))
                 elif real not in ancestors:  # a link back to a parent would never end
-                    self._walk(kind, child, ancestors | {real}, ents)
+                    self._walk(kind, child, ancestors | {real}, ents, nm)
+            elif self._sparse_link(child):
+                nm.add(child)
             else:
                 self.file_entry(kind, child, ents)
 

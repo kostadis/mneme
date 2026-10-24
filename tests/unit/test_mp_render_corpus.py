@@ -62,18 +62,18 @@ def test_config_yaml_has_canon_wings_and_no_canon_wing(tmp_path, monkeypatch):
     assert "canon_wing" not in doc["mempalace"]
 
 
-def test_coherent_detects_stale_toc_stamp_and_leftovers(tmp_path, monkeypatch):
+def test_coherent_detects_stale_root_stamp_and_leftovers(tmp_path, monkeypatch):
     w, cfg, rec = _setup(tmp_path, monkeypatch)
     assert render.coherent(cfg, rec, w.camp)  # nothing rendered yet
     render.write_all(cfg, rec, w.camp)
     assert render.coherent(cfg, rec, w.camp) == []
-    write(w.camp, "docs/npcs/new.md")  # a file added to a declared folder: TOC is stale
-    assert toc.TOC_RELPATH in render.coherent(cfg, rec, w.camp)
+    write(w.camp, "docs/npcs/new.md")  # a file added to a declared folder: TOC is stale ...
+    assert render.coherent(cfg, rec, w.camp) == []  # ... but that is the corpus row's report
     render.write_all(cfg, rec, w.camp)
     (w.camp / ".mneme" / "corpus.yaml").write_text(
         (w.camp / ".mneme" / "corpus.yaml").read_text() + "\n# touched\n"
     )
-    assert render.coherent(cfg, rec, w.camp)  # corpus_sha256 changed: root yaml + TOC stale
+    assert render.coherent(cfg, rec, w.camp)  # corpus_sha256 changed: the root yaml stamp is stale
     render.write_all(cfg, rec, w.camp)
     write(w.camp, "docs/x/mempalace.yaml", f"{render.STAMP_PREFIX} z; {render.STAMP_SUFFIX}\n")
     assert [p.as_posix() for p in render.coherent(cfg, rec, w.camp)] == ["docs/x/mempalace.yaml"]

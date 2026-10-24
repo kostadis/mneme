@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
-import os
-import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from mneme import atomic as _atomic
 
 FILENAME = "mneme-corpus-mined.json"
 SCHEMA = 1
@@ -35,21 +35,6 @@ class CorpusRecord:
 
 def record_path(store: Path) -> Path:
     return Path(store) / FILENAME
-
-
-def _atomic_write(store: Path, doc: dict) -> Path:
-    store = Path(store)
-    store.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=store, prefix=f".{FILENAME}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as fh:
-            json.dump(doc, fh, indent=2, sort_keys=True)
-            fh.write("\n")
-        os.replace(tmp, record_path(store))
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
-    return record_path(store)
 
 
 def read(store: Path) -> CorpusRecord | None:
@@ -91,7 +76,7 @@ def write(
         "files": {k: {"kind": v["kind"], "sha256": v["sha256"], "target": v["target"]}
                   for k, v in sorted(files.items())},
     }
-    return _atomic_write(store, doc)
+    return _atomic.write_json(record_path(store), doc, sort_keys=True)
 
 
 def merge_kind(

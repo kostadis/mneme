@@ -142,3 +142,77 @@ def test_first_mine_into_a_missing_store_forgets_nothing(tmp_path, monkeypatch):
     (res,) = _render_and_refresh(w)
     assert not res.failed, res.error
     assert not any(" forget " in f" {ln} " for ln in w.log_lines())
+
+
+def _declare(w, body):
+    (w.camp / ".mneme" / "corpus.yaml").write_text(body)
+
+
+def test_skip_notice_with_a_path_drops_only_that_file_from_the_record(tmp_path, monkeypatch):
+    """Two same-named files in one kind: a path-bearing SKIP notice names exactly one (A2)."""
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "docs/s/001/session-summary.md", "one")
+    write(w.camp, "docs/s/002/session-summary.md", "two")
+    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [docs/s]\n")
+    monkeypatch.setenv(
+        "MNEME_STUB_MINE_SKIPS",
+        "  SKIP: docs/s/001/session-summary.md (not a regular file)",
+    )
+    _render_and_refresh(w)
+    files = corpus_record.read(w.store).files
+    assert set(files) == {"docs/s/002/session-summary.md"}
+
+
+def test_ambiguous_basename_only_notice_is_unknown_not_skip_all(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "docs/s/001/session-summary.md", "one")
+    write(w.camp, "docs/s/002/session-summary.md", "two")
+    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [docs/s]\n")
+    # the chunk-cap notice carries only the (truncated) basename
+    monkeypatch.setenv(
+        "MNEME_STUB_MINE_SKIPS",
+        "  ! [skip] session-summary.md   produced 900 chunks (> 500); add to SKIP_FILENAMES",
+    )
+    _render_and_refresh(w)
+    assert set(corpus_record.read(w.store).files) == {
+        "docs/s/001/session-summary.md", "docs/s/002/session-summary.md"
+    }
+
+
+def test_repoint_does_not_delete_a_file_another_kind_still_mines(tmp_path, monkeypatch):
+    """current.md -> chapters/ch9.md re-pointed to ch10: ch9 stays mined by `chapters` (A4)."""
+    w = corpus_world(tmp_path, monkeypatch)
+    for n in ("ch9", "ch10"):
+        write(w.camp, f"docs/chapters/{n}.md", f"# {n}\n")
+    (w.camp / "docs" / "current.md").symlink_to("chapters/ch9.md")
+    _declare(
+        w,
+        "campaign: corp\nkinds:\n  summaries:\n    dirs: [docs/chapters]\n"
+        "  npcs:\n    files: [docs/current.md]\n    mined_as: true\n",
+    )
+    _render_and_refresh(w)
+    (w.camp / "docs" / "current.md").unlink()
+    (w.camp / "docs" / "current.md").symlink_to("chapters/ch10.md")
+    (res,) = refresh.refresh(w.entity, campaign="corp", runner=w.runner)
+    assert not res.failed, res.error
+    assert w.source_rels() == {"docs/chapters/ch9.md", "docs/chapters/ch10.md"}
+    assert w.wing_of("docs/chapters/ch9.md") == {"summaries"}
+    assert w.wing_of("docs/chapters/ch10.md") == {"npcs"}
+
+
+def test_bringup_with_an_unresolvable_declaration_writes_nothing(tmp_path, monkeypatch):
+    """Structurally valid but resolves to nothing (empty dir): refuse before any write (A5)."""
+    w = corpus_world(tmp_path, monkeypatch, authority=False)
+    (w.camp / "docs" / "empty").mkdir()
+    _declare(w, "campaign: corp\nkinds:\n  npcs:\n    dirs: [docs/empty]\n")
+    before = tree_snapshot(w.camp)
+    report = bringup.bringup(
+        w.entity, "corp", runner=w.runner, config_json=tmp_path / "config.json", do_backup=False
+    )
+    assert not report.ready
+    assert [(s.name, s.state) for s in report.steps] == [
+        ("configure", "skipped"), ("first_mine", "failed")
+    ]
+    assert "empty-corpus" in report.steps[1].note
+    assert tree_snapshot(w.camp) == before
+    assert not (tmp_path / "config.json").exists()

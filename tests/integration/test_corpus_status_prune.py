@@ -107,6 +107,13 @@ def test_edit_without_render_is_toc_stale(w):
     assert row.state is State.TOC_STALE and "mneme mp render corp" in row.note
 
 
+def test_a_content_edit_is_reported_once_as_toc_stale_not_stale_render(w):
+    write(w.camp, "docs/npcs/b.md")  # the TOC snapshot is now out of date
+    by, _ = rows(w)
+    assert by["render"].state is State.CONFORMANT, by["render"].note
+    assert by["corpus"].note.count("TOC-STALE") == 1
+
+
 def test_wrong_wing_after_a_plain_mine(tmp_path, monkeypatch):
     w = corpus_world(tmp_path, monkeypatch)
     render.write_all(_cfg(w), recipe_mod.current(), w.camp)

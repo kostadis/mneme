@@ -210,7 +210,9 @@ def write_corpus(cfg: CampaignMempalaceConfig, recipe: Recipe, dest_root: Path) 
 
 
 def coherent_corpus(cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: Path) -> list[Path]:
-    """Stale/missing/leftover corpus artifacts (relative paths); empty means coherent."""
+    """Stale/missing/leftover corpus artifacts (relative paths); empty means coherent. The TOC
+    snapshot is NOT judged here: it goes stale with every content edit, and the `corpus` row
+    reports that once (toc-stale)."""
     try:
         ccfg = _load_corpus(recipe, campaign_dir)
     except _cconfig.CorpusConfigError:
@@ -218,9 +220,6 @@ def coherent_corpus(cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: 
     drifted: list[Path] = []
     if read_stamp(campaign_dir / ROOT_YAML) != _corpus_digest(cfg, recipe, ccfg):
         drifted.append(Path(ROOT_YAML))
-    resolved = _cresolve.resolve(ccfg, campaign_dir, recipe)
-    if not _toc.verify(campaign_dir, _toc.build(resolved, ccfg, recipe)).ok:
-        drifted.append(_toc.TOC_RELPATH)
     return drifted + leftover_wing_renders(campaign_dir)
 
 
