@@ -73,8 +73,8 @@ Every user story needs these.
   - Exit non-zero on any failure.
   - Tests included.
 - [X] T007 (Opus) Gate the mempalace worktree: run its test suite and linter, read the diff against `contracts/mempalace-cli-additions.md`, then push `feat/corpus-cli` and open a PR into `kostadis-dev` via `mcp__github__create_pull_request`.
-- [ ] T008 (GM) Review and merge the mempalace PR into `kostadis-dev`. mneme work that calls the new verbs is blocked until this lands.
-- [ ] T009 Bump the mempalace pin in `hypostasis.example.yaml` (the `components.mempalace.pin` line) to the merged `kostadis-dev` commit, and update its comment to name feature 007's CLI additions. In the task report, tell the GM that each host's `~/.config/hypostasis/hypostasis.yaml` needs the same pin and a `hypostasis install`. This task does not touch host configs.
+- [X] T008 (GM) Review and merge the mempalace PR into `kostadis-dev`. mneme work that calls the new verbs is blocked until this lands.
+- [X] T009 Bump the mempalace pin in `hypostasis.example.yaml` (the `components.mempalace.pin` line) to the merged `kostadis-dev` commit, and update its comment to name feature 007's CLI additions. In the task report, tell the GM that each host's `~/.config/hypostasis/hypostasis.yaml` needs the same pin and a `hypostasis install`. This task does not touch host configs.
 
 ### mneme foundations
 
