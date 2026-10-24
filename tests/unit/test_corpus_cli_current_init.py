@@ -94,3 +94,13 @@ def test_current_with_a_store_path_that_is_a_file_refuses_naming_it(w):
     w.store.write_text("not a directory")
     res = CLI.invoke(ccli.app, ["current", "corp"])
     assert res.exit_code != 0 and "store path is not a directory" in res.output, res.output
+
+
+def test_current_on_a_mempalace_without_sources_names_the_missing_verbs(w, monkeypatch):
+    _settle(w)
+    monkeypatch.setenv("MNEME_STUB_OLD", "1")  # the pre-007 CLI: no `sources` / `forget`
+    fresh = MempalaceRunner("mempalace", w.runner.runner)  # the settle's probe was cached
+    monkeypatch.setattr(MempalaceRunner, "for_entity", classmethod(lambda c, e, **k: fresh))
+    res = CLI.invoke(ccli.app, ["current", "corp"])
+    assert res.exit_code != 0, res.output
+    assert "this mempalace lacks corpus support (missing `sources`, `forget`)" in res.output

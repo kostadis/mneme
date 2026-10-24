@@ -25,7 +25,7 @@ from . import recipe as _recipe
 from .corpus_mine import CorpusMine, mine_corpus
 from .discover import CampaignRef
 from .mine_report import WingSkips, warning_lines
-from .runner import MempalaceError, MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner, StoreKind, store_state
 
 
 @dataclass
@@ -79,6 +79,8 @@ def _guard_store(ref: CampaignRef, entity: ConfigEntity, prober):
         raise MempalaceError(
             "authority has no store pointer — cannot verify the palace; run `mneme mp bringup`"
         )
+    if (state := store_state(Path(cfg.store.path))).kind is StoreKind.BROKEN:
+        raise MempalaceError(state.reason)
     _guard.require_writable(entity, cfg.store.path, prober)
     return cfg
 

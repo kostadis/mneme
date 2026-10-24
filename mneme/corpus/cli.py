@@ -19,8 +19,8 @@ from mneme.mempalace.cli import EXIT_OK, EXIT_RUNTIME, _config_opt, _dir_opt, _l
 from mneme.mempalace.runner import (
     MempalaceError,
     MempalaceRunner,
-    holds_no_palace,
-    store_path_problem,
+    StoreKind,
+    store_state,
 )
 
 from . import api as _api
@@ -121,20 +121,25 @@ def current(
     except _authority.AuthorityError as e:
         typer.echo(f"error: unknown: authority does not load: {'; '.join(e.problems)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
-    if cfg.store is not None and (problem := store_path_problem(Path(cfg.store.path))):
-        typer.echo(f"error: unknown: {problem}", err=True)
+    state = store_state(Path(cfg.store.path)) if cfg.store is not None else None
+    if state is not None and state.kind is StoreKind.BROKEN:
+        typer.echo(f"error: unknown: {state.reason}", err=True)
         raise typer.Exit(EXIT_RUNTIME)
-    if cfg.store is None or holds_no_palace(Path(cfg.store.path)):
+    if state is None or state.unprovisioned:
         typer.echo(f"{campaign}: no palace (the store is not provisioned)")
         raise typer.Exit(EXIT_OK)
     runner = MempalaceRunner.for_entity(entity)
     try:
-        rows = runner.sources(cfg.store.path) if runner.supports_corpus_read() else None
+        if not runner.supports_corpus_read():
+            why = runner.read_too_old_message()
+            rows = None
+        else:
+            res = runner.read_sources(cfg.store.path)
+            rows, why = res.rows, res.why()
     except MempalaceError as e:  # the capability probe could not run: unknown, not too old
         typer.echo(f"error: unknown: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     if rows is None:
-        why = runner.last_error or "`mempalace sources` failed, or this mempalace lacks it"
         typer.echo(f"error: unknown: the palace for {campaign} could not be read ({why})",
                    err=True)
         raise typer.Exit(EXIT_RUNTIME)

@@ -11,12 +11,7 @@ import pytest
 from mneme.corpus import toc as corpus_toc
 from mneme.mempalace import authority, bringup, conform, corpus_record, refresh
 from mneme.mempalace.models import State
-from mneme.mempalace.runner import (
-    MempalaceError,
-    MempalaceRunner,
-    holds_no_palace,
-    store_path_problem,
-)
+from mneme.mempalace.runner import MempalaceError, MempalaceRunner
 from tests.fixtures import STUB, entity_for, make_greenfield_campaign, with_onnx
 from tests.fixtures.corpus_campaign import corpus_world, write
 from tests.integration.test_corpus_mining import _declare, _render_and_refresh, _skips_json
@@ -73,7 +68,9 @@ def _record_skip(w, rel, reason, target=None):
     files[rel]["skipped"] = reason
     if target is not None:
         files[rel]["target"] = target
-    corpus_record.write(w.store, rec.campaign, rec.corpus_sha256, files)
+    corpus_record.write(
+        w.store, rec.campaign, rec.corpus_sha256, files, excludes_sha256=rec.excludes_sha256
+    )
 
 
 def test_held_file_whose_remine_was_skipped_is_stale_not_current(tmp_path, monkeypatch):
@@ -97,24 +94,77 @@ def test_held_file_skipped_for_a_reason_refresh_cannot_fix_names_that_remedy(
     assert "mneme mp refresh corp" not in row.note
 
 
-def _touch_root_mempalace_yaml_after_the_mine(w):
+def _mtime_far_after_the_mine(w):
     import os
     import time
 
-    p = w.camp / "mempalace.yaml"
     later = time.time() + 30
-    os.utime(p, (later, later))
+    os.utime(w.camp / "mempalace.yaml", (later, later))
 
 
-def test_excluded_skip_stops_applying_once_the_mempalace_yaml_changed(tmp_path, monkeypatch):
+def _excluded_world(tmp_path, monkeypatch):
     w = corpus_world(tmp_path, monkeypatch)
     settle(w)
     _record_skip(w, "docs/npcs/a.md", "excluded")
     assert "excluded by a mempalace.yaml" in corpus_row(w).note
-    _touch_root_mempalace_yaml_after_the_mine(w)  # e.g. the exclude pattern was removed
+    return w
+
+
+def test_excluded_skip_survives_a_render_or_touch_that_leaves_the_content_identical(
+    tmp_path, monkeypatch
+):
+    w = _excluded_world(tmp_path, monkeypatch)
+    p = w.camp / "mempalace.yaml"
+    p.write_text(p.read_text())  # a re-render: same bytes, newer mtime
+    _mtime_far_after_the_mine(w)
+    assert "excluded by a mempalace.yaml" in corpus_row(w).note
+
+
+def test_excluded_skip_stops_applying_once_the_exclude_rules_changed(tmp_path, monkeypatch):
+    w = _excluded_world(tmp_path, monkeypatch)
+    p = w.camp / "mempalace.yaml"
+    p.write_text(p.read_text() + "exclude:\n  - nothing/**\n")  # the exclude pattern changed
     row = corpus_row(w)
     assert "excluded by a mempalace.yaml" not in row.note
     assert "mneme mp refresh corp" in row.note
+
+
+def test_excluded_skip_stops_applying_when_the_changed_file_got_its_old_mtime_back(
+    tmp_path, monkeypatch
+):
+    import os
+
+    w = _excluded_world(tmp_path, monkeypatch)
+    p = w.camp / "mempalace.yaml"
+    st = p.stat()
+    p.write_text(p.read_text() + "exclude:\n  - nothing/**\n")
+    os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns))  # e.g. `git checkout` restoring a time
+    assert "excluded by a mempalace.yaml" not in corpus_row(w).note
+
+
+def test_excluded_skip_in_a_record_without_an_exclude_hash_is_refresh_retryable(
+    tmp_path, monkeypatch
+):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    rec = corpus_record.read(w.store)
+    files = {k: dict(v) for k, v in rec.files.items()}
+    files["docs/npcs/a.md"]["skipped"] = "excluded"
+    corpus_record.write(w.store, rec.campaign, rec.corpus_sha256, files)  # an older record
+    row = corpus_row(w)
+    assert "excluded by a mempalace.yaml" not in row.note
+    assert "mneme mp refresh corp" in row.note
+
+
+def test_a_malformed_exclude_hash_makes_the_corpus_record_unreadable(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    path = w.store / corpus_record.FILENAME
+    doc = json.loads(path.read_text())
+    doc["excludes_sha256"] = 5
+    path.write_text(json.dumps(doc))
+    with pytest.raises(corpus_record.CorpusRecordError):
+        corpus_record.read(w.store)
 
 
 def test_recorded_skip_of_an_unmined_file_stops_applying_when_its_target_changed(
@@ -132,6 +182,7 @@ def test_recorded_skip_of_an_unmined_file_stops_applying_when_its_target_changed
     corpus_record.write(w.store, rec.campaign, rec.corpus_sha256, files)
     note = corpus_row(w).note
     assert "too short to index" not in note
+    assert "docs/npcs/tiny.md changed since it was skipped as too_short; refresh to retry" in note
     assert "mneme mp refresh corp" in note
 
 
@@ -222,16 +273,6 @@ def test_refresh_survives_a_record_with_a_non_string_target(tmp_path, monkeypatc
 
 # -- S8 / S9 -------------------------------------------------------------------------------
 
-def test_a_missing_store_path_holds_no_palace_but_a_stray_file_is_a_broken_one(tmp_path):
-    f = tmp_path / "store"
-    f.write_text("not a directory")
-    assert holds_no_palace(tmp_path / "missing")
-    assert not holds_no_palace(f)
-    assert store_path_problem(f) == f"store path is not a directory: {f}"
-    assert store_path_problem(tmp_path / "missing") is None
-    assert store_path_problem(tmp_path) is None
-
-
 def _stray_file_store(w):
     import shutil
 
@@ -248,6 +289,110 @@ def test_status_reports_a_stray_file_at_the_store_path_as_unknown(tmp_path, monk
     assert r["store"].state is State.INDEX_UNVERIFIED and want in r["store"].note
     assert r["corpus"].state is State.CORPUS_UNKNOWN and want in r["corpus"].note
     assert "embedder" not in r
+
+
+def _dangling_store(w):
+    import shutil
+
+    if w.store.is_dir():
+        shutil.rmtree(w.store)
+    else:
+        w.store.unlink()
+    w.store.symlink_to(w.store.parent / "gone")
+
+
+def test_prune_names_why_the_post_delete_verification_could_not_read_sources(
+    tmp_path, monkeypatch
+):
+    from mneme.mempalace import prune as prune_mod
+
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    w.runner.mine_files(w.camp, ["docs/party_draft.md"], wing="root", palace=w.store)
+    inner, applied = w.runner.runner, []
+
+    def run(cmd):
+        if "--apply" in cmd:
+            applied.append(cmd)
+        elif applied and "sources" in cmd[1:]:
+            raise PermissionError("denied")
+        return inner(cmd)
+
+    w.runner.runner = run
+    out: list[str] = []
+    ok = prune_mod.prune(w.entity, "corp", runner=w.runner, emit=out.append, confirm=True,
+                         expect=1, include_former_canon=("root",))
+    assert not ok and any("cannot run mempalace" in ln and "denied" in ln for ln in out), out
+
+
+def test_a_dangling_symlink_at_the_store_path_is_refused_by_status_current_and_prune(
+    tmp_path, monkeypatch
+):
+    from typer.testing import CliRunner
+
+    from mneme.corpus import cli as ccli
+    from mneme.mempalace import prune as prune_mod
+
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    _dangling_store(w)
+    want = f"store path is a dangling symlink: {w.store}"
+    r, _ = rows(w)
+    assert r["store"].state is State.INDEX_UNVERIFIED and want in r["store"].note
+    assert r["corpus"].state is State.CORPUS_UNKNOWN and want in r["corpus"].note
+    assert "embedder" not in r
+    monkeypatch.setattr("mneme.corpus.cli._load_or_exit", lambda _c: w.entity)
+    monkeypatch.setattr(MempalaceRunner, "for_entity", classmethod(lambda c, e, **k: w.runner))
+    res = CliRunner().invoke(ccli.app, ["current", "corp"])
+    assert res.exit_code != 0 and want in res.output
+    with pytest.raises(authority.AuthorityError, match="dangling symlink"):
+        prune_mod.prune(w.entity, "corp", runner=w.runner, emit=lambda ln: None)
+
+
+def test_bringup_refuses_a_dangling_symlink_at_the_store_path_before_writing_anything(
+    tmp_path, monkeypatch
+):
+    from tests.fixtures.corpus_campaign import tree_snapshot
+
+    w = corpus_world(tmp_path, monkeypatch, authority=False)
+    w.store.parent.mkdir(parents=True)
+    w.store.symlink_to(w.store.parent / "gone")
+    before = tree_snapshot(w.camp)
+    report = bringup.bringup(
+        w.entity, "corp", runner=w.runner, config_json=tmp_path / "config.json", do_backup=False
+    )
+    assert not report.ready
+    assert any("store path is a dangling symlink" in st.note for st in report.steps)
+    assert tree_snapshot(w.camp) == before and w.store.is_symlink()
+
+
+def test_regenerate_refuses_a_broken_store_path_and_touches_nothing(tmp_path, monkeypatch):
+    from mneme.mempalace import backup
+
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    _stray_file_store(w)
+    w.log.write_text("")
+    with pytest.raises(MempalaceError, match="store path is not a directory"):
+        backup.regenerate(w.entity, "corp", runner=w.runner)
+    assert w.store.read_text() == "not a directory" and w.log_lines() == []
+    _dangling_store(w)
+    with pytest.raises(MempalaceError, match="dangling symlink"):
+        backup.regenerate(w.entity, "corp", runner=w.runner)
+    assert w.store.is_symlink() and w.log_lines() == []
+
+
+def test_refresh_refuses_a_broken_store_path_before_any_mempalace_call(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    _stray_file_store(w)
+    w.log.write_text("")
+    (res,) = refresh.refresh(w.entity, campaign="corp", runner=w.runner)
+    assert res.failed and f"store path is not a directory: {w.store}" in res.error
+    _dangling_store(w)
+    (res,) = refresh.refresh(w.entity, campaign="corp", runner=w.runner)
+    assert res.failed and f"store path is a dangling symlink: {w.store}" in res.error
+    assert w.log_lines() == []
 
 
 def test_corpus_current_and_prune_refuse_a_stray_file_at_the_store_path(tmp_path, monkeypatch):
@@ -311,7 +456,9 @@ def test_other_dotfiles_are_not_write_json_temp_files(tmp_path, name):
 
     assert not atomic.is_temp(name)
     (tmp_path / name).write_text("")
-    assert not holds_no_palace(tmp_path)
+    from mneme.mempalace.runner import StoreKind, store_state
+
+    assert store_state(tmp_path).kind is StoreKind.PRESENT
 
 
 # -- S10 -----------------------------------------------------------------------------------

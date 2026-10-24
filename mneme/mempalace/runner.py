@@ -17,6 +17,7 @@ import tempfile
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -210,27 +211,62 @@ def _is_sidecar(name: str) -> bool:
     return name.startswith(".mneme-") and _atomic.is_temp(name)
 
 
-def store_path_problem(store: Path) -> str | None:
-    """Why the store path cannot hold a palace at all (something that is not a directory is
-    there), else None."""
-    store = Path(store)
-    if store.exists() and not store.is_dir():
-        return f"store path is not a directory: {store}"
-    return None
+class StoreKind(Enum):
+    MISSING = "missing"  # nothing there (and not a symlink)
+    EMPTY = "empty"  # a directory holding only mneme sidecars / write_json temps
+    BROKEN = "broken"  # exists but is not a directory, or a dangling symlink
+    PRESENT = "present"  # a directory with palace content
 
 
-def holds_no_palace(store: Path) -> bool:
-    """No palace there yet: the store path is missing, or holds only mneme's own sidecar
-    records (e.g. the former-wings record written the moment the store is known empty). A
-    non-directory that EXISTS there is a broken state, not "not provisioned" (see
-    `store_path_problem`)."""
+@dataclass(frozen=True)
+class StoreClass:
+    kind: StoreKind
+    reason: str | None = None  # set iff BROKEN
+
+    @property
+    def unprovisioned(self) -> bool:
+        """No palace there yet: MISSING or EMPTY."""
+        return self.kind in (StoreKind.MISSING, StoreKind.EMPTY)
+
+
+# What every refusal of a BROKEN store path starts with (callers that must not suggest bringup).
+BROKEN_STORE = "store path is "
+
+
+def store_state(store: Path) -> StoreClass:
+    """The ONE classification of a store path. A non-directory that exists, or a dangling
+    symlink, is BROKEN — never "not provisioned" (bringup refuses it too)."""
     store = Path(store)
+    if store.is_symlink() and not store.exists():
+        return StoreClass(StoreKind.BROKEN, f"{BROKEN_STORE}a dangling symlink: {store}")
+    if not store.exists():
+        return StoreClass(StoreKind.MISSING)
     if not store.is_dir():
-        return not store.exists()
+        return StoreClass(StoreKind.BROKEN, f"{BROKEN_STORE}not a directory: {store}")
     try:
-        return all(_is_sidecar(p.name) for p in store.iterdir())
+        empty = all(_is_sidecar(p.name) for p in store.iterdir())
     except OSError:
-        return False
+        return StoreClass(StoreKind.PRESENT)
+    return StoreClass(StoreKind.EMPTY if empty else StoreKind.PRESENT)
+
+
+@dataclass(frozen=True)
+class SourcesResult:
+    """`sources` read: ``rows`` is None when unknown; ``error`` says why when the binary could
+    not be launched (else None — rc != 0 / unparseable output carry no launch error)."""
+
+    rows: list[SourceRecord] | None
+    error: str | None = None
+
+    def why(self) -> str:
+        """The one message for an unreadable `sources`."""
+        return self.error or "`mempalace sources` failed or returned unparseable output"
+
+
+@dataclass(frozen=True)
+class StatusResult:
+    ok: bool
+    error: str | None = None
 
 
 class MempalaceRunner:
@@ -244,8 +280,6 @@ class MempalaceRunner:
         self.runner = runner
         # The hypostasis-declared overlay (e.g. MEMPALACE_BACKEND), exposed for assertions.
         self.env: dict[str, str] = dict(env or {})
-        # Why the LAST call could not launch the binary ("cannot run mempalace: ..."), else None.
-        self.last_error: str | None = None
         self._read_gaps: list[str] | None = None
         self._mine_gaps: list[str] | None = None
 
@@ -279,16 +313,21 @@ class MempalaceRunner:
         venv = entity.venv if entity.venv and str(entity.venv) != "." else None
         return cls.for_venv(venv, runner, stream=stream, env=entity.env)
 
-    def _call(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+    def _call_checked(
+        self, args: list[str]
+    ) -> tuple[subprocess.CompletedProcess[str], str | None]:
         """Run one subcommand. A binary that cannot be launched (missing, not executable, ...)
-        is ONE shape: rc 127 with ``stderr`` and ``last_error`` = "cannot run mempalace: <why>"."""
+        is ONE shape: rc 127 with ``stderr`` = "cannot run mempalace: <why>", also returned as
+        the second element (else None)."""
         cmd = [self.binary, *args]
-        self.last_error = None
         try:
-            return self.runner(cmd)
+            return self.runner(cmd), None
         except OSError as e:
-            self.last_error = f"{CANNOT_RUN}: {e}"
-            return subprocess.CompletedProcess(cmd, 127, stdout="", stderr=self.last_error)
+            err = f"{CANNOT_RUN}: {e}"
+            return subprocess.CompletedProcess(cmd, 127, stdout="", stderr=err), err
+
+    def _call(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        return self._call_checked(args)[0]
 
     @staticmethod
     def _with_palace(palace: Path | str | None, *sub: str) -> list[str]:
@@ -342,16 +381,22 @@ class MempalaceRunner:
     def sources(
         self, palace: Path | str | None = None, wing: str | None = None
     ) -> list[SourceRecord] | None:
-        """Every `(wing, source_file)` in the store, or None when it cannot be read: rc != 0
-        or unparseable output is unknown, never an empty list (FR-017, 007 R3). Never raises;
-        when the binary cannot be launched, ``last_error`` says why."""
+        """`read_sources(...).rows`: every `(wing, source_file)` in the store, or None."""
+        return self.read_sources(palace, wing).rows
+
+    def read_sources(
+        self, palace: Path | str | None = None, wing: str | None = None
+    ) -> SourcesResult:
+        """Every `(wing, source_file)` in the store, or ``rows=None`` when it cannot be read:
+        rc != 0 or unparseable output is unknown, never an empty list (FR-017, 007 R3). Never
+        raises; when the binary cannot be launched, ``error`` says why."""
         sub = ["sources", "--json"] + (["--wing", wing] if wing else [])
-        out = self._call(self._with_palace(palace, *sub))
+        out, err = self._call_checked(self._with_palace(palace, *sub))
         if out.returncode != 0:
-            return None
+            return SourcesResult(None, err)
         try:
             rows = json.loads(out.stdout or "")
-            return [
+            return SourcesResult([
                 SourceRecord(
                     str(r["wing"]),
                     str(r["source_file"]),
@@ -359,9 +404,9 @@ class MempalaceRunner:
                     int(r["drawers"]),
                 )
                 for r in rows
-            ]
+            ])
         except (ValueError, TypeError, KeyError):
-            return None
+            return SourcesResult(None)
 
     def forget(
         self,
@@ -446,7 +491,12 @@ class MempalaceRunner:
 
     def status(self, palace: Path | str | None = None) -> bool:
         """True iff `mempalace --palace <p> status` answers cleanly (the store is openable)."""
-        return self._call(self._with_palace(palace, "status")).returncode == 0
+        return self.probe_status(palace).ok
+
+    def probe_status(self, palace: Path | str | None = None) -> StatusResult:
+        """`status`, carrying why the binary could not be launched (else ``error`` is None)."""
+        out, err = self._call_checked(self._with_palace(palace, "status"))
+        return StatusResult(out.returncode == 0, err)
 
     def is_stale(
         self,

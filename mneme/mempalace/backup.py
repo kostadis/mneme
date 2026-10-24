@@ -31,7 +31,7 @@ from . import mine_record as _mine_record
 from . import provision as _provision
 from . import recipe as _recipe
 from .models import FAIL_STATES, BindingsBackup, ConformanceRow, State
-from .runner import MempalaceError, MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner, StoreKind, store_state
 
 MARKER = ".mneme-backup"  # labels a backup dir as derived/disposable
 
@@ -273,6 +273,8 @@ def regenerate(
     ref = _discover.resolve(entity, campaign, campaign_dir)
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     store = _authority.require_store(cfg).path
+    if (state := store_state(Path(store))).kind is StoreKind.BROKEN:
+        raise MempalaceError(f"{state.reason} — nothing was deleted")
     runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
     if has_corpus(ref.path):
         # 007 T032: validate BEFORE the store is deleted (a bad declaration or an old
@@ -301,7 +303,8 @@ def regenerate(
         warn = _former.try_record_empty(store, cfg.campaign)
     try:
         fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
-    except MempalaceError as e:  # the record warning must still reach cli.regenerate
+    except (MempalaceError, OSError, _authority.AuthorityError, _discover.DiscoveryError) as e:
+        # the record warning must still reach cli.regenerate, whatever stopped the rebuild
         if warn:
             e.record_warning = "; ".join(
                 w for w in (getattr(e, "record_warning", None), warn) if w

@@ -26,7 +26,7 @@ from . import provision as _provision
 from . import recipe as _recipe
 from . import render as _render
 from .models import BringUpReport, BringUpStep, CampaignMempalaceConfig, StorePointer
-from .runner import MempalaceError, MempalaceRunner, store_path_problem
+from .runner import MempalaceError, MempalaceRunner, StoreKind, store_state
 
 
 def default_config_json(mempalace_root: Path | None = None) -> Path:
@@ -92,7 +92,8 @@ def bringup(
     steps: list[BringUpStep] = []
     cfg = _plan_config(campaign, ref.path, rec, mp_root)  # in-memory; no write yet
 
-    if (problem := store_path_problem(Path(cfg.store.path))) is not None:
+    if (state := store_state(Path(cfg.store.path))).kind is StoreKind.BROKEN:
+        problem = state.reason
         steps.append(BringUpStep("configure", "skipped", note=f"nothing written: {problem}"))
         steps.append(BringUpStep("first_mine", "failed", note=problem))
         return BringUpReport(campaign, tuple(steps))

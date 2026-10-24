@@ -200,16 +200,30 @@ def test_read_capability_is_separate_from_mining(stub, monkeypatch):
     assert r.supports_corpus_read() is True and r.supports_corpus() is False
 
 
-def test_a_leftover_atomic_write_temp_file_is_not_palace_content(tmp_path):
+def test_store_state_tells_missing_empty_broken_and_present_apart(tmp_path):
     from mneme import atomic
-    from mneme.mempalace.runner import holds_no_palace
+    from mneme.mempalace.runner import StoreKind, store_state
 
+    missing = tmp_path / "missing"
+    assert store_state(missing).kind is StoreKind.MISSING
     store = tmp_path / "store"
     atomic.write_json(store / "mneme-corpus-mined.json", {})
-    (store / ".mneme-corpus-mined.json.ab12cd.tmp").write_text("{")
-    assert holds_no_palace(store)
+    (store / ".mneme-corpus-mined.json.ab12cd.tmp").write_text("{")  # a leftover write temp
+    assert store_state(store).kind is StoreKind.EMPTY
     (store / "knowledge_graph.sqlite3").write_text("x")
-    assert not holds_no_palace(store)
+    assert store_state(store).kind is StoreKind.PRESENT
+    stray = tmp_path / "stray"
+    stray.write_text("x")
+    s = store_state(stray)
+    assert s.kind is StoreKind.BROKEN and s.reason == f"store path is not a directory: {stray}"
+    dangling = tmp_path / "dangling"
+    dangling.symlink_to(tmp_path / "gone")
+    s = store_state(dangling)
+    assert s.kind is StoreKind.BROKEN
+    assert s.reason == f"store path is a dangling symlink: {dangling}"
+    link = tmp_path / "link"
+    link.symlink_to(store)
+    assert store_state(link).kind is StoreKind.PRESENT
 
 
 @pytest.mark.parametrize("exc", [FileNotFoundError(2, "No such file"),
@@ -224,7 +238,8 @@ def test_any_launch_failure_reads_as_unknown_with_one_reason(exc, tmp_path):
 
     r = MempalaceRunner("mempalace", run)
     assert r.sources("/x") is None
-    assert r.last_error.startswith("cannot run mempalace:")
+    res = r.read_sources("/x")
+    assert res.rows is None and res.error.startswith("cannot run mempalace:")
     (tmp_path / "turbovec" / "c").mkdir(parents=True)
     (tmp_path / "turbovec" / "c" / "store.sqlite3").write_text("")
     h = health.health(tmp_path, runner=MempalaceRunner("mempalace", run))

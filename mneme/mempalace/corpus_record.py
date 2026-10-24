@@ -10,6 +10,7 @@ top-level `.json`: neither a vector artifact, a binding, nor legacy chroma.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -33,10 +34,22 @@ class CorpusRecord:
     # relpath -> {kind, sha256, target[, skipped]}; `skipped` is mempalace's reason code for a
     # file it did NOT mine (the entry's sha256 is the content that was skipped)
     files: dict[str, dict] = field(default_factory=dict)
+    # sha256 of the root mempalace.yaml (where `excluded` comes from) when the files were mined;
+    # None in a record that predates it
+    excludes_sha256: str | None = None
 
 
 def record_path(store: Path) -> Path:
     return Path(store) / FILENAME
+
+
+def excludes_digest(campaign_dir: Path) -> str:
+    """sha256 of the campaign's root mempalace.yaml bytes (a sentinel when it is absent):
+    content, not mtime, so a re-render of the same text or a `git checkout` changes nothing."""
+    try:
+        return hashlib.sha256((Path(campaign_dir) / "mempalace.yaml").read_bytes()).hexdigest()
+    except OSError:
+        return hashlib.sha256(b"").hexdigest() + "-absent"
 
 
 def read(store: Path) -> CorpusRecord | None:
@@ -57,9 +70,13 @@ def read(store: Path) -> CorpusRecord | None:
             for v in files.values()
         ):
             raise ValueError("malformed files map")
+        excludes = doc.get("excludes_sha256")
+        if excludes is not None and not isinstance(excludes, str):
+            raise ValueError("malformed excludes_sha256")
         return CorpusRecord(
             str(doc["mined_at"]), str(doc.get("campaign", "")),
             str(doc.get("corpus_sha256", "")), {str(k): dict(v) for k, v in files.items()},
+            excludes,
         )
     except (OSError, ValueError, KeyError, AttributeError) as e:
         raise CorpusRecordError(f"{FILENAME} unreadable ({e})") from None
@@ -72,6 +89,7 @@ def write(
     files: Mapping[str, Mapping],
     *,
     now: _dt.datetime | None = None,
+    excludes_sha256: str | None = None,
 ) -> Path:
     """Atomically replace the whole record."""
     stamp = (now or _dt.datetime.now(_dt.UTC)).astimezone(_dt.UTC).isoformat(timespec="seconds")
@@ -81,6 +99,8 @@ def write(
         "files": {k: {f: v[f] for f in ("kind", "sha256", "target", "skipped") if f in v}
                   for k, v in sorted(files.items())},
     }
+    if excludes_sha256 is not None:
+        doc["excludes_sha256"] = excludes_sha256
     return _atomic.write_json(record_path(store), doc, sort_keys=True)
 
 
@@ -92,6 +112,7 @@ def merge_kind(
     entries: Mapping[str, Mapping],
     *,
     now: _dt.datetime | None = None,
+    excludes_sha256: str | None = None,
 ) -> Path:
     """Replace ``kind``'s entries with ``entries`` (relpath -> {kind, sha256, target[, skipped]})
     and keep every other kind's. Called after each SUCCESSFUL kind mine (R3). An unreadable existing
@@ -102,8 +123,12 @@ def merge_kind(
         old = None
     kept = {k: v for k, v in (old.files if old else {}).items()
             if v.get("kind") != kind and k not in entries}
+    if old is not None and old.excludes_sha256 != excludes_sha256:
+        # the other kinds' `excluded` skips were decided under rules that no longer hold; one
+        # digest cannot vouch for both, so forget them (a refresh retries those files)
+        kept = {k: v for k, v in kept.items() if v.get("skipped") != "excluded"}
     kept.update({k: dict(v) for k, v in entries.items()})
-    return write(store, campaign, corpus_sha256, kept, now=now)
+    return write(store, campaign, corpus_sha256, kept, now=now, excludes_sha256=excludes_sha256)
 
 
 def try_merge_kind(*args, **kwargs) -> str | None:

@@ -99,6 +99,36 @@ def test_regenerate_keeps_the_former_record_warning_when_the_rebuild_fails(
     assert "disk full" in (ei.value.record_warning or "")
 
 
+def test_regenerate_keeps_the_former_record_warning_when_the_rebuild_raises_an_oserror(
+    tmp_path, monkeypatch
+):
+    from typer.testing import CliRunner
+
+    from mneme.mempalace import cli as mp_cli
+    from mneme.mempalace import provision
+    from mneme.mempalace.runner import MempalaceRunner
+
+    w = corpus_world(tmp_path, monkeypatch)
+    cfg = authority.load(w.camp, mempalace_root=w.store.parent.parent)
+    render.write_all(cfg, recipe_mod.current(), w.camp)
+
+    def disk_full(*a, **k):
+        raise OSError("disk full")
+
+    def mine_fails(*a, **k):
+        raise OSError("mine disk error")
+
+    monkeypatch.setattr(former_wings, "write", disk_full)
+    monkeypatch.setattr(provision, "first_mine", mine_fails)
+    with pytest.raises(OSError) as ei:
+        backup.regenerate(w.entity, "corp", runner=w.runner)
+    assert "disk full" in (getattr(ei.value, "record_warning", None) or "")
+    monkeypatch.setattr(mp_cli, "_load_or_exit", lambda _c: w.entity)
+    monkeypatch.setattr(MempalaceRunner, "for_entity", classmethod(lambda c, e, **k: w.runner))
+    res = CliRunner().invoke(mp_cli.app, ["regenerate", "corp", "--confirm"])
+    assert res.exit_code != 0 and "disk full" in res.output, res.output
+
+
 def test_bringup_into_a_fresh_store_writes_an_empty_record(tmp_path, monkeypatch):
     w = corpus_world(tmp_path, monkeypatch, authority=False)
     assert not w.store.exists()

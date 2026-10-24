@@ -38,7 +38,7 @@ from .models import (
     State,
 )
 from .recipe import RecipeError
-from .runner import MempalaceError, MempalaceRunner, holds_no_palace, store_path_problem
+from .runner import MempalaceError, MempalaceRunner, StoreKind, store_state
 
 
 def _mp_root(entity):
@@ -110,7 +110,7 @@ def _embedder_row(ref, cfg, entity, prober) -> ConformanceRow | None:
     No row when the store dir doesn't exist (the `store` row already says not provisioned)."""
     from . import embedder_guard as _guard
 
-    if holds_no_palace(cfg.store.path) or store_path_problem(cfg.store.path):
+    if store_state(cfg.store.path).kind is not StoreKind.PRESENT:
         return None
     r = _guard.check(entity, cfg.store.path, prober)
     if r.state is _guard.GuardState.MISMATCH:
@@ -329,9 +329,9 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
     why = None
     if cfg.store is None:
         why = "no store pointer, so the palace cannot be read"
-    elif (problem := store_path_problem(Path(cfg.store.path))) is not None:
-        why = problem
-    elif holds_no_palace(Path(cfg.store.path)):
+    elif (state := store_state(Path(cfg.store.path))).kind is StoreKind.BROKEN:
+        why = state.reason
+    elif state.unprovisioned:
         why = "the store is not provisioned (`mneme mp bringup`)"
     else:
         try:
@@ -342,10 +342,10 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
             if not capable:
                 why = runner.read_too_old_message()
         if capable:
-            sources = runner.sources(cfg.store.path)
+            res = runner.read_sources(cfg.store.path)
+            sources = res.rows
             if sources is None:
-                why = (runner.last_error
-                       or "`mempalace sources` failed or returned unparseable output")
+                why = res.why()
     record = None
     rec_err = None
     if cfg.store is not None:

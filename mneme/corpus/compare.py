@@ -10,11 +10,11 @@ set. Display truncation lives in the callers; the data here is complete.
 
 from __future__ import annotations
 
-import datetime as _dt
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from mneme.mempalace import corpus_record as _crec
 from mneme.mempalace.corpus_mine import _by_real_path, _real
 from mneme.mempalace.corpus_record import CorpusRecord
 from mneme.mempalace.runner import SourceRecord
@@ -57,16 +57,14 @@ def skip_remedy(reason: str) -> str | None:
 
 
 def _exclude_rules_changed(record: CorpusRecord | None, campaign_dir: Path) -> bool:
-    """The root mempalace.yaml (where `excluded` comes from) was written after the record's last
-    mine, so an `excluded` skip may no longer hold; 1s slack covers the record's whole-second
-    stamp."""
+    """The root mempalace.yaml (where `excluded` comes from) differs, by content hash, from the
+    one the record's files were mined under, so an `excluded` skip may no longer hold. A record
+    without the hash predates it: treat the rules as changed (a refresh retries)."""
     if record is None:
         return False
-    try:
-        mined = _dt.datetime.fromisoformat(record.mined_at).timestamp()
-        return (Path(campaign_dir) / "mempalace.yaml").stat().st_mtime > mined + 1
-    except (OSError, ValueError):
-        return False
+    if record.excludes_sha256 is None:
+        return True
+    return record.excludes_sha256 != _crec.excludes_digest(campaign_dir)
 
 
 def _recorded_skip(entry: dict, f, rules_changed: bool) -> str | None:
@@ -269,7 +267,8 @@ def compare(
                 reason = r.get("skipped")
                 if not reason:
                     continue
-                if r.get("sha256") != by_path[p].sha256:
+                if (r.get("sha256") != by_path[p].sha256
+                        or r.get("target") not in (None, by_path[p].mined_path)):
                     changed.append(f"{p} changed since it was skipped as {reason}; "
                                    "refresh to retry")
                 elif remedy := _recorded_skip(r, by_path[p], rules_changed):

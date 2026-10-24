@@ -33,7 +33,8 @@ from .runner import (
     MempalaceError,
     MempalaceRunner,
     SourceRecord,
-    holds_no_palace,
+    StoreKind,
+    store_state,
 )
 
 
@@ -129,6 +130,8 @@ def mine_corpus(
     campaign_dir = Path(campaign_dir)
     if not runner.supports_corpus():
         raise MempalaceError(runner.too_old_message())
+    if store is not None and (state := store_state(Path(store))).kind is StoreKind.BROKEN:
+        raise MempalaceError(state.reason)  # before any write or mempalace call
     try:
         cfg = _cconfig.load(campaign_dir, recipe)
     except _cconfig.CorpusConfigError as e:
@@ -179,7 +182,7 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
     # None = unknown: forget candidates are not narrowed. A store that does not exist yet (first
     # mine) holds nothing, and the real `sources`/`forget` refuse a missing palace.
     sources = runner.sources(store)
-    if sources is None and store is not None and holds_no_palace(Path(store)):
+    if sources is None and store is not None and store_state(Path(store)).unprovisioned:
         sources = []
     by_real = _by_real_path(sources) if sources is not None else {}
     # a re-pointed link's old target may still be a corpus file (another kind mines it): its
@@ -197,7 +200,8 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
         if not targets:
             if store is not None and not dry_run:
                 out.record_warning = out.record_warning or _crec.try_merge_kind(
-                    store, campaign, cfg.corpus_sha256, kind, {}
+                    store, campaign, cfg.corpus_sha256, kind, {},
+                    excludes_sha256=_crec.excludes_digest(campaign_dir),
                 )
             continue
 
@@ -265,13 +269,15 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
             # a skipped file is recorded WITH its reason and hash: status then knows why it is
             # not held, and that the reason only holds while the content is unchanged
             entries = {}
+            excludes = _crec.excludes_digest(campaign_dir)  # as the mine just ran under it
             for f in files:
                 entry = {"kind": kind, "sha256": f.sha256, "target": f.mined_path}
                 if (s := _skipped(campaign_dir, f.mined_path, skipped)) is not None:
                     entry["skipped"] = s.reason
                 entries[f.path] = entry
             out.record_warning = _crec.try_merge_kind(
-                store, campaign, cfg.corpus_sha256, kind, entries
+                store, campaign, cfg.corpus_sha256, kind, entries,
+                excludes_sha256=excludes,
             ) or out.record_warning
     out.skips = tuple(skips)
     if store is not None and not dry_run:  # GH #31: remember the gaps for `mp status`

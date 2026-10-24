@@ -146,12 +146,17 @@ def up(
     # refuses to start against a not-brought-up store — it never brings it up itself.
     reason = mempalace_not_ready(cdir, entity) if store_gate is None else store_gate(cdir)
     if reason:
-        from .mempalace.runner import CANNOT_RUN
+        from .mempalace.runner import BROKEN_STORE, CANNOT_RUN
 
         if reason.startswith(CANNOT_RUN):  # bringup cannot help: the binary itself won't run
             raise LifecycleError(
                 f"cannot verify the mempalace store for '{campaign}': {reason} "
                 "— check the mempalace venv (`hypostasis install`)"
+            )
+        if reason.startswith(BROKEN_STORE):  # bringup refuses this too: the path itself is wrong
+            raise LifecycleError(
+                f"cannot use the mempalace store for '{campaign}': {reason} "
+                "— remove or fix that path"
             )
         raise LifecycleError(
             f"mempalace not brought up for '{campaign}': {reason} "

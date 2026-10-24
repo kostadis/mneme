@@ -30,9 +30,9 @@ from .runner import (
     MempalaceError,
     MempalaceRunner,
     SourceRecord,
+    StoreKind,
     SyncCheck,
-    holds_no_palace,
-    store_path_problem,
+    store_state,
 )
 
 
@@ -85,9 +85,10 @@ def prune(
         raise _authority.AuthorityError(
             ["no store pointer — cannot prune an unknown palace (run `mneme mp bringup`)"]
         )
-    if (problem := store_path_problem(Path(cfg.store.path))) is not None:
-        raise _authority.AuthorityError([f"cannot prune: {problem}"])
-    if holds_no_palace(Path(cfg.store.path)):
+    state = store_state(Path(cfg.store.path))
+    if state.kind is StoreKind.BROKEN:
+        raise _authority.AuthorityError([f"cannot prune: {state.reason}"])
+    if state.unprovisioned:
         raise _authority.AuthorityError(
             [f"store missing at {cfg.store.path} — nothing to prune (run `mneme mp bringup`)"]
         )
@@ -201,12 +202,9 @@ def _prune_corpus(
         raise MempalaceError(f"cannot prune: invalid corpus ({why})")
 
     def read_set() -> tuple[list[SourceRecord], list[SourceRecord], list[SourceRecord]]:
-        srcs = runner.sources(store)
-        if srcs is None:
-            raise MempalaceError(
-                "cannot read the palace's drawer sources: "
-                f"{runner.last_error or '`mempalace sources` failed or was unparseable'}"
-            )
+        res = runner.read_sources(store)
+        if (srcs := res.rows) is None:
+            raise MempalaceError(f"cannot read the palace's drawer sources: {res.why()}")
         deletion, spared = _compare.deletion_set(resolved, srcs, ref.path)
         return srcs, deletion, spared
 
@@ -265,9 +263,9 @@ def _prune_corpus(
         emit(f"FAIL prune: removed {removed} drawers but only {n} were approved in the preview")
         ok = False
     gone = {(s.wing, s.source_file) for s in deletion}
-    after = runner.sources(store)
-    if after is None:
-        emit("FAIL prune: cannot verify — `mempalace sources` failed after the delete")
+    res = runner.read_sources(store)
+    if (after := res.rows) is None:
+        emit(f"FAIL prune: cannot verify after the delete — {res.why()}")
         return False
     left = [s for s in after if (s.wing, s.source_file) in gone]
     if left:
