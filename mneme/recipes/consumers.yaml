@@ -27,7 +27,7 @@ consumers:
   - docs/party.md
   other: every configured doc
   note: documents[] is a second list of corpus files; converting it removes a second authority.
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.rlm.mcp_server — read_document / resources
   repo: CampaignGenerator
   entry: pipelines/rlm/mcp_server.py:88-97, 220-224
@@ -43,7 +43,7 @@ consumers:
   - docs/mechanics.md
   - docs/party.md
   other: mechanics
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.rlm.mcp_server — search_document / list_sessions / notes
   repo: CampaignGenerator
   entry: pipelines/rlm/mcp_server.py:254-274, 293, 100, 364
@@ -66,7 +66,7 @@ consumers:
   - summaries/*/scene_extractions/plan.md
   - notes/**
   other: docs/*
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.rlm.mcp_server — query_lore
   repo: CampaignGenerator
   entry: pipelines/rlm/mcp_server.py:546-552
@@ -79,7 +79,7 @@ consumers:
   - summaries/summaries.md
   - docs/summaries.md
   other: narrative bible
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.rlm.mcp_server — mempalace tools
   repo: CampaignGenerator
   entry: pipelines/rlm/mcp_server.py:103-107, 428-530
@@ -93,7 +93,7 @@ consumers:
   via: 'Mempalace search; wings come from config.yaml mempalace: (the search face).'
   reads: []
   note: Reads a single canon_wing today; needs canon_wings after 007 (research R8).
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.arc_triggers
   repo: CampaignGenerator
   entry: pipelines/grounding/arc_triggers.py:30, 93, 106
@@ -103,7 +103,7 @@ consumers:
   reads:
   - docs/tracking/*.md
   other: docs/tracking
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.dossier_proposer
   repo: CampaignGenerator
   entry: pipelines/rlm/dossier_proposer.py:30
@@ -113,7 +113,7 @@ consumers:
   via: Mempalace search against a hardcoded palace path.
   reads: []
   note: Hardcoded palace path is a separate Principle II problem.
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.grounding CLIs (campaign_state, distill, party, planning)
   repo: CampaignGenerator
   entry: pipelines/grounding/campaign_state.py:22, 296; planning.py:396, 831; party.py:221
@@ -130,7 +130,7 @@ consumers:
   - docs/ensemble/threads.md
   - docs/campaign_state.md
   - docs/party.md
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.event_spine / thread_registry
   repo: CampaignGenerator
   entry: pipelines/grounding/event_spine.py:127, 184; thread_registry.py:124
@@ -141,7 +141,7 @@ consumers:
   reads:
   - docs/ensemble/per_chapter/*/merged.json
   other: per-chapter corpus
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.grounding_sections
   repo: CampaignGenerator
   entry: pipelines/grounding/grounding_sections.py:16, 133, 143, 153
@@ -163,7 +163,7 @@ consumers:
   - notes/thread_speculations.md
   - docs/ensemble/narrative_importance.yaml
   other: planning notes
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.summary_native (build/extract/synth/key_npcs/npc_publish/notes)
   repo: CampaignGenerator
   entry: pipelines/summary_native/key_npcs.py:201; notes.py:69; pointers.py:52-56; npc_publish.py:384
@@ -179,7 +179,7 @@ consumers:
   - docs/npcs/authored/*.md
   - docs/npcs/distilled/*.md
   - docs/summary_native/**
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.npc_agent CLI
   repo: CampaignGenerator
   entry: pipelines/npc_agent/cli.py:111-117, 874; corpus.py:278
@@ -193,7 +193,7 @@ consumers:
   - npcs/*.md
   - docs/summaries/*.md
   - docs/npcs/*.md
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.campaignlib.npc (alias map, dossier guard)
   repo: CampaignGenerator
   entry: campaignlib/npc.py:51-75, 277
@@ -204,7 +204,7 @@ consumers:
   reads:
   - docs/npcs/distilled/*.md
   - docs/entity_registry.yaml
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.grounding_bundle
   repo: CampaignGenerator
   entry: campaignlib/grounding_bundle.py:27-30, 407
@@ -222,7 +222,7 @@ consumers:
   - docs/reference/**
   - docs/grounding/**
   note: A second authority for which files are grounding.
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.session_doc CLIs (enhance_summary, scene_extract, sd_narrate, sd_plan, sd_agent, sd_consistency)
   repo: CampaignGenerator
   entry: session_doc/sd_narrate.py:555; scene_extract.py:18, 301; sd_consistency.py:38
@@ -247,7 +247,7 @@ consumers:
   - docs/dossier_proposal.md
   - summaries/*/scene_extractions*/*.md
   - summaries/*/plan.md
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.check_consistency
   repo: CampaignGenerator
   entry: session_doc/check_consistency.py:9, 70
@@ -262,7 +262,7 @@ consumers:
   - docs/entity_registry.yaml
   other: entity_registry.yaml
   note: Registry path taken from the consistency-check skill text, not verified in this file.
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.server ensemble router
   repo: CampaignGenerator
   entry: server/routers/ensemble.py:69-72, 344-361, 554-555
@@ -283,7 +283,7 @@ consumers:
   - docs/ensemble/per_chapter/*/merged.json
   - docs/chapters/chapter_*.md
   other: corpus
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.server scene_editor router
   repo: CampaignGenerator
   entry: server/routers/scene_editor.py:1389-1391
@@ -296,7 +296,7 @@ consumers:
   - config/party.yaml
   - config/players.yaml
   - config/session_doc.yaml
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.server platform_config_service
   repo: CampaignGenerator
   entry: server/platform_config_service.py:1137-1190
@@ -324,7 +324,7 @@ consumers:
   - summaries/*/recap.md
   - voice
   - examples
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.kanka (sync/push/mcp)
   repo: CampaignGenerator
   entry: pipelines/integrations/kanka/kanka_push.py:42
@@ -334,7 +334,7 @@ consumers:
   via: CLI --input, documented as docs/world_state.md.
   reads:
   - docs/world_state.md
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: cg.migrate_grounding_bundle / migrate_npc_dossiers
   repo: CampaignGenerator
   entry: server/migrate_npc_dossiers.py, server/migrate_grounding_bundle.py
@@ -356,7 +356,7 @@ consumers:
   - config/grounding.yaml
   - config/planning.yaml
   note: Probably out of scope.
-  issue: null
+  issue: kostadis/CampaignGenerator#593
 - name: skill.campaign-prep
   repo: ~/.claude/skills
   entry: campaign-prep/SKILL.md:23-26
@@ -370,7 +370,7 @@ consumers:
   - docs/world_state.md
   - docs/planning.md
   - docs/party.md
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.campaign-chapter-review
   repo: ~/.claude/skills
   entry: campaign-chapter-review/SKILL.md:20-23
@@ -388,7 +388,7 @@ consumers:
   - voice/*.md
   - examples/*.md
   - summaries/*/*.md
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.consistency-check
   repo: ~/.claude/skills
   entry: consistency-check/SKILL.md:68, 113-130, 177-179
@@ -422,7 +422,7 @@ consumers:
   - summaries/*/session-summary.md
   - config/config.yaml
   other: notes/vtt_* glossaries
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.staged-consistency
   repo: ~/.claude/skills
   entry: staged-consistency/SKILL.md:43-57
@@ -452,7 +452,7 @@ consumers:
   - summaries/*/consistency_*stage*.sources.yaml
   - summaries/*/.cg/activity.jsonl
   - config/config.yaml
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.gmassist-precheck
   repo: ~/.claude/skills
   entry: gmassist-precheck/SKILL.md:20-33
@@ -464,7 +464,7 @@ consumers:
   reads:
   - summaries/*/gm-assist.md
   - docs/party.md
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.scene-extract
   repo: ~/.claude/skills
   entry: scene-extract/SKILL.md:19-24, 128
@@ -481,7 +481,7 @@ consumers:
   - config/players.yaml
   - config/session_doc.yaml
   - summaries/*/players.session.yaml
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.session-doc-run
   repo: ~/.claude/skills
   entry: session-doc-run/SKILL.md
@@ -496,7 +496,7 @@ consumers:
   - config/session_doc.yaml
   - summaries/*/gm-assist.md
   - summaries/*/players.session.yaml
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.grounding-refresh
   repo: ~/.claude/skills
   entry: grounding-refresh/SKILL.md:39, 62-75
@@ -525,7 +525,7 @@ consumers:
   - config/config.yaml
   - config/grounding.yaml
   - docs/grounding_patches.md
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.chapter-enhance
   repo: ~/.claude/skills
   entry: chapter-enhance/SKILL.md:61-62
@@ -542,7 +542,7 @@ consumers:
   - summaries/attempts/dgx-deep-seek/**
   - summaries/attempts/hand-edited/**
   other: docs/chapters
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.chapter-summarise
   repo: ~/.claude/skills
   entry: chapter-summarise/SKILL.md:95
@@ -554,7 +554,7 @@ consumers:
   - docs/*.md
   other: docs/chapters
   note: Reads chapters, not a declared kind today.
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.vtt-spell-pass
   repo: ~/.claude/skills
   entry: vtt-spell-pass/SKILL.md:66-73
@@ -574,7 +574,7 @@ consumers:
   - notes/session_start_trims.json
   - notes/.vtt_spell_pass_state.json
   other: notes glossary, session VTTs
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.session-summary-consistency
   repo: ~/.claude/skills
   entry: session-summary-consistency/SKILL.md:15-17, 42
@@ -589,7 +589,7 @@ consumers:
   - docs/entity_registry.yaml
   - docs/entity_inventory.md
   other: notes glossary
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.voice-smooth
   repo: ~/.claude/skills
   entry: voice-smooth/SKILL.md:112
@@ -608,7 +608,7 @@ consumers:
   - notes/session_prep/*
   - notes/sessions/*
   - notes/vtt_transcription_corrections.md
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.scrub / no-mech
   repo: ~/.claude/skills
   entry: scrub/SKILL.md:104-107; no-mech/SKILL.md:105-110
@@ -628,7 +628,7 @@ consumers:
   - summaries/*/scene_extractions_smoothed/*.md
   - summaries/*/plan.md
   other: notes/ policy
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.dossier-merge
   repo: ~/.claude/skills
   entry: dossier-merge/SKILL.md:16-25
@@ -641,7 +641,7 @@ consumers:
   - docs/planning_extractions/*.md
   - ui_config.yaml
   other: docs/planning_extractions
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.entity-triage / ensemble-alias-review / module-inventory / voice-critic
   repo: ~/.claude/skills
   entry: ensemble-alias-review/SKILL.md:118-120; voice-critic/SKILL.md:42
@@ -672,7 +672,7 @@ consumers:
   - docs/background/*
   other: notes glossaries
   note: Four skills in one row; split if they differ.
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.voice-examples
   repo: ~/.claude/skills
   entry: voice-examples/SKILL.md:27-29
@@ -685,7 +685,7 @@ consumers:
   - summaries/**/*.md
   - summaries.md
   - summary_*.md
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.mempalace-campaign
   repo: ~/.claude/skills
   entry: mempalace-campaign/SKILL.md:35-70
@@ -695,7 +695,7 @@ consumers:
   reads: []
   other: everything
   note: A builder, not a reader. Probably 'not a consumer', or superseded by mneme.
-  issue: null
+  issue: kostadis/mytools#87
 - name: skill.campaign-recall
   repo: ~/.claude/skills
   entry: campaign-recall/SKILL.md:33-44
@@ -707,7 +707,7 @@ consumers:
   - summaries/*.md
   note: The zg indexes found sit at campaigns-public campaign roots, so it may search the whole tree (inferred,
     not checked).
-  issue: null
+  issue: kostadis/mytools#88
 - name: gm.gm-session-prep
   repo: gm-assistant
   entry: gm-session-prep/SKILL.md:32-40
@@ -729,7 +729,7 @@ consumers:
   - docs/npcs/*.md
   other: party_state.md
   note: Uses party_state.md or party.md.
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-faction-network
   repo: gm-assistant
   entry: gm-faction-network/SKILL.md:30-33
@@ -745,7 +745,7 @@ consumers:
   - docs/npcs/*.md
   - summaries/**/*.md
   - docs/background/**
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-npc-build
   repo: gm-assistant
   entry: gm-npc-build/SKILL.md:28-32
@@ -761,7 +761,7 @@ consumers:
   - docs/npcs/*.md
   - docs/background/**
   - summaries/**/*.md
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-strategy-doc
   repo: gm-assistant
   entry: gm-strategy-doc/SKILL.md:30-35
@@ -782,7 +782,7 @@ consumers:
   - notes/*_strategy.md
   - notes/*_network.md
   other: party_state.md
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-handout
   repo: gm-assistant
   entry: gm-handout/SKILL.md:30-34
@@ -801,7 +801,7 @@ consumers:
   - docs/background/**
   - notes/handouts/*
   other: notes/*_strategy.md, notes/handouts
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-npc-voice
   repo: gm-assistant
   entry: gm-npc-voice/SKILL.md:21-28
@@ -814,7 +814,7 @@ consumers:
   - docs/npcs/*.md
   - notes/*_strategy.md
   other: notes/<slug>_strategy.md
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-improv
   repo: gm-assistant
   entry: gm-improv/SKILL.md:33-35
@@ -829,7 +829,7 @@ consumers:
   - summaries/*/session-summary.md
   other: gm_doctrine
   note: Public and private copies differ.
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-quest-log
   repo: gm-assistant
   entry: gm-quest-log/SKILL.md:30-64, 117
@@ -859,7 +859,7 @@ consumers:
   other: docs/chapters, voice files
   note: Explicitly does not read npcs dossiers or notes/*_strategy.md (:103). Public and private copies
     differ in output naming and handouts dir (:137-139).
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-social-encounter
   repo: gm-assistant
   entry: gm-social-encounter/SKILL.md:36, 59-63
@@ -875,7 +875,7 @@ consumers:
   - docs/campaign_state.md
   - summaries/*/session-summary.md
   other: ~/src/mytools/flexai-social/RULES.md (not campaign material)
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-statblock
   repo: gm-assistant
   entry: gm-statblock/SKILL.md:34, 42-47, 173
@@ -893,7 +893,7 @@ consumers:
   - docs/background/**
   - notes/**
   note: Reads docs/party_state.md, which obelisk/toee/oota don't have (they use docs/party.md).
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.gm-npc-dossier-cleanup (public copy only)
   repo: gm-assistant
   entry: gm-npc-dossier-cleanup/SKILL.md:74, 107
@@ -912,7 +912,7 @@ consumers:
   - docs/authority/**
   - config/grounding.yaml
   - summaries/*/session-summary.md
-  issue: null
+  issue: kostadis/campaigns#475
 - name: gm.phandalin-chapter-release / oota-chapter-release
   repo: gm-assistant
   entry: campaigns/.claude/skills/phandalin-chapter-release/SKILL.md:39, 75-174
@@ -936,4 +936,4 @@ consumers:
   - summaries/*/session-summary.md
   - .mempalaceignore
   note: Also drives the palace; may be partial.
-  issue: null
+  issue: kostadis/campaigns#475
