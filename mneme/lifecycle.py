@@ -71,7 +71,6 @@ def mempalace_not_ready(cdir: Path, entity: ConfigEntity | None = None) -> str |
     health probe's `mempalace status`."""
     from .mempalace import authority as _a
     from .mempalace import health as _h
-    from .mempalace.runner import MempalaceError as _ME
     from .mempalace.runner import MempalaceRunner as _MR
 
     if not _a.has_authority(cdir):
@@ -83,10 +82,7 @@ def mempalace_not_ready(cdir: Path, entity: ConfigEntity | None = None) -> str |
     if cfg.store is None:
         return None
     runner = _MR.for_entity(entity) if entity is not None else None
-    try:
-        sh = _h.health(cfg.store.path, runner=runner)
-    except _ME as e:  # the probe could not run: the store is unverified, which is not ready
-        return f"unverified: {e}"
+    sh = _h.health(cfg.store.path, runner=runner)
     return None if sh.ok else sh.note
 
 
@@ -150,6 +146,13 @@ def up(
     # refuses to start against a not-brought-up store — it never brings it up itself.
     reason = mempalace_not_ready(cdir, entity) if store_gate is None else store_gate(cdir)
     if reason:
+        from .mempalace.runner import CANNOT_RUN
+
+        if reason.startswith(CANNOT_RUN):  # bringup cannot help: the binary itself won't run
+            raise LifecycleError(
+                f"cannot verify the mempalace store for '{campaign}': {reason} "
+                "— check the mempalace venv (`hypostasis install`)"
+            )
         raise LifecycleError(
             f"mempalace not brought up for '{campaign}': {reason} "
             f"— run `mneme mp bringup {campaign}`"

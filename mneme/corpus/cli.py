@@ -16,7 +16,12 @@ from mneme.mempalace import authority as _authority
 from mneme.mempalace import discover as _discover
 from mneme.mempalace import recipe as _recipe
 from mneme.mempalace.cli import EXIT_OK, EXIT_RUNTIME, _config_opt, _dir_opt, _load_or_exit
-from mneme.mempalace.runner import MempalaceError, MempalaceRunner, holds_no_palace
+from mneme.mempalace.runner import (
+    MempalaceError,
+    MempalaceRunner,
+    holds_no_palace,
+    store_path_problem,
+)
 
 from . import api as _api
 from . import config as _cconfig
@@ -116,18 +121,22 @@ def current(
     except _authority.AuthorityError as e:
         typer.echo(f"error: unknown: authority does not load: {'; '.join(e.problems)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
+    if cfg.store is not None and (problem := store_path_problem(Path(cfg.store.path))):
+        typer.echo(f"error: unknown: {problem}", err=True)
+        raise typer.Exit(EXIT_RUNTIME)
     if cfg.store is None or holds_no_palace(Path(cfg.store.path)):
         typer.echo(f"{campaign}: no palace (the store is not provisioned)")
         raise typer.Exit(EXIT_OK)
     runner = MempalaceRunner.for_entity(entity)
     try:
         rows = runner.sources(cfg.store.path) if runner.supports_corpus_read() else None
-    except MempalaceError as e:  # a probe that could not run is unknown, not too old
+    except MempalaceError as e:  # the capability probe could not run: unknown, not too old
         typer.echo(f"error: unknown: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     if rows is None:
-        typer.echo(f"error: unknown: the palace for {campaign} could not be read "
-                   "(`mempalace sources` failed, or this mempalace lacks it)", err=True)
+        why = runner.last_error or "`mempalace sources` failed, or this mempalace lacks it"
+        typer.echo(f"error: unknown: the palace for {campaign} could not be read ({why})",
+                   err=True)
         raise typer.Exit(EXIT_RUNTIME)
     root = ref.path.resolve()
     by_wing: dict[str, list[str]] = {}

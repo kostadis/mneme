@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 
 from .models import DedicatedStore, StoreHealth, StoreState
-from .runner import MempalaceRunner
+from .runner import MempalaceRunner, store_path_problem
 
 
 def _is_chroma_segment(child: Path) -> bool:
@@ -67,14 +67,20 @@ def drop_legacy(store_path: Path) -> list[Path]:
 
 
 def health(store_path: Path, *, runner: MempalaceRunner | None = None) -> StoreHealth:
-    """Observed health of the store. MISSING if no bindings; HEALTHY iff it opens cleanly."""
+    """Observed health of the store. MISSING if no bindings; HEALTHY iff it opens cleanly;
+    UNVERIFIED when mempalace cannot be run at all. Never raises."""
     ds = inspect(store_path)
+    if (problem := store_path_problem(store_path)) is not None:
+        return StoreHealth(present=False, state=StoreState.UNVERIFIED, note=problem)
     if not ds.present:
         return StoreHealth(
             present=False, state=StoreState.MISSING, note=f"no store at {store_path}"
         )
     runner = runner or MempalaceRunner.for_venv(None)
-    if runner.status(store_path):
+    opens = runner.status(store_path)
+    if runner.last_error:
+        return StoreHealth(present=True, state=StoreState.UNVERIFIED, note=runner.last_error)
+    if opens:
         return StoreHealth(present=True, state=StoreState.HEALTHY, note="store opens cleanly")
     return StoreHealth(
         present=True, state=StoreState.DEGRADED, note="store present but not consistent/openable"

@@ -212,13 +212,21 @@ def test_a_leftover_atomic_write_temp_file_is_not_palace_content(tmp_path):
     assert not holds_no_palace(store)
 
 
-def test_any_oserror_launching_mempalace_is_a_mempalace_error():
-    import pytest
-
-    from mneme.mempalace.runner import MempalaceError, MempalaceRunner
+@pytest.mark.parametrize("exc", [FileNotFoundError(2, "No such file"),
+                                 PermissionError(13, "Permission denied")])
+def test_any_launch_failure_reads_as_unknown_with_one_reason(exc, tmp_path):
+    from mneme.mempalace import health
+    from mneme.mempalace.models import StoreState
+    from mneme.mempalace.runner import MempalaceRunner
 
     def run(cmd):
-        raise PermissionError(13, "Permission denied")
+        raise exc
 
-    with pytest.raises(MempalaceError, match="cannot run mempalace"):
-        MempalaceRunner("mempalace", run).sources("/x")
+    r = MempalaceRunner("mempalace", run)
+    assert r.sources("/x") is None
+    assert r.last_error.startswith("cannot run mempalace:")
+    (tmp_path / "turbovec" / "c").mkdir(parents=True)
+    (tmp_path / "turbovec" / "c" / "store.sqlite3").write_text("")
+    h = health.health(tmp_path, runner=MempalaceRunner("mempalace", run))
+    assert h.state is StoreState.UNVERIFIED and not h.ok
+    assert h.note.startswith("cannot run mempalace:")

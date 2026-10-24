@@ -26,7 +26,7 @@ from . import provision as _provision
 from . import recipe as _recipe
 from . import render as _render
 from .models import BringUpReport, BringUpStep, CampaignMempalaceConfig, StorePointer
-from .runner import MempalaceError, MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner, store_path_problem
 
 
 def default_config_json(mempalace_root: Path | None = None) -> Path:
@@ -91,6 +91,11 @@ def bringup(
     ref = _discover.resolve(entity, campaign, campaign_dir)
     steps: list[BringUpStep] = []
     cfg = _plan_config(campaign, ref.path, rec, mp_root)  # in-memory; no write yet
+
+    if (problem := store_path_problem(Path(cfg.store.path))) is not None:
+        steps.append(BringUpStep("configure", "skipped", note=f"nothing written: {problem}"))
+        steps.append(BringUpStep("first_mine", "failed", note=problem))
+        return BringUpReport(campaign, tuple(steps))
 
     resolved = None
     if _cconfig.has_corpus(ref.path):  # 007: an invalid declaration writes nothing (dry run too)

@@ -105,6 +105,9 @@ _CORPUS_VERBS = ("sources", "forget")
 _MINE_FLAGS = ("--files-from", "--skips-json")
 
 
+CANNOT_RUN = "cannot run mempalace"
+
+
 class MempalaceError(Exception):
     """A `mempalace` subprocess failed."""
 
@@ -207,13 +210,23 @@ def _is_sidecar(name: str) -> bool:
     return name.startswith(".mneme-") and _atomic.is_temp(name)
 
 
+def store_path_problem(store: Path) -> str | None:
+    """Why the store path cannot hold a palace at all (something that is not a directory is
+    there), else None."""
+    store = Path(store)
+    if store.exists() and not store.is_dir():
+        return f"store path is not a directory: {store}"
+    return None
+
+
 def holds_no_palace(store: Path) -> bool:
-    """No palace there yet: the store path is not a directory (missing, or a stray file), or
-    holds only mneme's own sidecar records (e.g. the former-wings record written the moment
-    the store is known empty)."""
+    """No palace there yet: the store path is missing, or holds only mneme's own sidecar
+    records (e.g. the former-wings record written the moment the store is known empty). A
+    non-directory that EXISTS there is a broken state, not "not provisioned" (see
+    `store_path_problem`)."""
     store = Path(store)
     if not store.is_dir():
-        return True
+        return not store.exists()
     try:
         return all(_is_sidecar(p.name) for p in store.iterdir())
     except OSError:
@@ -231,6 +244,8 @@ class MempalaceRunner:
         self.runner = runner
         # The hypostasis-declared overlay (e.g. MEMPALACE_BACKEND), exposed for assertions.
         self.env: dict[str, str] = dict(env or {})
+        # Why the LAST call could not launch the binary ("cannot run mempalace: ..."), else None.
+        self.last_error: str | None = None
         self._read_gaps: list[str] | None = None
         self._mine_gaps: list[str] | None = None
 
@@ -265,13 +280,15 @@ class MempalaceRunner:
         return cls.for_venv(venv, runner, stream=stream, env=entity.env)
 
     def _call(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        """Run one subcommand. A binary that cannot be launched (missing, not executable, ...)
+        is ONE shape: rc 127 with ``stderr`` and ``last_error`` = "cannot run mempalace: <why>"."""
         cmd = [self.binary, *args]
+        self.last_error = None
         try:
             return self.runner(cmd)
-        except FileNotFoundError:
-            return subprocess.CompletedProcess(cmd, 127, stdout="", stderr="mempalace not found")
-        except OSError as e:  # e.g. PermissionError: the binary exists but cannot be launched
-            raise MempalaceError(f"cannot run mempalace: {e}") from None
+        except OSError as e:
+            self.last_error = f"{CANNOT_RUN}: {e}"
+            return subprocess.CompletedProcess(cmd, 127, stdout="", stderr=self.last_error)
 
     @staticmethod
     def _with_palace(palace: Path | str | None, *sub: str) -> list[str]:
@@ -326,8 +343,8 @@ class MempalaceRunner:
         self, palace: Path | str | None = None, wing: str | None = None
     ) -> list[SourceRecord] | None:
         """Every `(wing, source_file)` in the store, or None when it cannot be read: rc != 0
-        or unparseable output is unknown, never an empty list (FR-017, 007 R3). Raises
-        `MempalaceError` only when the binary cannot be launched."""
+        or unparseable output is unknown, never an empty list (FR-017, 007 R3). Never raises;
+        when the binary cannot be launched, ``last_error`` says why."""
         sub = ["sources", "--json"] + (["--wing", wing] if wing else [])
         out = self._call(self._with_palace(palace, *sub))
         if out.returncode != 0:

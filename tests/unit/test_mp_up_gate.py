@@ -70,14 +70,12 @@ def test_mempalace_not_ready_logic(tmp_path):
     assert reason and "no store" in reason
 
 
-def test_up_reports_not_brought_up_when_the_health_probe_cannot_launch_mempalace(
-    tmp_path, monkeypatch
-):
-    from mneme.mempalace.runner import MempalaceError, MempalaceRunner
-
+@pytest.mark.parametrize("kind", ["missing", "non-exec"])
+def test_up_says_the_binary_cannot_run_and_does_not_suggest_bringup(tmp_path, monkeypatch, kind):
     e = _entity(tmp_path)
     camp = tmp_path / "campaigns" / "oota"
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))  # no mempalace to fall back on
     store = tmp_path / "home" / ".mempalace" / "palaces" / "oota"
     (store / "turbovec" / "c").mkdir(parents=True)
     (store / "turbovec" / "c" / "store.sqlite3").write_text("")
@@ -85,11 +83,11 @@ def test_up_reports_not_brought_up_when_the_health_probe_cannot_launch_mempalace
         campaign="oota", recipe_version="1.0.0",
         wings=(Wing("oota", ".", "reference", ()),), store=StorePointer("oota", store),
     ), camp)
-
-    def cannot_launch(self, palace=None):
-        raise MempalaceError("cannot run mempalace: denied")
-
-    monkeypatch.setattr(MempalaceRunner, "status", cannot_launch)
+    if kind == "non-exec":
+        (tmp_path / "venv" / "bin").mkdir(parents=True)
+        (tmp_path / "venv" / "bin" / "mempalace").write_text("#!/bin/sh\n")
     with pytest.raises(lifecycle.LifecycleError) as ei:
         lifecycle.up(e, "oota", prober=lambda s: True, runner=_ok_runner(), render=False)
-    assert "not brought up" in str(ei.value) and "denied" in str(ei.value)
+    msg = str(ei.value)
+    assert "cannot run mempalace" in msg and "hypostasis install" in msg
+    assert "mp bringup" not in msg

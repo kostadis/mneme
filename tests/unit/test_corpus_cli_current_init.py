@@ -89,8 +89,8 @@ def test_init_refuses_to_overwrite(w):
     assert path.read_bytes() == before
 
 
-def test_current_with_a_store_path_that_is_a_file_says_no_palace(w):
+def test_current_with_a_store_path_that_is_a_file_refuses_naming_it(w):
     w.store.parent.mkdir(parents=True, exist_ok=True)
     w.store.write_text("not a directory")
     res = CLI.invoke(ccli.app, ["current", "corp"])
-    assert res.exit_code == 0 and "no palace" in res.output, res.output
+    assert res.exit_code != 0 and "store path is not a directory" in res.output, res.output

@@ -305,6 +305,7 @@ class StoreState(StrEnum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     MISSING = "missing"
+    UNVERIFIED = "unverified"  # the probe could not run mempalace: unknown, not healthy
 
 
 @dataclass(frozen=True)

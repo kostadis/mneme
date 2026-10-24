@@ -76,6 +76,29 @@ def test_regenerate_writes_an_empty_record_and_prune_needs_no_flag(tmp_path, mon
     _prunes_without_the_flag(w)
 
 
+def test_regenerate_keeps_the_former_record_warning_when_the_rebuild_fails(
+    tmp_path, monkeypatch
+):
+    from mneme.mempalace import provision
+    from mneme.mempalace.runner import MempalaceError
+
+    w = corpus_world(tmp_path, monkeypatch)
+    cfg = authority.load(w.camp, mempalace_root=w.store.parent.parent)
+    render.write_all(cfg, recipe_mod.current(), w.camp)
+
+    def disk_full(*a, **k):
+        raise OSError("disk full")
+
+    def mine_fails(*a, **k):
+        raise MempalaceError("mine exploded")
+
+    monkeypatch.setattr(former_wings, "write", disk_full)
+    monkeypatch.setattr(provision, "first_mine", mine_fails)
+    with pytest.raises(MempalaceError) as ei:
+        backup.regenerate(w.entity, "corp", runner=w.runner)
+    assert "disk full" in (ei.value.record_warning or "")
+
+
 def test_bringup_into_a_fresh_store_writes_an_empty_record(tmp_path, monkeypatch):
     w = corpus_world(tmp_path, monkeypatch, authority=False)
     assert not w.store.exists()

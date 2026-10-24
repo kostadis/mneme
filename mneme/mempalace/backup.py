@@ -299,7 +299,14 @@ def regenerate(
         # GM 2026-10-24: a store rebuilt from the corpus provably holds no former wings —
         # recorded now it is empty, so a failed rebuild still leaves it.
         warn = _former.try_record_empty(store, cfg.campaign)
-    fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
+    try:
+        fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
+    except MempalaceError as e:  # the record warning must still reach cli.regenerate
+        if warn:
+            e.record_warning = "; ".join(
+                w for w in (getattr(e, "record_warning", None), warn) if w
+            )
+        raise
     if warn:
         fm.record_warning = "; ".join(w for w in (fm.record_warning, warn) if w)
     return fm

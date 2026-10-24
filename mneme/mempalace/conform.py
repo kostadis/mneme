@@ -38,7 +38,7 @@ from .models import (
     State,
 )
 from .recipe import RecipeError
-from .runner import MempalaceError, MempalaceRunner, holds_no_palace
+from .runner import MempalaceError, MempalaceRunner, holds_no_palace, store_path_problem
 
 
 def _mp_root(entity):
@@ -110,7 +110,7 @@ def _embedder_row(ref, cfg, entity, prober) -> ConformanceRow | None:
     No row when the store dir doesn't exist (the `store` row already says not provisioned)."""
     from . import embedder_guard as _guard
 
-    if holds_no_palace(cfg.store.path):
+    if holds_no_palace(cfg.store.path) or store_path_problem(cfg.store.path):
         return None
     r = _guard.check(entity, cfg.store.path, prober)
     if r.state is _guard.GuardState.MISMATCH:
@@ -139,25 +139,24 @@ def _store_backup_rows(ref, cfg, entity, runner, prober=None) -> list[Conformanc
     if entity is None or cfg.store is None:
         return []
     rows: list[ConformanceRow] = []
-    try:
-        h = _health.health(cfg.store.path, runner=runner)
-    except MempalaceError as e:  # the binary cannot be launched: unknown, never a crash
-        # the embedder / backup / faces rows below need no mempalace, so they are still produced
+    h = _health.health(cfg.store.path, runner=runner)
+    # (an unrunnable mempalace is UNVERIFIED; the embedder / backup / faces rows below need no
+    # mempalace, so they are still produced)
+    if h.state is StoreState.HEALTHY:
+        rows.append(ConformanceRow(ref.name, "store", State.BUILT, note="store healthy"))
+    elif h.state is StoreState.DEGRADED:
+        rows.append(ConformanceRow(ref.name, "store", State.STALE_RENDER, note=h.note))
+    elif h.state is StoreState.UNVERIFIED:
         rows.append(
-            ConformanceRow(ref.name, "store", State.INDEX_UNVERIFIED, note=f"unverified: {e}")
+            ConformanceRow(ref.name, "store", State.INDEX_UNVERIFIED, note=f"unverified: {h.note}")
         )
-    else:
-        if h.state is StoreState.HEALTHY:
-            rows.append(ConformanceRow(ref.name, "store", State.BUILT, note="store healthy"))
-        elif h.state is StoreState.DEGRADED:
-            rows.append(ConformanceRow(ref.name, "store", State.STALE_RENDER, note=h.note))
-        else:  # missing — not a hard fail; it's a to-do (run bringup)
-            rows.append(
-                ConformanceRow(
-                    ref.name, "store", State.MISSING_CONFIG,
-                    note="not provisioned — `mneme mp bringup`",
-                )
+    else:  # missing — not a hard fail; it's a to-do (run bringup)
+        rows.append(
+            ConformanceRow(
+                ref.name, "store", State.MISSING_CONFIG,
+                note="not provisioned — `mneme mp bringup`",
             )
+        )
     emb = _embedder_row(ref, cfg, entity, prober)
     if emb is not None:
         rows.append(emb)
@@ -273,23 +272,21 @@ _CODE_STATE = {
 }
 
 
-def _names(files: list[str]) -> str:
-    """Up to _SHOWN names, with the same '(+N more)' marker a finding's body uses."""
-    more = f" (+{len(files) - _SHOWN} more)" if len(files) > _SHOWN else ""
-    return ", ".join(files[:_SHOWN]) + more
+def _names(files: list[str], sep: str = ", ", shown: int = _SHOWN) -> str:
+    """Up to ``shown`` names joined by ``sep``, then the one '(+N more)' marker."""
+    more = f" (+{len(files) - shown} more)" if len(files) > shown else ""
+    return sep.join(files[:shown]) + more
 
 
 def _finding_text(f: _compare.CorpusFinding, campaign: str) -> str:
-    names = ", ".join(f.files[:_SHOWN])
-    more = f" (+{len(f.files) - _SHOWN} more)" if len(f.files) > _SHOWN else ""
     head = f.code.upper()
     if f.code in (_compare.INVALID, _compare.UNKNOWN):
-        body = "; ".join(f.files[:_SHOWN]) + more
+        body = _names(list(f.files), "; ")
     elif f.code == _compare.TOC_STALE:
         body = f.detail
     else:
         drawers = f" ({f.drawers} drawers)" if f.drawers else ""
-        body = f"{f.count} file(s){drawers}: {names}{more}"
+        body = f"{f.count} file(s){drawers}: {_names(list(f.files))}"
         if f.detail:
             body += f" [{f.detail}]"
     remedy = f.remedy
@@ -332,6 +329,8 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
     why = None
     if cfg.store is None:
         why = "no store pointer, so the palace cannot be read"
+    elif (problem := store_path_problem(Path(cfg.store.path))) is not None:
+        why = problem
     elif holds_no_palace(Path(cfg.store.path)):
         why = "the store is not provisioned (`mneme mp bringup`)"
     else:
@@ -343,13 +342,10 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
             if not capable:
                 why = runner.read_too_old_message()
         if capable:
-            try:
-                sources = runner.sources(cfg.store.path)
-            except MempalaceError as e:  # cannot be launched: unknown, never a crash
-                why = str(e)
-            else:
-                if sources is None:
-                    why = "`mempalace sources` failed or returned unparseable output"
+            sources = runner.sources(cfg.store.path)
+            if sources is None:
+                why = (runner.last_error
+                       or "`mempalace sources` failed or returned unparseable output")
     record = None
     rec_err = None
     if cfg.store is not None:
@@ -426,11 +422,10 @@ def _gaps_row(ref: CampaignRef, cfg) -> ConformanceRow | None:
             ref.name, "gaps", State.CONFORMANT,
             note=f"no files skipped at last mine ({rec.mined_at}){carried}",
         )
-    shown = ", ".join(names[:_GAPS_SHOWN])
-    more = f" (+{len(names) - _GAPS_SHOWN} more)" if len(names) > _GAPS_SHOWN else ""
     return ConformanceRow(
         ref.name, "gaps", State.INDEX_GAPS, observed=str(len(names)),
-        note=f"{len(names)} file(s) skipped at last mine: {shown}{more}{carried}",
+        note=f"{len(names)} file(s) skipped at last mine: "
+        f"{_names(names, shown=_GAPS_SHOWN)}{carried}",
     )
 
 

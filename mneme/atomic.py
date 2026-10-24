@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
 _TEMP_PREFIX, _TEMP_SUFFIX = ".", ".tmp"
+# write_json's exact shape: `.<final name>.<mkstemp random>.tmp`, the final name ending `.json`
+_TEMP_RE = re.compile(r"\.[^/]+\.json\.[A-Za-z0-9_]+\.tmp")
 
 
 def is_temp(name: str) -> bool:
     """True for the temp file name `write_json` leaves behind when a write was interrupted
-    (`.<final name>.<rand>.tmp`)."""
-    return name.startswith(_TEMP_PREFIX) and name.endswith(_TEMP_SUFFIX)
+    (`.<final name>.<rand>.tmp`) — and for no other dotfile."""
+    return _TEMP_RE.fullmatch(name) is not None
 
 
 def write_json(path: Path, doc: dict, *, sort_keys: bool = False) -> Path:

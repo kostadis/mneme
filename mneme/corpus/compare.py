@@ -10,6 +10,7 @@ set. Display truncation lives in the callers; the data here is complete.
 
 from __future__ import annotations
 
+import datetime as _dt
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,6 +54,31 @@ def skip_remedy(reason: str) -> str | None:
     """The remedy for a skip that `mneme mp refresh` alone can never fix; None when a refresh
     retries it (limit, write_failed, failed, purge_skipped, stat_error, unknown codes)."""
     return _SKIP_REMEDY.get(reason)
+
+
+def _exclude_rules_changed(record: CorpusRecord | None, campaign_dir: Path) -> bool:
+    """The root mempalace.yaml (where `excluded` comes from) was written after the record's last
+    mine, so an `excluded` skip may no longer hold; 1s slack covers the record's whole-second
+    stamp."""
+    if record is None:
+        return False
+    try:
+        mined = _dt.datetime.fromisoformat(record.mined_at).timestamp()
+        return (Path(campaign_dir) / "mempalace.yaml").stat().st_mtime > mined + 1
+    except (OSError, ValueError):
+        return False
+
+
+def _recorded_skip(entry: dict, f, rules_changed: bool) -> str | None:
+    """The remedy for a recorded skip that still applies to ``f`` (a resolved file), else None
+    (a refresh retries). It applies only to the same content AND the same target; an `excluded`
+    skip additionally only while the exclude rules have not changed since."""
+    reason = entry.get("skipped")
+    if (not reason or entry.get("sha256") != f.sha256
+            or entry.get("target") not in (None, f.mined_path)
+            or (reason == "excluded" and rules_changed)):
+        return None
+    return skip_remedy(reason)
 
 
 @dataclass(frozen=True)
@@ -229,6 +255,7 @@ def compare(
             ))
         mine = [f for rk in resolved.kinds.values() for f in rk.files
                 if f.minable and f.mined_as == rk.name]
+        rules_changed = _exclude_rules_changed(record, root)
         unmined = sorted(f.path for f in mine if f.path not in c.held)
         if unmined:
             # the corpus record says why a file was skipped, but only for the content it saw:
@@ -245,7 +272,7 @@ def compare(
                 if r.get("sha256") != by_path[p].sha256:
                     changed.append(f"{p} changed since it was skipped as {reason}; "
                                    "refresh to retry")
-                elif remedy := skip_remedy(reason):
+                elif remedy := _recorded_skip(r, by_path[p], rules_changed):
                     fixed.append((p, remedy))
             found.append(CorpusFinding(
                 UNMINED, tuple(unmined), remedy="mneme mp refresh",
@@ -268,7 +295,7 @@ def compare(
                 if r and same and not r.get("skipped"):
                     continue
                 stale.append(f.path)
-                if r and same and (remedy := skip_remedy(r["skipped"])):
+                if r and (remedy := _recorded_skip(r, f, rules_changed)):
                     stuck.append((f.path, remedy))
             if stale:
                 found.append(CorpusFinding(

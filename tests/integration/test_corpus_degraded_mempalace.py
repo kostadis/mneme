@@ -9,9 +9,14 @@ import re
 import pytest
 
 from mneme.corpus import toc as corpus_toc
-from mneme.mempalace import bringup, conform, corpus_record, refresh
+from mneme.mempalace import authority, bringup, conform, corpus_record, refresh
 from mneme.mempalace.models import State
-from mneme.mempalace.runner import MempalaceError, MempalaceRunner, holds_no_palace
+from mneme.mempalace.runner import (
+    MempalaceError,
+    MempalaceRunner,
+    holds_no_palace,
+    store_path_problem,
+)
 from tests.fixtures import STUB, entity_for, make_greenfield_campaign, with_onnx
 from tests.fixtures.corpus_campaign import corpus_world, write
 from tests.integration.test_corpus_mining import _declare, _render_and_refresh, _skips_json
@@ -62,10 +67,12 @@ def test_sources_that_cannot_be_launched_make_the_corpus_and_index_rows_unknown(
 
 # -- S4 ------------------------------------------------------------------------------------
 
-def _record_skip(w, rel, reason):
+def _record_skip(w, rel, reason, target=None):
     rec = corpus_record.read(w.store)
     files = {k: dict(v) for k, v in rec.files.items()}
     files[rel]["skipped"] = reason
+    if target is not None:
+        files[rel]["target"] = target
     corpus_record.write(w.store, rec.campaign, rec.corpus_sha256, files)
 
 
@@ -88,6 +95,54 @@ def test_held_file_skipped_for_a_reason_refresh_cannot_fix_names_that_remedy(
     assert row.state is State.CORPUS_STALE, row.note
     assert "too short to index: add content" in row.note
     assert "mneme mp refresh corp" not in row.note
+
+
+def _touch_root_mempalace_yaml_after_the_mine(w):
+    import os
+    import time
+
+    p = w.camp / "mempalace.yaml"
+    later = time.time() + 30
+    os.utime(p, (later, later))
+
+
+def test_excluded_skip_stops_applying_once_the_mempalace_yaml_changed(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    _record_skip(w, "docs/npcs/a.md", "excluded")
+    assert "excluded by a mempalace.yaml" in corpus_row(w).note
+    _touch_root_mempalace_yaml_after_the_mine(w)  # e.g. the exclude pattern was removed
+    row = corpus_row(w)
+    assert "excluded by a mempalace.yaml" not in row.note
+    assert "mneme mp refresh corp" in row.note
+
+
+def test_recorded_skip_of_an_unmined_file_stops_applying_when_its_target_changed(
+    tmp_path, monkeypatch
+):
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "docs/npcs/tiny.md", "x")
+    _skips_json(monkeypatch, ("docs/npcs/tiny.md", "too_short", ""))
+    settle(w)
+    note = corpus_row(w).note
+    assert "too short to index" in note and "docs/npcs/tiny.md" in note
+    rec = corpus_record.read(w.store)
+    files = {k: dict(v) for k, v in rec.files.items()}
+    files["docs/npcs/tiny.md"]["target"] = "docs/npcs/old-target.md"  # re-pointed link
+    corpus_record.write(w.store, rec.campaign, rec.corpus_sha256, files)
+    note = corpus_row(w).note
+    assert "too short to index" not in note
+    assert "mneme mp refresh corp" in note
+
+
+def test_recorded_skip_of_a_held_file_stops_applying_when_its_target_changed(
+    tmp_path, monkeypatch
+):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    _record_skip(w, "docs/npcs/a.md", "too_short", target="docs/npcs/old-target.md")
+    note = corpus_row(w).note
+    assert "too short to index" not in note and "mneme mp refresh corp" in note
 
 
 # -- S5 / S6 -------------------------------------------------------------------------------
@@ -142,13 +197,92 @@ def test_non_string_skipped_value_makes_the_record_unreadable(tmp_path, bad):
         corpus_record.read(tmp_path)
 
 
+@pytest.mark.parametrize("field,bad", [("sha256", 5), ("kind", ["k"]), ("target", 5),
+                                       ("target", ["a.md"])])
+def test_non_string_record_fields_make_the_record_unreadable(tmp_path, field, bad):
+    entry = {"kind": "k", "sha256": "h", "target": "a.md", field: bad}
+    doc = {"schema": 1, "campaign": "c", "mined_at": "t", "corpus_sha256": "s",
+           "files": {"a.md": entry}}
+    corpus_record.record_path(tmp_path).write_text(json.dumps(doc))
+    with pytest.raises(corpus_record.CorpusRecordError):
+        corpus_record.read(tmp_path)
+
+
+def test_refresh_survives_a_record_with_a_non_string_target(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    path = corpus_record.record_path(w.store)
+    doc = json.loads(path.read_text())
+    doc["files"]["docs/npcs/a.md"]["target"] = 5
+    path.write_text(json.dumps(doc))
+    (res,) = refresh.refresh(w.entity, campaign="corp", runner=w.runner)
+    assert not res.failed, res.error
+    assert any("treating every file as unrecorded" in x for x in res.warnings())
+
+
 # -- S8 / S9 -------------------------------------------------------------------------------
 
-def test_a_regular_file_at_the_store_path_holds_no_palace(tmp_path):
+def test_a_missing_store_path_holds_no_palace_but_a_stray_file_is_a_broken_one(tmp_path):
     f = tmp_path / "store"
     f.write_text("not a directory")
-    assert holds_no_palace(f)
     assert holds_no_palace(tmp_path / "missing")
+    assert not holds_no_palace(f)
+    assert store_path_problem(f) == f"store path is not a directory: {f}"
+    assert store_path_problem(tmp_path / "missing") is None
+    assert store_path_problem(tmp_path) is None
+
+
+def _stray_file_store(w):
+    import shutil
+
+    shutil.rmtree(w.store)
+    w.store.write_text("not a directory")
+
+
+def test_status_reports_a_stray_file_at_the_store_path_as_unknown(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    _stray_file_store(w)
+    r, _ = rows(w)
+    want = f"store path is not a directory: {w.store}"
+    assert r["store"].state is State.INDEX_UNVERIFIED and want in r["store"].note
+    assert r["corpus"].state is State.CORPUS_UNKNOWN and want in r["corpus"].note
+    assert "embedder" not in r
+
+
+def test_corpus_current_and_prune_refuse_a_stray_file_at_the_store_path(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from mneme.corpus import cli as ccli
+    from mneme.mempalace import prune as prune_mod
+
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    _stray_file_store(w)
+    monkeypatch.setattr("mneme.corpus.cli._load_or_exit", lambda _c: w.entity)
+    monkeypatch.setattr(MempalaceRunner, "for_entity", classmethod(lambda c, e, **k: w.runner))
+    res = CliRunner().invoke(ccli.app, ["current", "corp"])
+    assert res.exit_code != 0 and f"store path is not a directory: {w.store}" in res.output
+    with pytest.raises(authority.AuthorityError, match="store path is not a directory"):
+        prune_mod.prune(w.entity, "corp", runner=w.runner, emit=lambda ln: None)
+
+
+def test_bringup_refuses_a_stray_file_at_the_store_path_before_writing_anything(
+    tmp_path, monkeypatch
+):
+    from tests.fixtures.corpus_campaign import tree_snapshot
+
+    w = corpus_world(tmp_path, monkeypatch, authority=False)
+    w.store.parent.mkdir(parents=True)
+    w.store.write_text("not a directory")
+    before = tree_snapshot(w.camp)
+    report = bringup.bringup(
+        w.entity, "corp", runner=w.runner, config_json=tmp_path / "config.json", do_backup=False
+    )
+    assert not report.ready
+    assert any("store path is not a directory" in st.note for st in report.steps)
+    assert tree_snapshot(w.camp) == before and w.store.read_text() == "not a directory"
+    assert not (tmp_path / "config.json").exists()
 
 
 def test_atomic_names_the_temp_files_write_json_leaves_behind(tmp_path, monkeypatch):
@@ -168,6 +302,16 @@ def test_atomic_names_the_temp_files_write_json_leaves_behind(tmp_path, monkeypa
 
     assert atomic.is_temp(pathlib.Path(seen[0]).name)
     assert not atomic.is_temp("mneme-x.json")
+
+
+@pytest.mark.parametrize("name", [".mneme-lock.tmp", ".mneme-x.json.tmp", ".hidden.tmp",
+                                  ".x.json.ab12.bak"])
+def test_other_dotfiles_are_not_write_json_temp_files(tmp_path, name):
+    from mneme import atomic
+
+    assert not atomic.is_temp(name)
+    (tmp_path / name).write_text("")
+    assert not holds_no_palace(tmp_path)
 
 
 # -- S10 -----------------------------------------------------------------------------------
@@ -190,3 +334,57 @@ def test_unmined_note_marks_each_truncated_remedy_group_and_the_refreshable_list
     fresh = re.search(r"mneme mp refresh corp \[([^\]]*)\]", note)
     assert short and "(+2 more)" in short.group(1), note
     assert fresh and "(+2 more)" in fresh.group(1), note
+
+
+# -- launch failure has one shape ------------------------------------------------------------
+
+def _unlaunchable(tmp_path, kind):
+    """A runner whose binary is missing, or exists but is not executable."""
+    from mneme.mempalace.runner import _run
+
+    if kind == "missing":
+        return MempalaceRunner(str(tmp_path / "no-such-mempalace"), _run)
+    bad = tmp_path / "not-executable"
+    bad.write_text("#!/bin/sh\n")
+    bad.chmod(0o644)
+    return MempalaceRunner(str(bad), _run)
+
+
+def _status_shape(w, runner):
+    rep = conform.report(w.entity, "corp", runner=runner)
+    return {r.dimension: (r.state, "cannot run mempalace" in r.note) for r in rep.rows
+            if r.dimension in ("store", "embedder", "backup", "faces", "corpus", "index")}
+
+
+def test_missing_and_non_executable_binaries_give_the_same_status_rows(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    missing = _status_shape(w, _unlaunchable(tmp_path, "missing"))
+    non_exec = _status_shape(w, _unlaunchable(tmp_path, "non-exec"))
+    assert missing == non_exec
+    assert missing["store"] == (State.INDEX_UNVERIFIED, True)
+    assert missing["corpus"] == (State.CORPUS_UNKNOWN, True)
+    assert {"backup", "faces"} <= missing.keys()
+
+
+@pytest.mark.parametrize("kind", ["missing", "non-exec"])
+def test_prune_with_an_unlaunchable_binary_refuses_cleanly(tmp_path, monkeypatch, kind):
+    from mneme.mempalace import prune
+
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    runner = _unlaunchable(tmp_path, kind)
+    runner._read_gaps = []  # capability already probed; the sources read is what cannot run
+    with pytest.raises(MempalaceError, match="cannot read the palace's drawer sources: cannot run"):
+        prune.prune(w.entity, "corp", runner=runner, emit=lambda ln: None)
+
+
+@pytest.mark.parametrize("kind", ["missing", "non-exec"])
+def test_refresh_with_an_unlaunchable_binary_fails_without_a_traceback(
+    tmp_path, monkeypatch, kind
+):
+    w = corpus_world(tmp_path, monkeypatch)
+    settle(w)
+    runner = _unlaunchable(tmp_path, kind)
+    (res,) = refresh.refresh(w.entity, campaign="corp", runner=runner)
+    assert res.failed and "cannot" in res.error

@@ -26,7 +26,14 @@ from . import conform as _conform
 from . import discover as _discover
 from . import former_wings as _former
 from . import recipe as _recipe
-from .runner import MempalaceError, MempalaceRunner, SourceRecord, SyncCheck, holds_no_palace
+from .runner import (
+    MempalaceError,
+    MempalaceRunner,
+    SourceRecord,
+    SyncCheck,
+    holds_no_palace,
+    store_path_problem,
+)
 
 
 def _need_report(chk: SyncCheck, what: str) -> SyncCheck:
@@ -78,6 +85,8 @@ def prune(
         raise _authority.AuthorityError(
             ["no store pointer — cannot prune an unknown palace (run `mneme mp bringup`)"]
         )
+    if (problem := store_path_problem(Path(cfg.store.path))) is not None:
+        raise _authority.AuthorityError([f"cannot prune: {problem}"])
     if holds_no_palace(Path(cfg.store.path)):
         raise _authority.AuthorityError(
             [f"store missing at {cfg.store.path} — nothing to prune (run `mneme mp bringup`)"]
@@ -194,7 +203,10 @@ def _prune_corpus(
     def read_set() -> tuple[list[SourceRecord], list[SourceRecord], list[SourceRecord]]:
         srcs = runner.sources(store)
         if srcs is None:
-            raise MempalaceError("cannot read the palace's drawer sources (`mempalace sources`)")
+            raise MempalaceError(
+                "cannot read the palace's drawer sources: "
+                f"{runner.last_error or '`mempalace sources` failed or was unparseable'}"
+            )
         deletion, spared = _compare.deletion_set(resolved, srcs, ref.path)
         return srcs, deletion, spared
 
