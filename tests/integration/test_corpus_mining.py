@@ -148,75 +148,87 @@ def _declare(w, body):
     (w.camp / ".mneme" / "corpus.yaml").write_text(body)
 
 
-def test_skip_notice_with_a_path_drops_only_that_file_from_the_record(tmp_path, monkeypatch):
-    """Two same-named files in one kind: a path-bearing SKIP notice names exactly one (A2)."""
+def _skips_json(monkeypatch, *entries):
+    monkeypatch.setenv(
+        "MNEME_STUB_MINE_SKIPS_JSON",
+        json.dumps([{"path": p, "reason": r, "detail": d} for p, r, d in entries]),
+    )
+
+
+def test_exactly_the_listed_same_named_file_is_dropped_from_the_record(tmp_path, monkeypatch):
+    """Two same-named files in one kind: the JSON list names exactly one (A2)."""
     w = corpus_world(tmp_path, monkeypatch)
     write(w.camp, "docs/s/001/session-summary.md", "one")
     write(w.camp, "docs/s/002/session-summary.md", "two")
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [docs/s]\n")
-    monkeypatch.setenv(
-        "MNEME_STUB_MINE_SKIPS",
-        "  SKIP: docs/s/001/session-summary.md (not a regular file)",
-    )
+    _skips_json(monkeypatch, ("docs/s/001/session-summary.md", "chunk_cap", "900 chunks"))
     _render_and_refresh(w)
     files = corpus_record.read(w.store).files
     assert set(files) == {"docs/s/002/session-summary.md"}
 
 
-def test_ambiguous_basename_only_notice_is_unknown_not_skip_all(tmp_path, monkeypatch):
+def test_skip_of_a_root_file_does_not_drop_a_same_named_nested_one(tmp_path, monkeypatch):
     w = corpus_world(tmp_path, monkeypatch)
-    write(w.camp, "docs/s/001/session-summary.md", "one")
-    write(w.camp, "docs/s/002/session-summary.md", "two")
-    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [docs/s]\n")
-    # the chunk-cap notice carries only the (truncated) basename
-    monkeypatch.setenv(
-        "MNEME_STUB_MINE_SKIPS",
-        "  ! [skip] session-summary.md   produced 900 chunks (> 500); add to SKIP_FILENAMES",
-    )
-    _render_and_refresh(w)
-    assert set(corpus_record.read(w.store).files) == {
-        "docs/s/001/session-summary.md", "docs/s/002/session-summary.md"
-    }
-
-
-def test_bare_chunk_cap_notice_equal_to_a_root_target_is_still_ambiguous(tmp_path, monkeypatch):
-    """`a.md` and `sub/a.md` in one kind: the bare notice `a.md` blames neither (C3a)."""
-    w = corpus_world(tmp_path, monkeypatch)
-    write(w.camp, "a.md", "one")  # at the root: its target is exactly the bare name `a.md`
+    write(w.camp, "a.md", "one")
     write(w.camp, "sub/a.md", "two")
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    files: [a.md]\n    dirs: [sub]\n")
-    monkeypatch.setenv(
-        "MNEME_STUB_MINE_SKIPS",
-        "  ! [skip] a.md   produced 900 chunks (> 500); add to SKIP_FILENAMES",
-    )
+    _skips_json(monkeypatch, ("a.md", "chunk_cap", ""))
     _render_and_refresh(w)
-    assert set(corpus_record.read(w.store).files) == {"a.md", "sub/a.md"}
+    assert set(corpus_record.read(w.store).files) == {"sub/a.md"}
 
 
-def test_path_skip_notice_does_not_match_a_longer_path_suffix(tmp_path, monkeypatch):
-    """`SKIP: sub/a.md` must not also drop `x/sub/a.md` (C3b)."""
+def test_skip_path_is_not_a_suffix_match(tmp_path, monkeypatch):
+    """`sub/a.md` in the list must not also drop `x/sub/a.md`."""
     w = corpus_world(tmp_path, monkeypatch)
     write(w.camp, "sub/a.md", "one")
     write(w.camp, "x/sub/a.md", "two")
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [sub, x]\n")
-    monkeypatch.setenv("MNEME_STUB_MINE_SKIPS", "  SKIP: sub/a.md (not a regular file)")
+    _skips_json(monkeypatch, ("sub/a.md", "symlink", ""))
     _render_and_refresh(w)
     assert set(corpus_record.read(w.store).files) == {"x/sub/a.md"}
 
 
-def test_missing_and_unsupported_files_are_gaps_and_not_recorded_as_mined(tmp_path, monkeypatch):
-    """C2 + C4: the filter's `missing` / `unsupported extension` skips are reported."""
+def test_listed_skips_are_gaps_and_not_recorded_as_mined(tmp_path, monkeypatch):
+    """Missing / unsupported / unknown-code entries are reported with path + reason (C2, C4)."""
     w = corpus_world(tmp_path, monkeypatch)
     write(w.camp, "cx/gone.md", "one")
+    write(w.camp, "cx/odd.md", "three")
     write(w.camp, "cx/ok.md", "two")
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [cx]\n")
-    monkeypatch.setenv(
-        "MNEME_STUB_MINE_SKIPS",
-        "  SKIP: cx/gone.md (missing)\n  SKIP: cx/other.pdf (unsupported extension .pdf)",
+    _skips_json(
+        monkeypatch,
+        ("cx/gone.md", "missing", "file not found"),
+        ("cx/odd.md", "some_future_code", "who knows"),
     )
     (res,) = _render_and_refresh(w)
-    assert {n.kind for _, n in res.skips} == {"missing", "unsupported_ext"}
+    assert {(n.name, n.kind) for _, n in res.skips} == {
+        ("cx/gone.md", "missing"), ("cx/odd.md", "some_future_code")
+    }
+    assert any("cx/gone.md" in ln and "file not found" in ln for ln in res.warnings())
     assert set(corpus_record.read(w.store).files) == {"cx/ok.md"}
+
+
+def test_stdout_text_notices_are_ignored_by_corpus_mining(tmp_path, monkeypatch):
+    """Skip detection reads the JSON list only: a text SKIP line alone changes nothing."""
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "cx/a.md", "one")
+    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [cx]\n")
+    monkeypatch.setenv("MNEME_STUB_MINE_SKIPS", "  SKIP: cx/a.md (not a regular file)")
+    (res,) = _render_and_refresh(w)
+    assert not res.skips
+    assert set(corpus_record.read(w.store).files) == {"cx/a.md"}
+
+
+def test_missing_or_garbled_skips_json_records_nothing_and_warns(tmp_path, monkeypatch):
+    for mode in ("missing", "garbled"):
+        w = corpus_world(tmp_path / mode, monkeypatch)
+        write(w.camp, "cx/a.md", "one")
+        _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [cx]\n")
+        monkeypatch.setenv("MNEME_STUB_SKIPS_OUT", mode)
+        (res,) = _render_and_refresh(w)
+        assert not res.failed, res.error
+        assert corpus_record.read(w.store).files == {}, mode
+        assert any("--skips-json" in ln for ln in res.warnings()), mode
 
 
 def test_repoint_does_not_delete_a_file_another_kind_still_mines(tmp_path, monkeypatch):

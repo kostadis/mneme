@@ -180,7 +180,8 @@ def _prune_corpus(
     removed with `forget`, and re-verified with `sources`."""
     store = cfg.store.path
     if not runner.supports_corpus():
-        raise MempalaceError("this mempalace lacks the corpus verbs (`sources`, `forget`)")
+        gaps = ", ".join(runner.corpus_gaps())
+        raise MempalaceError(f"this mempalace lacks corpus support ({gaps})")
     try:
         rec = _recipe.load(cfg.recipe_version)
         ccfg = _cconfig.load(ref.path, rec)

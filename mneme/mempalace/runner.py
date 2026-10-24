@@ -67,6 +67,17 @@ class MineResult:
 
 
 @dataclass(frozen=True)
+class ListedSkip:
+    """One listed file mempalace did not (fully) mine, from `mine --skips-json` (GM 2026-10-24).
+    ``path`` is as listed, relative to the mine dir (POSIX); ``reason`` is mempalace's code
+    (missing, symlink, too_large, chunk_cap, ...) — an unknown code is still a skip."""
+
+    path: str
+    reason: str
+    detail: str = ""
+
+
+@dataclass(frozen=True)
 class SourceRecord:
     """One distinct `(wing, source_file)` in the store (`mempalace sources --json`, 007 R3)."""
 
@@ -89,10 +100,23 @@ _FORGET_SOURCES_RE = re.compile(r"^\s*Sources:\s+(\d+)", re.MULTILINE)
 _FORGET_DRAWERS_RE = re.compile(r"^\s*Drawers:\s+(\d+)", re.MULTILINE)
 _FORGET_LINE_RE = re.compile(r"^\s+(\S.*?)\s+\((\d+)\)\s*$", re.MULTILINE)
 _CORPUS_VERBS = ("sources", "forget")
+_MINE_FLAGS = ("--files-from", "--skips-json")
 
 
 class MempalaceError(Exception):
     """A `mempalace` subprocess failed."""
+
+
+def _read_skips(path: Path) -> list[ListedSkip] | None:
+    """The `--skips-json` array, or None when it is absent or not a list of {path, reason}."""
+    try:
+        rows = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(rows, list):
+            return None
+        return [ListedSkip(str(r["path"]), str(r["reason"]), str(r.get("detail") or ""))
+                for r in rows]
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
 
 
 def _merged_env(env: Mapping[str, str] | None) -> dict[str, str]:
@@ -184,7 +208,7 @@ class MempalaceRunner:
         self.runner = runner
         # The hypostasis-declared overlay (e.g. MEMPALACE_BACKEND), exposed for assertions.
         self.env: dict[str, str] = dict(env or {})
-        self._corpus_ok: bool | None = None
+        self._corpus_gaps: list[str] | None = None
 
     @classmethod
     def for_venv(
@@ -247,24 +271,30 @@ class MempalaceRunner:
         wing: str,
         palace: Path | str | None = None,
         dry_run: bool = False,
-    ) -> MineResult:
+    ) -> list[ListedSkip] | None:
         """Mine exactly ``files`` under ``root`` into ``wing`` (`mine --files-from`, 007 R1).
-        Pass resolved targets, never symlinks. Raises on failure; skips parsed as `mine`."""
+        Pass resolved targets, never symlinks. Raises on failure. Returns the listed files
+        mempalace did not mine, read from `--skips-json` — never from its text output; None
+        when that file is missing or unparseable after the run (unknown, not "no skips")."""
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
             fh.write("".join(f"{f}\n" for f in files))
+        skips_out = Path(fh.name).with_suffix(".skips.json")
         try:
-            sub = ["mine", str(root), "--files-from", fh.name, "--wing", wing]
+            sub = ["mine", str(root), "--files-from", fh.name, "--wing", wing,
+                   "--skips-json", str(skips_out)]
             if dry_run:
                 sub.append("--dry-run")
             out = self._call(self._with_palace(palace, *sub))
+            skips = _read_skips(skips_out)
         finally:
             Path(fh.name).unlink(missing_ok=True)
+            skips_out.unlink(missing_ok=True)
         if out.returncode != 0:
             detail = (out.stderr or out.stdout or "").strip()[-300:] or "no output"
             raise MempalaceError(
                 f"mempalace mine --files-from {root} failed (rc {out.returncode}): {detail}"
             )
-        return MineResult(tuple(parse_skips(f"{out.stdout or ''}\n{out.stderr or ''}")))
+        return skips
 
     def sources(
         self, palace: Path | str | None = None, wing: str | None = None
@@ -320,20 +350,28 @@ class MempalaceRunner:
         paths = tuple(m.group(1) for m in _FORGET_LINE_RE.finditer(text))
         return ForgetReport(int(ns.group(1)), int(nd.group(1)), paths)
 
+    def corpus_gaps(self) -> list[str]:
+        """What this mempalace lacks for corpus mining, named: the `sources` / `forget` verbs
+        (`--help`) and the `mine --files-from` / `--skips-json` flags (`mine --help`). Empty =
+        supported. Probed once per runner."""
+        if self._corpus_gaps is None:
+            top = self._call(["--help"])
+            mine = self._call(["mine", "--help"])
+            top_ok, mine_ok = top.returncode == 0, mine.returncode == 0
+            self._corpus_gaps = [
+                *(f"`{v}`" for v in _CORPUS_VERBS if not top_ok or v not in (top.stdout or "")),
+                *(f"`mine {f}`" for f in _MINE_FLAGS
+                  if not mine_ok or f not in (mine.stdout or "")),
+            ]
+        return self._corpus_gaps
+
     def supports_corpus(self) -> bool:
-        """True iff `mempalace --help` lists the `sources` and `forget` verbs (007 Dependency 1).
-        `mine --files-from` is probed from `mine --help`. Probed once per runner."""
-        if self._corpus_ok is not None:
-            return self._corpus_ok
-        top = self._call(["--help"])
-        mine = self._call(["mine", "--help"])
-        self._corpus_ok = (
-            top.returncode == 0
-            and mine.returncode == 0
-            and all(v in (top.stdout or "") for v in _CORPUS_VERBS)
-            and "--files-from" in (mine.stdout or "")
-        )
-        return self._corpus_ok
+        """True iff `corpus_gaps()` is empty (007 Dependency 1; `--skips-json`, GM 2026-10-24)."""
+        return not self.corpus_gaps()
+
+    def too_old_message(self) -> str:
+        """The refusal for a mempalace that cannot mine a corpus, naming what is missing."""
+        return f"mempalace too old for corpus mining (missing {', '.join(self.corpus_gaps())})"
 
     def status(self, palace: Path | str | None = None) -> bool:
         """True iff `mempalace --palace <p> status` answers cleanly (the store is openable)."""

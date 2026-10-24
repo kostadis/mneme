@@ -85,6 +85,16 @@ def test_old_mempalace_fails_and_never_falls_back_to_wings(tmp_path, monkeypatch
     monkeypatch.setenv("MNEME_STUB_OLD", "1")
     r = go(w)
     assert r.failed and "mempalace too old for corpus mining" in r.error
+    assert "--files-from" in r.error and "--skips-json" in r.error
+    assert not any(" mine " in f" {ln} " and "--help" not in ln for ln in w.log_lines())
+
+
+def test_mempalace_without_skips_json_fails_naming_the_flag(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    monkeypatch.setenv("MNEME_STUB_OLD", "skips")
+    r = go(w)
+    assert r.failed and "mempalace too old for corpus mining" in r.error
+    assert "mine --skips-json" in r.error and "--files-from" not in r.error
     assert not any(" mine " in f" {ln} " and "--help" not in ln for ln in w.log_lines())
 
 

@@ -16,6 +16,10 @@ Palace resolution: `--palace <path>` arg or ``$MEMPALACE_PALACE_PATH`` env.
   JSON state file ``$MNEME_STUB_SOURCES_STATE``. Like real mempalace, a source already in the
   state is skipped, whatever its wing. A missing path prints
   ``SKIP: <rel> (not a regular file)``.
+  ``--skips-json OUT`` writes the JSON array of ``{path, reason, detail}`` for each listed file
+  not mined (the stub's own ``not_regular`` skips, then the entries of
+  ``$MNEME_STUB_MINE_SKIPS_JSON``, a JSON array given verbatim). ``$MNEME_STUB_SKIPS_OUT``:
+  ``missing`` writes no OUT, ``garbled`` writes non-JSON.
 - ``sources [--wing W] --json`` → a JSON array of ``{wing, source_file, source_mtime, drawers}``
   from that state (``[]`` without one). ``$MNEME_STUB_SOURCES=rc1`` exits 1, ``garbage`` prints
   non-JSON.
@@ -23,7 +27,8 @@ Palace resolution: `--palace <path>` arg or ``$MEMPALACE_PALACE_PATH`` env.
   ``Drawers: M``, one ``  <path>  (<count>)`` line per source). ``--apply`` also removes those
   sources from the state. ``$MNEME_STUB_FORGET=rc1`` exits 1.
 - ``--help`` / ``mine --help`` → verb list / mine usage naming ``--files-from``; with
-  ``$MNEME_STUB_OLD`` set, the pre-007 CLI without them.
+  ``$MNEME_STUB_OLD`` set, the pre-007 CLI without them (``MNEME_STUB_OLD=skips``: only
+  ``--skips-json`` is missing).
 - ``status [--palace P]`` → exit 0, prints ``ok``.
 - ``[--palace P] sync <path> --dry-run`` → the REAL report format (GH #22). Counts via
   ``$MNEME_STUB_SYNC``: ``"<missing>,<gitignored>[,<oos>]"`` (default ``0,0``),
@@ -94,7 +99,8 @@ def _read_list(spec: str) -> list[str]:
     return [ln.strip() for ln in text.splitlines() if ln.strip()]
 
 
-def _mine_files(dir_: str, subargs: list[str]) -> None:
+def _mine_files(dir_: str, subargs: list[str]) -> list[dict]:
+    skipped: list[dict] = []
     wing = _opt(subargs, "--wing") or "stub"
     rows = _load_state()
     have = {r["source_file"] for r in rows}
@@ -102,6 +108,7 @@ def _mine_files(dir_: str, subargs: list[str]) -> None:
         p = Path(rel) if os.path.isabs(rel) else Path(dir_) / rel
         if not p.is_file() or p.is_symlink():
             print(f"SKIP: {rel} (not a regular file)", file=sys.stderr, flush=True)
+            skipped.append({"path": rel, "reason": "not_regular", "detail": "not a regular file"})
             continue
         ab = str(p.resolve())
         if ab in have:
@@ -111,6 +118,18 @@ def _mine_files(dir_: str, subargs: list[str]) -> None:
             {"wing": wing, "source_file": ab, "source_mtime": p.stat().st_mtime, "drawers": 1}
         )
     _save_state(rows)
+    return skipped
+
+
+def _write_skips(out: str, skipped: list[dict]) -> None:
+    mode = os.environ.get("MNEME_STUB_SKIPS_OUT", "")
+    if mode == "missing":
+        return
+    if mode == "garbled":
+        Path(out).write_text("not json {")
+        return
+    extra = os.environ.get("MNEME_STUB_MINE_SKIPS_JSON")
+    Path(out).write_text(json.dumps(skipped + (json.loads(extra) if extra else [])))
 
 
 def _sources(subargs: list[str]) -> int:
@@ -166,9 +185,13 @@ def main() -> int:
             fh.write(" ".join(argv) + "\n")
 
     if "--help" in argv or "-h" in argv:  # `supports_corpus()` probe; $MNEME_STUB_OLD = old CLI
-        old = bool(os.environ.get("MNEME_STUB_OLD"))
+        mode = os.environ.get("MNEME_STUB_OLD", "")
+        old = bool(mode) and mode != "skips"
         if argv and argv[0] == "mine":
-            print("usage: mempalace mine DIR" + ("" if old else " [--files-from FILE]"))
+            flags = "" if old else " [--files-from FILE]"
+            if not old and mode != "skips":
+                flags += " [--skips-json OUT]"
+            print("usage: mempalace mine DIR" + flags)
         else:
             print("{mine,status,sync,split}" if old else "{mine,sources,forget,status,sync,split}")
         return 0
@@ -183,7 +206,11 @@ def main() -> int:
                 print(line, file=sys.stderr, flush=True)
 
     if sub == "mine" and "--files-from" in subargs and "--dry-run" not in subargs and subargs:
-        _mine_files(subargs[0], subargs)
+        skipped = _mine_files(subargs[0], subargs)
+    else:
+        skipped = []
+    if sub == "mine" and _opt(subargs, "--skips-json"):
+        _write_skips(_opt(subargs, "--skips-json"), skipped)
 
     if sub == "sources":
         return _sources(subargs)

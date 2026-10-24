@@ -491,15 +491,15 @@ def test_cli_regenerate_failure_still_prints_earlier_gaps(world, monkeypatch):
     assert "FAIL regenerate:" in out.output
 
 
-def test_files_from_skip_of_a_top_level_target_is_not_mistaken_for_a_basename():
-    # G4: every filter-printed kind carries the exact listed path, so `README.md` skipped as a
-    # symlink must not read as "mined" because `npcs/README.md` shares its basename
+def test_skipped_is_exact_on_the_listed_path():
+    # G4: a listed `README.md` skip must not read as a skip of `npcs/README.md`, or vice versa
     from pathlib import Path
 
-    from mneme.mempalace.corpus_mine import _skipped
+    from mneme.mempalace.corpus_mine import _norm, _skipped
+    from mneme.mempalace.runner import ListedSkip
 
-    peers = ["README.md", "npcs/README.md"]
-    for why in ("symlink", "not a regular file", "stat error: Permission denied"):
-        notices = tuple(parse_skips(f"  SKIP: README.md ({why})"))
-        assert _skipped(Path("/c"), "README.md", notices, peers), why
-        assert not _skipped(Path("/c"), "npcs/README.md", notices, peers), why
+    root = Path("/c")
+    listed = {_norm(root, "README.md"): ListedSkip("README.md", "symlink")}
+    assert _skipped(root, "README.md", listed)
+    assert _skipped(root, "./README.md", listed)
+    assert not _skipped(root, "npcs/README.md", listed)

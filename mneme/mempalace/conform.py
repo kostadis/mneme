@@ -305,7 +305,7 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
     elif not Path(cfg.store.path).is_dir():
         why = "the store is not provisioned (`mneme mp bringup`)"
     elif not runner.supports_corpus():
-        why = "this mempalace lacks the corpus verbs (`sources`, `forget`, `mine --files-from`)"
+        why = f"this mempalace lacks corpus support ({', '.join(runner.corpus_gaps())})"
     else:
         sources = runner.sources(cfg.store.path)
         if sources is None:

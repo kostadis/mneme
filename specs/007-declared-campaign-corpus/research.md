@@ -43,6 +43,16 @@ is that kind's mined files from the TOC (R5).
   (`detect_room`, `miner.py:630-660`). Kind membership is a precision decision and cannot rest
   on a keyword score.
 
+**Skip detection (GM decision 2026-10-24)**: mneme does not infer skipped files from
+`mine`'s stdout or stderr. Several notices print only a basename truncated to 50 characters
+(chunk cap, purge, too large), which cannot name one of two same-named files. `mine
+--files-from` therefore also takes `--skips-json OUT`, which writes the exact list of listed
+files not (fully) mined, each as `{path, reason, detail}` (contract section 1). A target is
+skipped if and only if its mine-dir-relative path is in that list. A missing or unparseable
+`OUT` means unknown: none of that kind is recorded as mined, so its files show as UNMINED or
+STALE and never wrongly current. A binary without `--skips-json` does not support corpus
+mining.
+
 ---
 
 ## R2. A file can be mined under only one kind
@@ -86,6 +96,9 @@ stored. **There is no content hash for project drawers**; only `convo_miner.py:2
    - **unmined**: in the TOC, not in `sources`.
    - **stale**: TOC sha256 ≠ mined-record sha256.
    - **unknown**: `sources` failed or did not parse, or the record is unreadable.
+
+**Skips**: the "mined record" in step 2 omits any file in the `--skips-json` list of that
+kind's mine (R1); mneme never parses `mine` text for corpus mining.
 
 **Rationale**: mtime is not a content fact. A `git checkout` or a sparse-checkout widening
 rewrites mtimes without changing content, so mtime alone would report false staleness
@@ -267,8 +280,8 @@ select files and must not survive as second authorities:
 
 ## Dependencies
 
-1. **mempalace (`kostadis-dev`)**: three CLI additions: `mine --files-from`, `sources --json`
-   and `forget --sources-from`. The first is a thin exposure of an existing parameter; the
+1. **mempalace (`kostadis-dev`)**: CLI additions: `mine --files-from` (with `--skips-json`),
+   `sources --json` and `forget --sources-from`. The first is a thin exposure of an existing parameter; the
    other two wrap existing internals (R3, R4). They ship first, then a hypostasis pin bump,
    as with PR #58.
 2. **CampaignGenerator**: reading `canon_wings` (R8), and the TOC follow-ups (R9).

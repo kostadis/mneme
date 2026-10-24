@@ -28,9 +28,7 @@ from . import corpus_record as _crec
 from . import mine_record as _record
 from .mine_report import SkipNotice, WingSkips
 from .models import Recipe
-from .runner import MempalaceError, MempalaceRunner, SourceRecord
-
-TOO_OLD = "mempalace too old for corpus mining (needs `mine --files-from`, `sources`, `forget`)"
+from .runner import ListedSkip, MempalaceError, MempalaceRunner, SourceRecord
 
 
 @dataclass
@@ -74,36 +72,20 @@ def _real(root: Path, rel: str) -> str:
     return os.path.realpath(root / rel)
 
 
-# every notice `--files-from`'s filter (cmd_mine._prepare_files_from) prints carries the path as
-# listed; only chunk-cap / purge / too-large (the miner loop) print bare truncated basenames
-_LISTED_PATH_KINDS = (
-    "missing", "unsupported_ext", "outside_dir", "symlink", "not_regular", "stat_error",
-)
+def _skipped(root: Path, target: str, listed: dict[str, ListedSkip]) -> bool:
+    """Did mempalace report skipping ``target`` (relative to ``root``, the mine dir)? Exact:
+    its mined path is in the `--skips-json` list (matched after normalising, so `./a` == `a`)."""
+    return _norm(root, target) in listed
 
 
-def _skipped(
-    root: Path, target: str, notices: tuple[SkipNotice, ...], peers: list[str]
-) -> bool:
-    """Did mempalace report skipping ``target`` (relative to ``root``, the mine dir)? A name
-    with a '/' — or of a kind only the `--files-from` filter prints — is the path as listed
-    (mine-dir-relative or absolute), matched exactly after making it relative. Any other bare
-    name (chunk cap / purge / miner-loop skips, truncated to 50 chars) counts only when it is
-    unique among ``peers`` (the kind's targets) — even when it equals ``target`` — so an
-    ambiguous one is unknown, never a skip of every same-named file."""
-    base = os.path.basename(target)
-    for n in notices:
-        name = n.name.strip()
-        if not name:
-            continue
-        if "/" in name or n.kind in _LISTED_PATH_KINDS:
-            if os.path.normpath(os.path.join(root, name)) == os.path.normpath(
-                os.path.join(root, target)
-            ):
-                return True
-        elif name == base[:50]:
-            if sum(1 for p in peers if os.path.basename(p)[:50] == name) == 1:
-                return True
-    return False
+def _norm(root: Path, rel: str) -> str:
+    return os.path.normpath(os.path.join(root, rel))
+
+
+def _as_notice(s: ListedSkip) -> SkipNotice:
+    """A `--skips-json` entry in the shape the report/record code prints (path + reason)."""
+    detail = s.detail or s.reason
+    return SkipNotice(s.path, s.reason, detail, f"{s.path} ({s.reason}) {s.detail}".strip())
 
 
 def _holds_no_palace(store: Path) -> bool:
@@ -138,7 +120,7 @@ def mine_corpus(
     declaration (nothing is mined), or a failed kind (the run stops; no clean record)."""
     campaign_dir = Path(campaign_dir)
     if not runner.supports_corpus():
-        raise MempalaceError(TOO_OLD)
+        raise MempalaceError(runner.too_old_message())
     try:
         cfg = _cconfig.load(campaign_dir, recipe)
     except _cconfig.CorpusConfigError as e:
@@ -236,7 +218,7 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
                 runner.forget(sorted(set(paths)), palace=store, apply=True, wing=wing)
             if forget_all:
                 runner.forget(sorted(set(forget_all)), palace=store, apply=True)
-            res = runner.mine_files(campaign_dir, targets, wing=kind, palace=store)
+            listed = runner.mine_files(campaign_dir, targets, wing=kind, palace=store)
         except MempalaceError as e:
             e.skips = tuple(skips)
             if store is not None:  # earlier kinds' skips are real; no stale clean record
@@ -244,13 +226,21 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
                     store, campaign, mined_kinds, tuple(skips), status="failed", error=str(e)
                 )
             raise
-        notices = tuple(getattr(res, "skips", None) or ())
+        if listed is None:
+            # unknown, never "nothing skipped": record none of this kind, so it shows UNMINED
+            out.warnings.append(
+                f"WARN mempalace gave no usable --skips-json for {kind}: cannot tell which "
+                f"files it skipped, so none are recorded as mined"
+            )
+        notices = tuple(_as_notice(s) for s in listed or ())
         skips.extend((kind, n) for n in notices)
+        skipped = {_norm(campaign_dir, s.path): s for s in listed or ()}
         mined_kinds.append(kind)
         if store is not None:
             entries = {
                 f.path: {"kind": kind, "sha256": f.sha256, "target": f.mined_path}
-                for f in files if not _skipped(campaign_dir, f.mined_path, notices, targets)
+                for f in files
+                if listed is not None and not _skipped(campaign_dir, f.mined_path, skipped)
             }
             out.record_warning = _crec.try_merge_kind(
                 store, campaign, cfg.corpus_sha256, kind, entries

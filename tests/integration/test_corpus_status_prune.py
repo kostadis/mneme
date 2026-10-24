@@ -222,7 +222,7 @@ def test_regenerate_with_an_old_mempalace_deletes_nothing(w, monkeypatch):
 
     (w.store / "keep").write_text("precious")
     monkeypatch.setenv("MNEME_STUB_OLD", "1")
-    w.runner._corpus_ok = None  # the runner probes once; force a re-probe against the old CLI
+    w.runner._corpus_gaps = None  # the runner probes once; force a re-probe against the old CLI
     with pytest.raises(MempalaceError, match="nothing was deleted"):
         backup.regenerate(w.entity, "corp", runner=w.runner)
     assert (w.store / "keep").read_text() == "precious"

@@ -287,10 +287,7 @@ def regenerate(
             why = "; ".join(f.line() for f in resolved.findings)
             raise MempalaceError(f"invalid corpus ({why}) — nothing was deleted")
         if not runner.supports_corpus():
-            raise MempalaceError(
-                "mempalace too old for corpus mining (needs `mine --files-from`, `sources`, "
-                "`forget`) — nothing was deleted"
-            )
+            raise MempalaceError(f"{runner.too_old_message()} — nothing was deleted")
     # GH #26: verify the embedder answers BEFORE deleting — else a down endpoint leaves
     # the user with no store and a failed mine.
     _guard.require_embedder_answers(entity, prober)

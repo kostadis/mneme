@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from mneme.mempalace.runner import MempalaceError, MempalaceRunner, SourceRecord
+from mneme.mempalace.runner import ListedSkip, MempalaceError, MempalaceRunner, SourceRecord
 from tests.fixtures import STUB
 
 
@@ -35,9 +35,10 @@ def _log(tmp_path):
 def test_mine_files_then_sources(stub):
     runner, camp, tmp = stub
     res = runner.mine_files(camp, ["docs/a.md", camp / "docs" / "b.md"], "npcs", tmp / "p")
-    assert res.skips == ()
+    assert res == []
     line = _log(tmp)[0]
     assert "--palace" in line and "--files-from" in line and "--wing npcs" in line
+    assert "--skips-json" in line
     got = runner.sources(tmp / "p")
     assert got is not None
     assert {(r.wing, r.source_file.rsplit("/", 1)[1], r.drawers) for r in got} == {
@@ -57,7 +58,32 @@ def test_mine_files_dry_run_mines_nothing(stub):
 def test_mine_files_reports_skips(stub):
     runner, camp, tmp = stub
     res = runner.mine_files(camp, ["docs/nope.md"], "npcs")
-    assert [s.name for s in res.skips] == ["docs/nope.md"]
+    assert res == [ListedSkip("docs/nope.md", "not_regular", "not a regular file")]
+
+
+def test_mine_files_skips_come_from_the_json_not_the_text(stub, monkeypatch):
+    runner, camp, _ = stub
+    monkeypatch.setenv("MNEME_STUB_MINE_SKIPS", "  SKIP: docs/a.md (missing)")
+    monkeypatch.setenv(
+        "MNEME_STUB_MINE_SKIPS_JSON",
+        '[{"path": "docs/b.md", "reason": "too_large", "detail": "9 MB"}]',
+    )
+    assert runner.mine_files(camp, ["docs/a.md", "docs/b.md"], "npcs") == [
+        ListedSkip("docs/b.md", "too_large", "9 MB")
+    ]
+
+
+@pytest.mark.parametrize("mode", ["missing", "garbled"])
+def test_mine_files_unknown_when_skips_json_missing_or_garbled(stub, monkeypatch, mode):
+    runner, camp, _ = stub
+    monkeypatch.setenv("MNEME_STUB_SKIPS_OUT", mode)
+    assert runner.mine_files(camp, ["docs/a.md"], "npcs") is None
+
+
+def test_mine_files_unknown_when_skips_json_has_the_wrong_shape(stub, monkeypatch):
+    runner, camp, _ = stub
+    monkeypatch.setenv("MNEME_STUB_MINE_SKIPS_JSON", '[{"nope": 1}]')
+    assert runner.mine_files(camp, ["docs/a.md"], "npcs") is None
 
 
 def test_sources_unknown_on_rc1_and_garbage(stub, monkeypatch):
@@ -119,7 +145,24 @@ def test_supports_corpus(stub, monkeypatch):
     def run(cmd):
         return subprocess.run([sys.executable, str(STUB), *cmd[1:]], capture_output=True, text=True)
 
-    assert MempalaceRunner("mempalace", run).supports_corpus() is False
+    old = MempalaceRunner("mempalace", run)
+    assert old.supports_corpus() is False
+    assert "`mine --files-from`" in old.too_old_message()
+
+
+def test_supports_corpus_false_when_help_lacks_skips_json(stub, monkeypatch):
+    import subprocess
+
+    runner, _, _ = stub
+    monkeypatch.setenv("MNEME_STUB_OLD", "skips")
+
+    def run(cmd):
+        return subprocess.run([sys.executable, str(STUB), *cmd[1:]], capture_output=True, text=True)
+
+    r = MempalaceRunner("mempalace", run)
+    assert r.supports_corpus() is False
+    assert r.corpus_gaps() == ["`mine --skips-json`"]
+    assert "mine --skips-json" in r.too_old_message()
 
 
 def test_supports_corpus_false_when_binary_missing():
