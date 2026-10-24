@@ -190,9 +190,12 @@ def leftover_wing_renders(campaign_dir: Path) -> list[Path]:
     return sorted(found)
 
 
-def write_corpus(cfg: CampaignMempalaceConfig, recipe: Recipe, dest_root: Path) -> list[Path]:
+def write_corpus(
+    cfg: CampaignMempalaceConfig, recipe: Recipe, dest_root: Path, resolved=None,
+) -> list[Path]:
     """Corpus render: stamped root `mempalace.yaml`, the TOC snapshot (+ `.gitignore` line),
-    and removal of leftover stamped wing-model renders. Raises CorpusConfigError."""
+    and removal of leftover stamped wing-model renders. Raises CorpusConfigError. ``resolved``
+    is a ResolvedCorpus the caller already built for this recipe (else resolved here)."""
     ccfg = _load_corpus(recipe, dest_root)
     art = RenderedArtifact(
         target=Path(ROOT_YAML), source_sha256=_corpus_digest(cfg, recipe, ccfg),
@@ -204,7 +207,8 @@ def write_corpus(cfg: CampaignMempalaceConfig, recipe: Recipe, dest_root: Path) 
     written.append(root)
     for rel in leftover_wing_renders(dest_root):
         (dest_root / rel).unlink()
-    resolved = _cresolve.resolve(ccfg, dest_root, recipe)
+    if resolved is None:
+        resolved = _cresolve.resolve(ccfg, dest_root, recipe)
     written.append(_toc.write(dest_root, _toc.build(resolved, ccfg, recipe)))
     return written
 
@@ -223,11 +227,13 @@ def coherent_corpus(cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: 
     return drifted + leftover_wing_renders(campaign_dir)
 
 
-def write_all(cfg: CampaignMempalaceConfig, recipe: Recipe, dest_root: Path) -> list[Path]:
+def write_all(
+    cfg: CampaignMempalaceConfig, recipe: Recipe, dest_root: Path, resolved=None,
+) -> list[Path]:
     """Write every derived artifact under ``dest_root`` (a working copy, never the
     active checkout for an upgrade). Returns the written paths."""
     if _cconfig.has_corpus(dest_root):
-        return write_corpus(cfg, recipe, dest_root)
+        return write_corpus(cfg, recipe, dest_root, resolved)
     written: list[Path] = []
     for art in render(cfg, recipe):
         target = dest_root / art.target
@@ -360,11 +366,11 @@ def render_mcp(
 
 def render_faces(
     cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: Path, config_json: Path,
-    env: Mapping[str, str] | None = None,
+    env: Mapping[str, str] | None = None, resolved=None,
 ) -> list[Path]:
     """Render ALL faces from the one authority (FR-002a): the stamped wing yamls +
     .mempalaceignore (incl. the root `palace:` pointer), plus the three merge faces."""
-    written = write_all(cfg, recipe, campaign_dir)
+    written = write_all(cfg, recipe, campaign_dir, resolved)
     written.append(render_config_yaml(cfg, campaign_dir, recipe))
     if cfg.store is not None:
         written.append(render_global_alias(cfg, config_json))

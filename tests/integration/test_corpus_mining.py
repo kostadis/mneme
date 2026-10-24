@@ -179,6 +179,46 @@ def test_ambiguous_basename_only_notice_is_unknown_not_skip_all(tmp_path, monkey
     }
 
 
+def test_bare_chunk_cap_notice_equal_to_a_root_target_is_still_ambiguous(tmp_path, monkeypatch):
+    """`a.md` and `sub/a.md` in one kind: the bare notice `a.md` blames neither (C3a)."""
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "a.md", "one")  # at the root: its target is exactly the bare name `a.md`
+    write(w.camp, "sub/a.md", "two")
+    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    files: [a.md]\n    dirs: [sub]\n")
+    monkeypatch.setenv(
+        "MNEME_STUB_MINE_SKIPS",
+        "  ! [skip] a.md   produced 900 chunks (> 500); add to SKIP_FILENAMES",
+    )
+    _render_and_refresh(w)
+    assert set(corpus_record.read(w.store).files) == {"a.md", "sub/a.md"}
+
+
+def test_path_skip_notice_does_not_match_a_longer_path_suffix(tmp_path, monkeypatch):
+    """`SKIP: sub/a.md` must not also drop `x/sub/a.md` (C3b)."""
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "sub/a.md", "one")
+    write(w.camp, "x/sub/a.md", "two")
+    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [sub, x]\n")
+    monkeypatch.setenv("MNEME_STUB_MINE_SKIPS", "  SKIP: sub/a.md (not a regular file)")
+    _render_and_refresh(w)
+    assert set(corpus_record.read(w.store).files) == {"x/sub/a.md"}
+
+
+def test_missing_and_unsupported_files_are_gaps_and_not_recorded_as_mined(tmp_path, monkeypatch):
+    """C2 + C4: the filter's `missing` / `unsupported extension` skips are reported."""
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "cx/gone.md", "one")
+    write(w.camp, "cx/ok.md", "two")
+    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [cx]\n")
+    monkeypatch.setenv(
+        "MNEME_STUB_MINE_SKIPS",
+        "  SKIP: cx/gone.md (missing)\n  SKIP: cx/other.pdf (unsupported extension .pdf)",
+    )
+    (res,) = _render_and_refresh(w)
+    assert {n.kind for _, n in res.skips} == {"missing", "unsupported_ext"}
+    assert set(corpus_record.read(w.store).files) == {"cx/ok.md"}
+
+
 def test_repoint_does_not_delete_a_file_another_kind_still_mines(tmp_path, monkeypatch):
     """current.md -> chapters/ch9.md re-pointed to ch10: ch9 stays mined by `chapters` (A4)."""
     w = corpus_world(tmp_path, monkeypatch)
@@ -216,3 +256,35 @@ def test_bringup_with_an_unresolvable_declaration_writes_nothing(tmp_path, monke
     assert "empty-corpus" in report.steps[1].note
     assert tree_snapshot(w.camp) == before
     assert not (tmp_path / "config.json").exists()
+
+
+def test_bringup_validates_with_the_recipe_the_authority_carries(tmp_path, monkeypatch):
+    """r2 D2: an authority on a kinds-less recipe is refused BEFORE any write (first_mine would
+    load that recipe and fail recipe-no-kinds), not after files were rendered."""
+    w = corpus_world(tmp_path, monkeypatch)
+    (w.camp / ".mneme" / "mempalace.yaml").write_text(
+        'campaign: corp\nrecipe_version: "2.0.0"\nstore:\n  alias: corp\n'
+    )
+    before = tree_snapshot(w.camp)
+    report = bringup.bringup(
+        w.entity, "corp", runner=w.runner, config_json=tmp_path / "config.json", do_backup=False
+    )
+    assert not report.ready
+    assert [(s.name, s.state) for s in report.steps] == [
+        ("configure", "skipped"), ("first_mine", "failed")
+    ]
+    assert "recipe-no-kinds" in report.steps[1].note
+    assert tree_snapshot(w.camp) == before
+
+
+def test_dry_run_refuses_an_invalid_corpus_like_the_real_run(tmp_path, monkeypatch):
+    """r2 D3: --dry-run must not say 'would configure' for a declaration the real run refuses."""
+    w = corpus_world(tmp_path, monkeypatch, authority=False)
+    _declare(w, "campaign: corp\nkinds:\n  nonsense: {}\n")
+    kw = dict(runner=w.runner, config_json=tmp_path / "config.json", do_backup=False)
+    real = bringup.bringup(w.entity, "corp", **kw)
+    dry = bringup.bringup(w.entity, "corp", dry_run=True, **kw)
+    assert not real.ready and not dry.ready
+    assert [(s.name, s.state, s.note) for s in dry.steps] == [
+        (s.name, s.state, s.note) for s in real.steps
+    ]

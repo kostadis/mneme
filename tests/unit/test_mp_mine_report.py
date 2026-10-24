@@ -61,6 +61,27 @@ def test_parse_skip_variants():
     ]
 
 
+def test_parse_files_from_skips_are_never_silent():
+    """The `--files-from` filter's own reasons (cli/cmd_mine.py) are all named (C2)."""
+    text = "\n".join(
+        [
+            "  SKIP: docs/x.md (missing)",
+            "  SKIP: docs/x.pdf (unsupported extension .pdf)",
+            "  SKIP: docs/Makefile (unsupported extension (none))",
+            "  SKIP: /elsewhere/x.md (outside the mined directory)",
+        ]
+    )
+    got = [(n.name, n.kind) for n in parse_skips(text)]
+    assert got == [
+        ("docs/x.md", "missing"),
+        ("docs/x.pdf", "unsupported_ext"),
+        ("docs/Makefile", "unsupported_ext"),
+        ("/elsewhere/x.md", "outside_dir"),
+    ]
+    lines = warning_lines("c", tuple(("npcs", n) for n in parse_skips(text)))
+    assert sum(ln.startswith("WARN index gap") for ln in lines) == 4
+
+
 def test_parse_purge_failure_both_shapes():
     miner = (
         "  ! [skip] {n:50} stale-drawer purge failed (OSError('disk'));"

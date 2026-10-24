@@ -288,7 +288,7 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
         ccfg = _cconfig.load(ref.path, rec)
     except _cconfig.CorpusConfigError as e:
         if docs is not None:
-            docs[ref.name] = None
+            docs[ref.path] = None
         return _compare.CorpusFindings((_compare.CorpusFinding(
             _compare.INVALID, tuple(f.line() for f in e.findings),
             remedy="edit .mneme/corpus.yaml (`mneme corpus check`)",
@@ -296,7 +296,7 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
     resolved = _cresolve.resolve(ccfg, ref.path, rec)
     doc = _toc.build(resolved, ccfg, rec)
     if docs is not None:
-        docs[ref.name] = doc
+        docs[ref.path] = doc
     toc_check = _toc.verify(ref.path, doc)
     sources = None
     why = None
@@ -623,14 +623,14 @@ def report(
     else:
         refs = _discover.discover(entity)
     rows: list[ConformanceRow] = []
-    docs: dict = {}  # corpus campaign name -> its TOC document, resolved once in the status row
+    docs: dict = {}  # campaign path -> its TOC document (names repeat across roots), resolved once
     for ref in refs:
         rows.extend(_campaign_rows(ref, recipe, runner, entity, prober, docs=docs))
     fleet, consumers = _consumers_fleet_row()
     rows.append(fleet)
     for ref in refs:
         if consumers and has_corpus(ref.path):
-            diff = _consumers_campaign_row(ref, consumers, docs.get(ref.name))
+            diff = _consumers_campaign_row(ref, consumers, docs.get(ref.path))
             if diff is not None:
                 rows.append(diff)
     return ConformanceReport(rows=tuple(rows))

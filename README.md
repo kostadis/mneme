@@ -127,7 +127,9 @@ For a corpus campaign the `mp` commands behave differently:
   from that same comparison. A fleet-level `consumers` row counts non-compliant consumers; like
   an undeclared corpus it is owed work, exit 0, never a failure (an invalid `consumers.yaml` is).
 - `mp prune` deletes undeclared and missing drawers (preview, then `--confirm --expect N`, backed
-  up, re-verified). Drawers of a former authoritative wing need `--include-former-canon WING`.
+  up, re-verified). Drawers of a former authoritative wing need `--include-former-canon WING`. A store rebuilt or first built from the corpus records
+  no former wings, so it needs no flag; migrate a campaign with `mp regenerate --confirm` (a
+  fresh rebuild, never an in-place conversion).
 - `mp regenerate --confirm` rebuilds the palace from the declared corpus.
 
 Consumers must ask `mneme corpus toc` (or the `corpus_files` MCP tool), which resolve the

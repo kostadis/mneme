@@ -280,3 +280,42 @@ def test_dangling_link_in_a_declared_dir_to_a_sparse_target_is_not_materialized(
     assert res.valid, codes(res)
     assert res.kinds["npcs"].not_materialized == ("docs/keep/current.md",)
     assert [f.path for f in res.kinds["npcs"].files] == ["docs/keep/a.md"]
+
+
+def _sparse_shared_lore(camp):
+    write(camp, "shared/lore/a.md")
+    write(camp, "shared/lore/sub/b.md")
+    write(camp, "campaign/keep.md")
+    git(camp, "add", "-A")
+    git(camp, "commit", "-qm", "i")
+    git(camp, "update-index", "--skip-worktree", "shared/lore/a.md", "shared/lore/sub/b.md")
+    import shutil
+    shutil.rmtree(camp / "shared")
+    (camp / "campaign/lore").symlink_to("../shared/lore")
+
+
+def test_declared_dir_link_to_a_sparse_directory_is_not_materialized(camp):
+    """A dir link whose target dir is wholly outside the sparse cone is not a broken link (C1)."""
+    _sparse_shared_lore(camp)
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [campaign/lore]\n")
+    assert res.valid, codes(res)
+    assert res.kinds["npcs"].files == ()
+    assert set(res.kinds["npcs"].not_materialized) == {
+        "campaign/lore/a.md", "campaign/lore/sub/b.md"
+    }
+
+
+def test_dir_link_to_a_sparse_directory_inside_a_declared_dir_is_not_materialized(camp):
+    _sparse_shared_lore(camp)
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [campaign]\n")
+    assert res.valid, codes(res)
+    assert [f.path for f in res.kinds["npcs"].files] == ["campaign/keep.md"]
+    assert res.kinds["npcs"].not_materialized
+
+
+def test_declared_file_link_to_a_sparse_directory_file_is_not_materialized(camp):
+    _sparse_shared_lore(camp)
+    (camp / "campaign/a.md").symlink_to("../shared/lore/a.md")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    files: [campaign/a.md]\n")
+    assert res.valid, codes(res)
+    assert res.kinds["npcs"].not_materialized == ("campaign/a.md",)

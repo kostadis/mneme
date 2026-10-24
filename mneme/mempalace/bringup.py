@@ -21,6 +21,7 @@ from . import authority as _authority
 from . import bootstrap as _bootstrap
 from . import discover as _discover
 from . import embedder_guard as _guard
+from . import former_wings as _former
 from . import provision as _provision
 from . import recipe as _recipe
 from . import render as _render
@@ -91,18 +92,12 @@ def bringup(
     steps: list[BringUpStep] = []
     cfg = _plan_config(campaign, ref.path, rec, mp_root)  # in-memory; no write yet
 
-    if dry_run:
-        steps.append(
-            BringUpStep("configure", "skipped", note=f"would configure; store={cfg.store.alias}")
-        )
-        for name in ("render_faces", "provision", "first_mine", "backup"):
-            steps.append(BringUpStep(name, "skipped", note="dry-run"))
-        return BringUpReport(campaign, tuple(steps))
-
-    if _cconfig.has_corpus(ref.path):  # 007: an invalid declaration writes nothing either
+    resolved = None
+    if _cconfig.has_corpus(ref.path):  # 007: an invalid declaration writes nothing (dry run too)
+        vrec = _recipe.load(cfg.recipe_version)  # the recipe first_mine will mine with
         try:
-            ccfg = _cconfig.load(ref.path, rec)
-            resolved = _cresolve.resolve(ccfg, ref.path, rec)  # the disk too, like regenerate
+            ccfg = _cconfig.load(ref.path, vrec)
+            resolved = _cresolve.resolve(ccfg, ref.path, vrec)  # the disk too, like regenerate
             why = "; ".join(f.line() for f in resolved.findings) if not resolved.valid else ""
         except _cconfig.CorpusConfigError as e:
             why = str(e)
@@ -110,6 +105,16 @@ def bringup(
             steps.append(BringUpStep("configure", "skipped", note="nothing written: bad corpus"))
             steps.append(BringUpStep("first_mine", "failed", note=why))
             return BringUpReport(campaign, tuple(steps))
+        if vrec.version != rec.version:
+            resolved = None  # rendered with `rec`: let it resolve under its own recipe
+
+    if dry_run:
+        steps.append(
+            BringUpStep("configure", "skipped", note=f"would configure; store={cfg.store.alias}")
+        )
+        for name in ("render_faces", "provision", "first_mine", "backup"):
+            steps.append(BringUpStep(name, "skipped", note="dry-run"))
+        return BringUpReport(campaign, tuple(steps))
 
     try:  # GH #26: guard BEFORE any write, so a refused bring-up leaves no file changes
         _guard.require_writable(entity, cfg.store.path, prober)
@@ -122,9 +127,10 @@ def bringup(
     steps.append(
         BringUpStep("configure", "ok", observed=f".mneme/mempalace.yaml; store={cfg.store.alias}")
     )
-    _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
+    _render.render_faces(cfg, rec, ref.path, config_json, entity.env, resolved=resolved)
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 
+    store_existed = Path(cfg.store.path).is_dir()
     try:
         fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
         store_path, mined = fm
@@ -134,6 +140,12 @@ def bringup(
         return BringUpReport(  # not-ready (FR-008)
             campaign, tuple(steps), skips=tuple(getattr(e, "skips", ())), warnings=warns
         )
+    record_warning = fm.record_warning
+    if _cconfig.has_corpus(ref.path) and not store_existed:
+        # GM 2026-10-24: a store first built from the corpus holds no former wings. An
+        # EXISTING store (maybe with old wings) is left alone, so prune stays fail-closed.
+        w = _former.try_record_empty(store_path, cfg.campaign)
+        record_warning = "; ".join(x for x in (record_warning, w) if x) or None
     steps.append(BringUpStep("provision", "ok", observed=str(store_path)))
     steps.append(
         BringUpStep("first_mine", "ok", observed=f"mined: {', '.join(mined) or 'nothing yet'}")
@@ -146,7 +158,7 @@ def bringup(
         steps.append(BringUpStep("backup", "skipped", note="--no-backup"))
 
     return BringUpReport(campaign, tuple(steps), skips=tuple(fm.skips),
-        warnings=(fm.record_warning,) if fm.record_warning else (),
+        warnings=(record_warning,) if record_warning else (),
     )
 
 

@@ -148,3 +148,25 @@ def test_every_real_consumers_pattern_loads_and_matches_a_sample():
             sample = pat.replace("**", "x/y").replace("*", "a").replace("?", "a")
             sample = re.sub(r"\[([^\]!])[^\]]*\]", r"\1", sample)
             assert conform._glob_match(sample, pat), (c.name, pat, sample)
+
+
+def test_same_named_campaigns_in_two_roots_are_diffed_against_their_own_corpus(
+    tmp_path, monkeypatch
+):
+    # 005 discovery can return `corp` from two roots: the per-run TOC cache must not let the
+    # second overwrite the first (r2 finding D1).
+    import shutil
+
+    from tests.fixtures import entity_for_trees
+    from tests.fixtures.corpus_campaign import write
+
+    w = corpus_world(tmp_path, monkeypatch)
+    other = tmp_path / "other"
+    other.mkdir()
+    shutil.copytree(w.camp, other / "corp")
+    write(w.camp, "docs/npcs/b.md")  # in the corpus of the first checkout only (dirs: docs/npcs)
+    _write(tmp_path, monkeypatch, IND.format(reads="    reads: ['docs/npcs/**']\n"))
+    ent = entity_for_trees(w.root, other, mempalace=tmp_path / "mp")
+    rep = conform.report(ent, runner=w.runner)
+    notes = [r.note for r in rep.rows if r.dimension == "consumers" and r.campaign == "corp"]
+    assert notes and not any("docs/npcs/b.md" in n for n in notes)

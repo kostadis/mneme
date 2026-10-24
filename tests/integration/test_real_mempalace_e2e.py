@@ -266,11 +266,12 @@ def test_real_mempalace_declared_corpus(tmp_path, monkeypatch):
     pv = cli_runner.invoke(cli.app, ["prune", "stormhaven"])
     print(pv.output)
     assert pv.exit_code == 0 and "docs/npcs/mira.md" in pv.output
+    # a store first built from the corpus records no former wings: no guard flag needed
+    assert "NEEDS --include-former-canon" not in pv.output
     assert f"--confirm --expect {n}" in pv.output
     assert held() == before  # a preview deletes nothing
     pc = cli_runner.invoke(
-        cli.app, ["prune", "stormhaven", "--confirm", "--expect", str(n),
-                  "--include-former-canon", "npcs"],
+        cli.app, ["prune", "stormhaven", "--confirm", "--expect", str(n)],
     )
     print(pc.output)
     assert pc.exit_code == 0, pc.output

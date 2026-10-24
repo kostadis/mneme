@@ -74,9 +74,11 @@ Per campaign (obelisk, toee, out-of-the-abyss):
 2. `mneme corpus current <c>`. **Expect**: today's mined files, grouped by wing. For toee this
    includes `docs/campaign_state_draft.md` and `docs/party_draft.md` under the root wing.
 3. The GM writes `corpus.yaml` (`mneme corpus init` gives the skeleton). No file is moved.
-4. `mp render` then `mp status`. **Expect**: the old palace's extra drawers show as
-   `undeclared-drawers`, with a prune remedy. Nothing has been deleted.
-5. The GM previews and confirms `mp prune`, then runs `mp refresh`. **Expect**: `corpus: OK`.
+4. `mneme corpus check <c>`. **Expect**: valid.
+5. The GM runs `mp regenerate <c> --confirm` (a fresh rebuild from the corpus; GM decision
+   2026-10-24: no in-place conversion). **Expect**: `mp status` shows `corpus: OK`, `sources`
+   lists only declared files, and the store's former-wings record is empty, so a later
+   `mp prune` needs no `--include-former-canon`.
 
 ## Scenario 7: consumer compliance is visible (US5, SC-006)
 

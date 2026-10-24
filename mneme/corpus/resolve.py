@@ -213,13 +213,24 @@ class _Walker:
         target = self._rel_real(real) if is_link else None
         entries.append(_Entry(kind, rel, target, _sha256(Path(real)), _is_minable(target or rel)))
 
-    def _sparse_link(self, rel: str) -> bool:
-        """A dangling symlink whose target is skip-worktree (R7), not a broken link."""
+    def _sparse_link(self, rel: str) -> list[str]:
+        """The would-be corpus paths of a dangling symlink whose target is outside this host's
+        sparse cone (R7), not a broken link. The target is a skip-worktree file (-> ``[rel]``)
+        or a directory whose tracked entries are all skip-worktree (-> ``rel/<sub>`` each).
+        Empty when the link is not such a link."""
         full = self.root / rel
         if not (os.path.islink(full) and not os.path.exists(full)):
-            return False
+            return []
         real = os.path.realpath(full)
-        return self._inside(real) and self.git.skip_worktree(self._rel_real(real))
+        if not self._inside(real):
+            return []
+        target = self._rel_real(real)
+        tracked = self.git.tracked_under(target)
+        if not tracked or not all(self.git.skip_worktree(p) for p in tracked):
+            return []
+        if target in tracked:
+            return [rel]
+        return [rel + p[len(target):] for p in tracked]
 
     def declared_file(self, kind: str, rel: str, ents: list[_Entry], nm: set[str], miss: set[str]):
         full = self.root / rel
@@ -228,8 +239,8 @@ class _Walker:
                 self.findings.append(Finding("not-a-file", "declared under `files` but is a "
                                              "directory (use `dirs`)", path=rel))
                 return
-            if self._sparse_link(rel):
-                nm.add(rel)  # target is outside this host's sparse cone
+            if sparse := self._sparse_link(rel):
+                nm.update(sparse)  # target is outside this host's sparse cone
                 return
             self.file_entry(kind, rel, ents)
             return
@@ -248,6 +259,9 @@ class _Walker:
         full = self.root / rel
         if not os.path.lexists(full):
             self._absent(rel, nm, miss)
+            return
+        if sparse := self._sparse_link(rel):  # a link to a directory outside the sparse cone
+            nm.update(sparse)
             return
         real = os.path.realpath(full)
         if not self._inside(real):
@@ -285,8 +299,8 @@ class _Walker:
                                                  path=child))
                 elif real not in ancestors:  # a link back to a parent would never end
                     self._walk(kind, child, ancestors | {real}, ents, nm)
-            elif self._sparse_link(child):
-                nm.add(child)
+            elif sparse := self._sparse_link(child):
+                nm.update(sparse)
             else:
                 self.file_entry(kind, child, ents)
 

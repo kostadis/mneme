@@ -237,8 +237,8 @@ Every user story needs these.
 - [ ] T046 (GM) Live migration, one campaign at a time (obelisk, toee, out-of-the-abyss):
   - The GM writes each `corpus.yaml` from its worksheet (T044), at their own pace and in any order. `mneme corpus init` is optional; the worksheet's skeleton is enough. No agent writes or converts a campaign on the GM's behalf.
   - **Prerequisite (plan Dependency 6):** the CampaignGenerator change (reads `canon_wings`; no query names a pre-corpus wing) has shipped. No campaign gets a `corpus.yaml` before then.
-  - Opus runs `mp render` and `mp status` and shows the prune preview.
-  - The GM alone runs `mp prune --confirm --expect N`, then `mp refresh`, until `corpus: OK` (SC-003, SC-007).
+  - **Fresh rebuild, not in-place conversion (GM decision 2026-10-24).** Opus runs `mneme corpus check` and shows `mp regenerate <c>` (the preview). The GM alone runs `mp regenerate <c> --confirm`, which rebuilds the palace from the corpus only; no old wing is carried over. Then `mp status` until `corpus: OK` (SC-003, SC-007).
+  - A rebuilt store records that it has no former wings, so later prunes need no `--include-former-canon` (GM decision 2026-10-24).
 
 ---
 

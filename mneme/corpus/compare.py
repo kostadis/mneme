@@ -106,13 +106,15 @@ def classify(
         if not _under(real, real_root):
             out.out_of_scope.extend(group)
         elif real in declared:
-            for i, (path, mined_as, minable) in enumerate(declared[real]):
-                if mined_as is None or not minable:
-                    continue  # a declared file mempalace cannot mine: not ours to judge
+            group_decl = declared[real]
+            _, mined_as, minable = group_decl[0]  # resolve assigns both per real path
+            if mined_as is None or not minable:
+                continue  # a declared file mempalace cannot mine: not ours to judge
+            for path, _, _ in group_decl:
                 out.held.setdefault(path, []).extend(group)
-                bad = [s for s in group if s.wing != mined_as]
-                if bad and i == 0:  # one real file, one wing finding
-                    out.wrong.setdefault(path, []).extend(bad)
+            bad = [s for s in group if s.wing != mined_as]
+            if bad:  # one real file, one wing finding
+                out.wrong.setdefault(group_decl[0][0], []).extend(bad)
         elif any(_under(real, n) for n in nm):
             out.spared.extend(group)
         elif any(_under(real, m) for m in miss):

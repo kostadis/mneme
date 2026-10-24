@@ -74,19 +74,29 @@ def _real(root: Path, rel: str) -> str:
     return os.path.realpath(root / rel)
 
 
-def _skipped(target: str, notices: tuple[SkipNotice, ...], peers: list[str]) -> bool:
-    """Did mempalace report skipping ``target``? `--files-from` skips name the path relative
-    to the mine dir (or an absolute one); only the chunk-cap notice carries a bare basename,
-    truncated to 50 chars. A bare name counts only when it is unique among ``peers`` (the
-    kind's targets): an ambiguous one is unknown, never a skip of every same-named file."""
+_LISTED_PATH_KINDS = ("missing", "unsupported_ext", "outside_dir")
+
+
+def _skipped(
+    root: Path, target: str, notices: tuple[SkipNotice, ...], peers: list[str]
+) -> bool:
+    """Did mempalace report skipping ``target`` (relative to ``root``, the mine dir)? A name
+    with a '/' — or of a kind only the `--files-from` filter prints — is the path as listed
+    (mine-dir-relative or absolute), matched exactly after making it relative. Any other bare
+    name (chunk cap / purge / miner-loop skips, truncated to 50 chars) counts only when it is
+    unique among ``peers`` (the kind's targets) — even when it equals ``target`` — so an
+    ambiguous one is unknown, never a skip of every same-named file."""
     base = os.path.basename(target)
     for n in notices:
         name = n.name.strip()
         if not name:
             continue
-        if name == target or ("/" in name and target.endswith("/" + name)):
-            return True
-        if "/" not in name and name == base[:50]:
+        if "/" in name or n.kind in _LISTED_PATH_KINDS:
+            if os.path.normpath(os.path.join(root, name)) == os.path.normpath(
+                os.path.join(root, target)
+            ):
+                return True
+        elif name == base[:50]:
             if sum(1 for p in peers if os.path.basename(p)[:50] == name) == 1:
                 return True
     return False
@@ -225,7 +235,7 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
         if store is not None:
             entries = {
                 f.path: {"kind": kind, "sha256": f.sha256, "target": f.mined_path}
-                for f in files if not _skipped(f.mined_path, notices, targets)
+                for f in files if not _skipped(campaign_dir, f.mined_path, notices, targets)
             }
             out.record_warning = _crec.try_merge_kind(
                 store, campaign, cfg.corpus_sha256, kind, entries

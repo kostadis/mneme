@@ -2,7 +2,11 @@
 
 `<store>/mneme-former-wings.json` is `{schema, campaign, recorded_at, wings: {name: trust}}`,
 rewritten whenever `mp refresh` loads a wing-model authority that has a store (never by the
-read-only `mp status`), so it holds the LAST pre-corpus wings. It is a derived cache with
+read-only `mp status`), so it holds the LAST pre-corpus wings. A store rebuilt (`mp regenerate`)
+or first built (bring-up into a store that did not exist) from a corpus provably holds no
+former wings, so those write it EMPTY (`wings: {}`, `try_record_empty`): `read` then returns a
+FormerWings with no wings (distinct from None, "no record", which prune treats as fail-closed).
+A corpus refresh/bring-up into an EXISTING store never writes it. It is a derived cache with
 the store's lifecycle (a sibling of `mine_record.py`'s record) and feeds `mp prune`'s
 former-canon guard. Writing is best effort (`try_record`): a failure is a warning string,
 never a status or refresh failure.
@@ -80,4 +84,14 @@ def try_record(cfg) -> str | None:
         write(cfg.store.path, cfg.campaign, {w.name: w.trust for w in cfg.wings})
     except OSError as e:
         return f"WARN could not record the campaign's wings for the prune guard: {e}"
+    return None
+
+
+def try_record_empty(store: Path, campaign: str) -> str | None:
+    """Record that a store built from a corpus holds NO former wings (an empty record).
+    None on success, else a warning string; never raises."""
+    try:
+        write(store, campaign, {})
+    except OSError as e:
+        return f"WARN could not record the (empty) former-wings record for the prune guard: {e}"
     return None

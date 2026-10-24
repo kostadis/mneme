@@ -64,7 +64,10 @@ when they differ.
 `{schema, campaign, recorded_at, wings: {name: trust}}`. Rewritten whenever mneme loads a
 wing-model authority that has a store, so it holds the last pre-corpus wings. It feeds
 prune's former-canon guard (FR-018a). It has the store's lifecycle. When absent, every
-wing holding undeclared drawers is treated as former canon (fail closed).
+wing holding undeclared drawers is treated as former canon (fail closed). A store rebuilt
+or first built from the corpus records no former wings: `mp regenerate --confirm` and a
+bring-up into a new store write it empty (`wings: {}`); migration is a fresh rebuild. A
+corpus refresh/bring-up into an existing store never writes it.
 
 ### CorpusMinedRecord (derived, `<store>/mneme-corpus-mined.json`)
 

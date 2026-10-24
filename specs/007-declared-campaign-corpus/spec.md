@@ -424,7 +424,9 @@ one appears in status as owed work with the files it reads outside the TOC.
   a wing that was `authoritative` before the corpus, naming each such wing with its file
   and drawer counts, and proceed only when the GM names every one with
   `--include-former-canon <wing>`. When mneme cannot tell which wings were authoritative,
-  it MUST treat every wing holding undeclared drawers as former canon.
+  it MUST treat every wing holding undeclared drawers as former canon. A store rebuilt or
+  first built from the corpus records no former wings (an empty record); migration is
+  `mp regenerate --confirm` (a fresh rebuild), never an in-place conversion.
 
 **Migration**
 
