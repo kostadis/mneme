@@ -9,6 +9,7 @@ finding or is reported in ``git`` rather than silently passed.
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import os
 import subprocess
@@ -94,13 +95,23 @@ class _Git:
     state: str = GIT_UNAVAILABLE
     status: dict[str, str] = field(default_factory=dict)  # tracked relpath -> ls-files tag
     cwd: Path | None = None
+    _keys: list[str] = field(default_factory=list, repr=False)
+    _keys_n: int = field(default=-1, repr=False)
 
     def skip_worktree(self, rel: str) -> bool:
         return self.status.get(rel, "")[:1].upper() == "S"
 
     def tracked_under(self, rel: str) -> list[str]:
+        if self._keys_n != len(self.status):  # sorted once; bisect per call
+            self._keys = sorted(self.status)
+            self._keys_n = len(self.status)
         pre = rel + "/"
-        return sorted(p for p in self.status if p == rel or p.startswith(pre))
+        out = [rel] if rel in self.status else []
+        i = bisect.bisect_left(self._keys, pre)
+        while i < len(self._keys) and self._keys[i].startswith(pre):
+            out.append(self._keys[i])
+            i += 1
+        return out
 
     def ignored(self, rels: list[str]) -> set[str]:
         """Paths git ignores. ``--no-index``: a TRACKED file that matches an ignore rule
@@ -213,11 +224,13 @@ class _Walker:
         target = self._rel_real(real) if is_link else None
         entries.append(_Entry(kind, rel, target, _sha256(Path(real)), _is_minable(target or rel)))
 
-    def _sparse_link(self, rel: str) -> list[str]:
+    def _sparse_link(self, rel: str, want: str) -> list[str]:
         """The would-be corpus paths of a dangling symlink whose target is outside this host's
-        sparse cone (R7), not a broken link. The target is a skip-worktree file (-> ``[rel]``)
-        or a directory whose tracked entries are all skip-worktree (-> ``rel/<sub>`` each).
-        Empty when the link is not such a link."""
+        sparse cone (R7), not a broken link. ``want`` is the declared kind: ``"file"`` (target
+        is a skip-worktree file -> ``[rel]``), ``"dir"`` (target is a directory whose tracked
+        entries are all skip-worktree -> ``rel/<sub>`` each) or ``"any"`` (inside a dir walk,
+        where a link may be either). A kind mismatch is not sparse: validity must not depend
+        on the host. Empty when the link is not such a link."""
         full = self.root / rel
         if not (os.path.islink(full) and not os.path.exists(full)):
             return []
@@ -229,8 +242,17 @@ class _Walker:
         if not tracked or not all(self.git.skip_worktree(p) for p in tracked):
             return []
         if target in tracked:
-            return [rel]
-        return [rel + p[len(target):] for p in tracked]
+            return [rel] if want != "dir" else []
+        return [rel + p[len(target):] for p in tracked] if want != "file" else []
+
+    def _sparse_under(self, rel: str, real: str, nm: set[str]) -> None:
+        """A LIVE directory link: skip-worktree entries under its real target are not
+        materialized (R7), recorded link-relative like a dangling link's."""
+        target = self._rel_real(real)
+        for p in self.git.tracked_under(target):
+            sub = rel + p[len(target):]
+            if self.git.skip_worktree(p) and not os.path.lexists(self.root / sub):
+                nm.add(sub)
 
     def declared_file(self, kind: str, rel: str, ents: list[_Entry], nm: set[str], miss: set[str]):
         full = self.root / rel
@@ -239,7 +261,7 @@ class _Walker:
                 self.findings.append(Finding("not-a-file", "declared under `files` but is a "
                                              "directory (use `dirs`)", path=rel))
                 return
-            if sparse := self._sparse_link(rel):
+            if sparse := self._sparse_link(rel, "file"):
                 nm.update(sparse)  # target is outside this host's sparse cone
                 return
             self.file_entry(kind, rel, ents)
@@ -260,7 +282,7 @@ class _Walker:
         if not os.path.lexists(full):
             self._absent(rel, nm, miss)
             return
-        if sparse := self._sparse_link(rel):  # a link to a directory outside the sparse cone
+        if sparse := self._sparse_link(rel, "dir"):  # link to a dir outside the sparse cone
             nm.update(sparse)
             return
         real = os.path.realpath(full)
@@ -273,6 +295,8 @@ class _Walker:
             self.findings.append(Finding("not-a-directory", "declared under `dirs` but "
                                          "is not a directory", path=rel))
             return
+        if real != os.path.join(self.real_root, rel):  # declared dir is (under) a live link
+            self._sparse_under(rel, real, nm)
         self._walk(kind, rel, {real}, ents, nm)
         for p in self.git.tracked_under(rel):  # partially sparse folder
             if self.git.skip_worktree(p) and not os.path.lexists(self.root / p):
@@ -298,8 +322,10 @@ class _Walker:
                                                  f"resolves outside the campaign: {real}",
                                                  path=child))
                 elif real not in ancestors:  # a link back to a parent would never end
+                    if os.path.islink(full):
+                        self._sparse_under(child, real, nm)
                     self._walk(kind, child, ancestors | {real}, ents, nm)
-            elif sparse := self._sparse_link(child):
+            elif sparse := self._sparse_link(child, "any"):
                 nm.update(sparse)
             else:
                 self.file_entry(kind, child, ents)

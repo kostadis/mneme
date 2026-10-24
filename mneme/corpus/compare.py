@@ -83,6 +83,19 @@ def _under(real: str, prefix: str) -> bool:
     return real == prefix or real.startswith(prefix + os.sep)
 
 
+def _under_any(real: str, prefixes: set[str]) -> bool:
+    """``real`` is, or is under, one of ``prefixes``: a set lookup per ancestor, so the cost
+    is the path depth, not the number of prefixes."""
+    p = real
+    while True:
+        if p in prefixes:
+            return True
+        parent = os.path.dirname(p)
+        if parent == p:
+            return False
+        p = parent
+
+
 def classify(
     resolved: ResolvedCorpus, sources: list[SourceRecord], campaign_dir: Path
 ) -> _Sets:
@@ -99,8 +112,8 @@ def classify(
             lst = declared.setdefault(_real(root, f.mined_path), [])
             if ent not in lst:
                 lst.append(ent)
-    nm = [_real(root, p) for rk in resolved.kinds.values() for p in rk.not_materialized]
-    miss = [_real(root, p) for rk in resolved.kinds.values() for p in rk.missing]
+    nm = {_real(root, p) for rk in resolved.kinds.values() for p in rk.not_materialized}
+    miss = {_real(root, p) for rk in resolved.kinds.values() for p in rk.missing}
     out = _Sets()
     for real, group in sorted(_by_real_path(sources).items()):
         if not _under(real, real_root):
@@ -115,9 +128,9 @@ def classify(
             bad = [s for s in group if s.wing != mined_as]
             if bad:  # one real file, one wing finding
                 out.wrong.setdefault(group_decl[0][0], []).extend(bad)
-        elif any(_under(real, n) for n in nm):
+        elif _under_any(real, nm):
             out.spared.extend(group)
-        elif any(_under(real, m) for m in miss):
+        elif _under_any(real, miss):
             out.missing.extend(group)
         else:
             out.undeclared.extend(group)

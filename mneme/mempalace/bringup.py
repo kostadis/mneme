@@ -94,19 +94,18 @@ def bringup(
 
     resolved = None
     if _cconfig.has_corpus(ref.path):  # 007: an invalid declaration writes nothing (dry run too)
-        vrec = _recipe.load(cfg.recipe_version)  # the recipe first_mine will mine with
         try:
+            vrec = _recipe.load(cfg.recipe_version)  # the recipe the authority carries
             ccfg = _cconfig.load(ref.path, vrec)
             resolved = _cresolve.resolve(ccfg, ref.path, vrec)  # the disk too, like regenerate
             why = "; ".join(f.line() for f in resolved.findings) if not resolved.valid else ""
-        except _cconfig.CorpusConfigError as e:
+        except (_recipe.RecipeError, _cconfig.CorpusConfigError) as e:
             why = str(e)
         if why:
             steps.append(BringUpStep("configure", "skipped", note="nothing written: bad corpus"))
             steps.append(BringUpStep("first_mine", "failed", note=why))
             return BringUpReport(campaign, tuple(steps))
-        if vrec.version != rec.version:
-            resolved = None  # rendered with `rec`: let it resolve under its own recipe
+        rec = vrec  # one recipe serves validation, render and first_mine
 
     if dry_run:
         steps.append(
@@ -127,25 +126,29 @@ def bringup(
     steps.append(
         BringUpStep("configure", "ok", observed=f".mneme/mempalace.yaml; store={cfg.store.alias}")
     )
-    _render.render_faces(cfg, rec, ref.path, config_json, entity.env, resolved=resolved)
+    store_existed = Path(cfg.store.path).is_dir()
+    record_warning = None
+    if _cconfig.has_corpus(ref.path) and not store_existed:
+        # GM 2026-10-24: a store first built from the corpus holds no former wings — recorded
+        # now, so a failed first mine (or a re-run) still leaves it. An EXISTING store (maybe
+        # with old wings) is left alone, so prune stays fail-closed.
+        record_warning = _former.try_record_empty(cfg.store.path, cfg.campaign)
+    # the render re-resolves AFTER its own deletes/rewrites, so the TOC snapshot is current
+    _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 
-    store_existed = Path(cfg.store.path).is_dir()
     try:
         fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
         store_path, mined = fm
     except MempalaceError as e:
         steps.append(BringUpStep("first_mine", "failed", note=str(e)))
-        warns = (e.record_warning,) if getattr(e, "record_warning", None) else ()
+        warns = tuple(
+            w for w in (record_warning, getattr(e, "record_warning", None)) if w
+        )
         return BringUpReport(  # not-ready (FR-008)
             campaign, tuple(steps), skips=tuple(getattr(e, "skips", ())), warnings=warns
         )
-    record_warning = fm.record_warning
-    if _cconfig.has_corpus(ref.path) and not store_existed:
-        # GM 2026-10-24: a store first built from the corpus holds no former wings. An
-        # EXISTING store (maybe with old wings) is left alone, so prune stays fail-closed.
-        w = _former.try_record_empty(store_path, cfg.campaign)
-        record_warning = "; ".join(x for x in (record_warning, w) if x) or None
+    record_warning = "; ".join(x for x in (record_warning, fm.record_warning) if x) or None
     steps.append(BringUpStep("provision", "ok", observed=str(store_path)))
     steps.append(
         BringUpStep("first_mine", "ok", observed=f"mined: {', '.join(mined) or 'nothing yet'}")

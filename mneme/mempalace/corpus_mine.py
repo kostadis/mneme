@@ -74,7 +74,11 @@ def _real(root: Path, rel: str) -> str:
     return os.path.realpath(root / rel)
 
 
-_LISTED_PATH_KINDS = ("missing", "unsupported_ext", "outside_dir")
+# every notice `--files-from`'s filter (cmd_mine._prepare_files_from) prints carries the path as
+# listed; only chunk-cap / purge / too-large (the miner loop) print bare truncated basenames
+_LISTED_PATH_KINDS = (
+    "missing", "unsupported_ext", "outside_dir", "symlink", "not_regular", "stat_error",
+)
 
 
 def _skipped(
@@ -100,6 +104,17 @@ def _skipped(
             if sum(1 for p in peers if os.path.basename(p)[:50] == name) == 1:
                 return True
     return False
+
+
+def _holds_no_palace(store: Path) -> bool:
+    """No palace there yet: the directory is missing, or holds only mneme's own sidecar
+    records (e.g. the former-wings record written the moment the store is known empty)."""
+    if not store.exists():
+        return True
+    try:
+        return all(p.name.startswith("mneme-") and p.suffix == ".json" for p in store.iterdir())
+    except OSError:
+        return False
 
 
 def _by_real_path(sources: list[SourceRecord]) -> dict[str, list[SourceRecord]]:
@@ -162,7 +177,7 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
     # None = unknown: forget candidates are not narrowed. A store that does not exist yet (first
     # mine) holds nothing, and the real `sources`/`forget` refuse a missing palace.
     sources = runner.sources(store)
-    if sources is None and store is not None and not Path(store).exists():
+    if sources is None and store is not None and _holds_no_palace(Path(store)):
         sources = []
     by_real = _by_real_path(sources) if sources is not None else {}
     # a re-pointed link's old target may still be a corpus file (another kind mines it): its

@@ -297,11 +297,13 @@ def regenerate(
     if store.is_dir():
         shutil.rmtree(store)
     # store was just cleared ⇒ the GH #26 guard sees EMPTY and allows (this IS the remedy).
-    fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
+    warn = None
     if has_corpus(ref.path):
-        # GM 2026-10-24: a store rebuilt from the corpus provably holds no former wings.
+        # GM 2026-10-24: a store rebuilt from the corpus provably holds no former wings —
+        # recorded now it is empty, so a failed rebuild still leaves it.
         warn = _former.try_record_empty(store, cfg.campaign)
-        if warn:
-            fm.record_warning = "; ".join(w for w in (fm.record_warning, warn) if w)
+    fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
+    if warn:
+        fm.record_warning = "; ".join(w for w in (fm.record_warning, warn) if w)
     return fm
 

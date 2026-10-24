@@ -193,3 +193,18 @@ def test_symlink_and_its_target_both_declared_are_both_held(tmp_path):
     })
     res = run(tmp_path, r, [real], rec)
     assert res.ok, [(f.code, f.files) for f in res.findings]
+
+
+def test_classify_scales_with_thousands_of_not_materialized_entries(tmp_path):
+    """Matching stays near-linear for a sparse directory link expanded per file (F3)."""
+    import time
+    n = 3000
+    nm = [f"lore/d{i % 30}/f{i}.md" for i in range(n)]
+    r = _resolved(tmp_path, [_f("a.md")], nm=nm)
+    sources = [SourceRecord("npcs", str(tmp_path / nm[i]), 1.0, 1) for i in range(n)]
+    sources += [_src(tmp_path, "a.md"), SourceRecord("npcs", str(tmp_path / "zz/u.md"), 1.0, 1)]
+    t = time.perf_counter()
+    c = C.classify(r, sources, tmp_path)
+    assert time.perf_counter() - t < 1.0
+    assert len(c.spared) == n
+    assert [s.source_file for s in c.undeclared] == [str(tmp_path / "zz/u.md")]

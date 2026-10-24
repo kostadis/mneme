@@ -319,3 +319,62 @@ def test_declared_file_link_to_a_sparse_directory_file_is_not_materialized(camp)
     res = run(camp, "campaign: c\nkinds:\n  npcs:\n    files: [campaign/a.md]\n")
     assert res.valid, codes(res)
     assert res.kinds["npcs"].not_materialized == ("campaign/a.md",)
+
+
+def _live_lore_with_sparse_old(camp):
+    write(camp, "shared/lore/cur.md")
+    write(camp, "shared/lore/old/x.md")
+    write(camp, "canon/keep.md")
+    git(camp, "add", "-A")
+    git(camp, "commit", "-qm", "i")
+    git(camp, "update-index", "--skip-worktree", "shared/lore/old/x.md")
+    import shutil
+    shutil.rmtree(camp / "shared/lore/old")
+    (camp / "canon/lore").symlink_to("../shared/lore")
+
+
+def test_live_dir_link_collects_sparse_entries_under_its_real_target(camp):
+    """R7: skip-worktree files under a LIVE linked directory are not-materialized, so their
+    drawers are never pruned as undeclared (review round 3, F1)."""
+    _live_lore_with_sparse_old(camp)
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [canon]\n")
+    assert res.valid, codes(res)
+    assert "canon/lore/cur.md" in [f.path for f in res.kinds["npcs"].files]
+    assert res.kinds["npcs"].not_materialized == ("canon/lore/old/x.md",)
+
+
+def test_declared_dir_that_is_a_live_link_collects_sparse_entries(camp):
+    _live_lore_with_sparse_old(camp)
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [canon/lore]\n")
+    assert res.valid, codes(res)
+    assert res.kinds["npcs"].not_materialized == ("canon/lore/old/x.md",)
+
+
+def test_files_entry_linking_to_a_sparse_directory_is_a_finding_on_every_host(camp):
+    """Validity must not depend on the host (F2): `files:` -> directory is symlink-not-file."""
+    _sparse_shared_lore(camp)
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    files: [campaign/lore]\n")
+    assert "symlink-not-file" in codes(res)
+    assert res.kinds["npcs"].not_materialized == ()
+
+
+def test_dirs_entry_linking_to_a_sparse_file_is_a_finding_on_every_host(camp):
+    _sparse_shared_lore(camp)
+    (camp / "campaign/a.md").symlink_to("../shared/lore/a.md")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [campaign/a.md]\n")
+    assert "not-a-directory" in codes(res)
+    assert res.kinds["npcs"].not_materialized == ()
+
+
+def test_tracked_under_and_many_entries_are_fast(camp):
+    import time
+    g = resolve._Git(state=resolve.GIT_WORK_TREE)
+    for i in range(5000):
+        g.status[f"d{i % 50}/f{i}.md"] = "S"
+    g.status["d1"] = "H"
+    t = time.perf_counter()
+    for i in range(2000):
+        g.tracked_under(f"d{i % 50}")
+    assert time.perf_counter() - t < 1.0
+    assert g.tracked_under("d1")[0] == "d1"
+    assert g.tracked_under("d") == []

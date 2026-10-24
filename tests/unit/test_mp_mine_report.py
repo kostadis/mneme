@@ -489,3 +489,17 @@ def test_cli_regenerate_failure_still_prints_earlier_gaps(world, monkeypatch):
     assert "WARN index gap: stormhaven/" in out.output and "bible.md" in out.output
     assert "WARN could not record mine skips" in out.output
     assert "FAIL regenerate:" in out.output
+
+
+def test_files_from_skip_of_a_top_level_target_is_not_mistaken_for_a_basename():
+    # G4: every filter-printed kind carries the exact listed path, so `README.md` skipped as a
+    # symlink must not read as "mined" because `npcs/README.md` shares its basename
+    from pathlib import Path
+
+    from mneme.mempalace.corpus_mine import _skipped
+
+    peers = ["README.md", "npcs/README.md"]
+    for why in ("symlink", "not a regular file", "stat error: Permission denied"):
+        notices = tuple(parse_skips(f"  SKIP: README.md ({why})"))
+        assert _skipped(Path("/c"), "README.md", notices, peers), why
+        assert not _skipped(Path("/c"), "npcs/README.md", notices, peers), why
