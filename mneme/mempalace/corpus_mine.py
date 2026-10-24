@@ -147,13 +147,19 @@ def mine_corpus(
     if not resolved.valid:
         snapshot()
         why = "; ".join(f.line() for f in resolved.findings)
-        raise MempalaceError(f"invalid corpus, nothing mined: {why}")
+        err = MempalaceError(f"invalid corpus, nothing mined: {why}")
+        err.warnings = tuple(out.warnings)  # e.g. the TOC snapshot could not be written
+        raise err
 
     try:
         _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out, dry_run)
     except MempalaceError as e:
         snapshot()  # its warning (if any) belongs on the error too
         e.warnings = tuple(out.warnings)
+        # an earlier kind's record-write failure must survive the last-mine write's result
+        e.record_warning = "; ".join(
+            w for w in (out.record_warning, getattr(e, "record_warning", None)) if w
+        ) or None
         raise
     except BaseException:
         snapshot()

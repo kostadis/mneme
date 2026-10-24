@@ -78,7 +78,7 @@ def prune(
         raise _authority.AuthorityError(
             ["no store pointer — cannot prune an unknown palace (run `mneme mp bringup`)"]
         )
-    if not Path(cfg.store.path).is_dir() or holds_no_palace(Path(cfg.store.path)):
+    if holds_no_palace(Path(cfg.store.path)):
         raise _authority.AuthorityError(
             [f"store missing at {cfg.store.path} — nothing to prune (run `mneme mp bringup`)"]
         )

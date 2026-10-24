@@ -62,8 +62,8 @@ class CorpusFinding:
     drawers: int = 0
     remedy: str = ""
     detail: str = ""
-    # UNMINED only: (file, mempalace skip reason) for the files the last mine skipped and whose
-    # content has not changed since. `mp refresh` cannot fix those (see ``skip_remedy``).
+    # UNMINED / STALE: (file, remedy) for the files the last mine skipped and whose content has
+    # not changed since. `mp refresh` cannot fix those (see ``skip_remedy``).
     skipped: tuple[tuple[str, str], ...] = ()
 
     @property
@@ -245,8 +245,8 @@ def compare(
                 if r.get("sha256") != by_path[p].sha256:
                     changed.append(f"{p} changed since it was skipped as {reason}; "
                                    "refresh to retry")
-                elif skip_remedy(reason):
-                    fixed.append((p, reason))
+                elif remedy := skip_remedy(reason):
+                    fixed.append((p, remedy))
             found.append(CorpusFinding(
                 UNMINED, tuple(unmined), remedy="mneme mp refresh",
                 detail="; ".join(changed), skipped=tuple(fixed),
@@ -256,16 +256,25 @@ def compare(
                            "staleness cannot be verified")
         else:
             known = record.files if record else {}
-            stale = sorted(
-                f.path for f in mine if f.path in c.held and not (
-                    (r := known.get(f.path)) and r.get("sha256") == f.sha256
-                    and r.get("target") in (None, f.mined_path)
-                )
-            )
+            stale: list[str] = []
+            stuck: list[tuple[str, str]] = []  # stale, and a refresh alone will not fix it
+            for f in mine:
+                if f.path not in c.held:
+                    continue
+                r = known.get(f.path) or {}
+                same = r.get("sha256") == f.sha256 and r.get("target") in (None, f.mined_path)
+                # an entry with `skipped` never vouches for held content: the drawers are
+                # whatever an earlier mine left (e.g. purge_skipped), not this content
+                if r and same and not r.get("skipped"):
+                    continue
+                stale.append(f.path)
+                if r and same and (remedy := skip_remedy(r["skipped"])):
+                    stuck.append((f.path, remedy))
             if stale:
                 found.append(CorpusFinding(
-                    STALE, tuple(stale), remedy="mneme mp refresh",
+                    STALE, tuple(sorted(stale)), remedy="mneme mp refresh",
                     detail="" if record else "no corpus mine record: content cannot be vouched for",
+                    skipped=tuple(stuck),
                 ))
         if c.wrong:
             found.append(CorpusFinding(

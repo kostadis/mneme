@@ -116,9 +116,7 @@ def current(
     except _authority.AuthorityError as e:
         typer.echo(f"error: unknown: authority does not load: {'; '.join(e.problems)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
-    if cfg.store is None or not Path(cfg.store.path).is_dir() or holds_no_palace(
-        Path(cfg.store.path)
-    ):
+    if cfg.store is None or holds_no_palace(Path(cfg.store.path)):
         typer.echo(f"{campaign}: no palace (the store is not provisioned)")
         raise typer.Exit(EXIT_OK)
     runner = MempalaceRunner.for_entity(entity)

@@ -68,3 +68,28 @@ def test_mempalace_not_ready_logic(tmp_path):
     authority.write(cfg, camp)
     reason = lifecycle.mempalace_not_ready(camp)
     assert reason and "no store" in reason
+
+
+def test_up_reports_not_brought_up_when_the_health_probe_cannot_launch_mempalace(
+    tmp_path, monkeypatch
+):
+    from mneme.mempalace.runner import MempalaceError, MempalaceRunner
+
+    e = _entity(tmp_path)
+    camp = tmp_path / "campaigns" / "oota"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    store = tmp_path / "home" / ".mempalace" / "palaces" / "oota"
+    (store / "turbovec" / "c").mkdir(parents=True)
+    (store / "turbovec" / "c" / "store.sqlite3").write_text("")
+    authority.write(CampaignMempalaceConfig(
+        campaign="oota", recipe_version="1.0.0",
+        wings=(Wing("oota", ".", "reference", ()),), store=StorePointer("oota", store),
+    ), camp)
+
+    def cannot_launch(self, palace=None):
+        raise MempalaceError("cannot run mempalace: denied")
+
+    monkeypatch.setattr(MempalaceRunner, "status", cannot_launch)
+    with pytest.raises(lifecycle.LifecycleError) as ei:
+        lifecycle.up(e, "oota", prober=lambda s: True, runner=_ok_runner(), render=False)
+    assert "not brought up" in str(ei.value) and "denied" in str(ei.value)

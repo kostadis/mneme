@@ -110,7 +110,7 @@ def _embedder_row(ref, cfg, entity, prober) -> ConformanceRow | None:
     No row when the store dir doesn't exist (the `store` row already says not provisioned)."""
     from . import embedder_guard as _guard
 
-    if not cfg.store.path.is_dir() or holds_no_palace(cfg.store.path):
+    if holds_no_palace(cfg.store.path):
         return None
     r = _guard.check(entity, cfg.store.path, prober)
     if r.state is _guard.GuardState.MISMATCH:
@@ -142,17 +142,22 @@ def _store_backup_rows(ref, cfg, entity, runner, prober=None) -> list[Conformanc
     try:
         h = _health.health(cfg.store.path, runner=runner)
     except MempalaceError as e:  # the binary cannot be launched: unknown, never a crash
-        return [ConformanceRow(ref.name, "store", State.INDEX_UNVERIFIED, note=f"unverified: {e}")]
-    if h.state is StoreState.HEALTHY:
-        rows.append(ConformanceRow(ref.name, "store", State.BUILT, note="store healthy"))
-    elif h.state is StoreState.DEGRADED:
-        rows.append(ConformanceRow(ref.name, "store", State.STALE_RENDER, note=h.note))
-    else:  # missing — not a hard fail; it's a to-do (run bringup)
+        # the embedder / backup / faces rows below need no mempalace, so they are still produced
         rows.append(
-            ConformanceRow(
-                ref.name, "store", State.MISSING_CONFIG, note="not provisioned — `mneme mp bringup`"
-            )
+            ConformanceRow(ref.name, "store", State.INDEX_UNVERIFIED, note=f"unverified: {e}")
         )
+    else:
+        if h.state is StoreState.HEALTHY:
+            rows.append(ConformanceRow(ref.name, "store", State.BUILT, note="store healthy"))
+        elif h.state is StoreState.DEGRADED:
+            rows.append(ConformanceRow(ref.name, "store", State.STALE_RENDER, note=h.note))
+        else:  # missing — not a hard fail; it's a to-do (run bringup)
+            rows.append(
+                ConformanceRow(
+                    ref.name, "store", State.MISSING_CONFIG,
+                    note="not provisioned — `mneme mp bringup`",
+                )
+            )
     emb = _embedder_row(ref, cfg, entity, prober)
     if emb is not None:
         rows.append(emb)
@@ -268,6 +273,12 @@ _CODE_STATE = {
 }
 
 
+def _names(files: list[str]) -> str:
+    """Up to _SHOWN names, with the same '(+N more)' marker a finding's body uses."""
+    more = f" (+{len(files) - _SHOWN} more)" if len(files) > _SHOWN else ""
+    return ", ".join(files[:_SHOWN]) + more
+
+
 def _finding_text(f: _compare.CorpusFinding, campaign: str) -> str:
     names = ", ".join(f.files[:_SHOWN])
     more = f" (+{len(f.files) - _SHOWN} more)" if len(f.files) > _SHOWN else ""
@@ -284,15 +295,14 @@ def _finding_text(f: _compare.CorpusFinding, campaign: str) -> str:
     remedy = f.remedy
     if f.skipped:  # skips a refresh cannot fix: one remedy group per distinct remedy
         groups: dict[str, list[str]] = {}
-        for path, reason in f.skipped:
-            groups.setdefault(_compare.skip_remedy(reason) or "", []).append(path)
+        for path, fix in f.skipped:
+            groups.setdefault(fix, []).append(path)
         fixed = {p for p, _ in f.skipped}
         refreshable = [p for p in f.files if p not in fixed]
         parts = []
         if refreshable:
-            shown = f" [{', '.join(refreshable[:_SHOWN])}]" if groups else ""
-            parts.append(f"{remedy} {campaign}{shown}")
-        parts += [f"{r} [{', '.join(ps[:_SHOWN])}]" for r, ps in groups.items()]
+            parts.append(f"{remedy} {campaign} [{_names(refreshable)}]")
+        parts += [f"{r} [{_names(ps)}]" for r, ps in groups.items()]
         return f"{head}: {body} -> {'; '.join(parts)}"
     if re.fullmatch(r"mneme mp \w+", remedy):
         remedy += f" {campaign}"
@@ -322,7 +332,7 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
     why = None
     if cfg.store is None:
         why = "no store pointer, so the palace cannot be read"
-    elif not Path(cfg.store.path).is_dir() or holds_no_palace(Path(cfg.store.path)):
+    elif holds_no_palace(Path(cfg.store.path)):
         why = "the store is not provisioned (`mneme mp bringup`)"
     else:
         try:
@@ -333,9 +343,13 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
             if not capable:
                 why = runner.read_too_old_message()
         if capable:
-            sources = runner.sources(cfg.store.path)
-            if sources is None:
-                why = "`mempalace sources` failed or returned unparseable output"
+            try:
+                sources = runner.sources(cfg.store.path)
+            except MempalaceError as e:  # cannot be launched: unknown, never a crash
+                why = str(e)
+            else:
+                if sources is None:
+                    why = "`mempalace sources` failed or returned unparseable output"
     record = None
     rec_err = None
     if cfg.store is not None:

@@ -51,6 +51,7 @@ def read(store: Path) -> CorpusRecord | None:
         files = doc["files"]
         if not isinstance(files, dict) or not all(
             isinstance(v, dict) and {"kind", "sha256", "target"} <= v.keys()
+            and isinstance(v.get("skipped", ""), str)
             for v in files.values()
         ):
             raise ValueError("malformed files map")

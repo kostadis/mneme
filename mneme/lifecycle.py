@@ -71,6 +71,7 @@ def mempalace_not_ready(cdir: Path, entity: ConfigEntity | None = None) -> str |
     health probe's `mempalace status`."""
     from .mempalace import authority as _a
     from .mempalace import health as _h
+    from .mempalace.runner import MempalaceError as _ME
     from .mempalace.runner import MempalaceRunner as _MR
 
     if not _a.has_authority(cdir):
@@ -82,7 +83,10 @@ def mempalace_not_ready(cdir: Path, entity: ConfigEntity | None = None) -> str |
     if cfg.store is None:
         return None
     runner = _MR.for_entity(entity) if entity is not None else None
-    sh = _h.health(cfg.store.path, runner=runner)
+    try:
+        sh = _h.health(cfg.store.path, runner=runner)
+    except _ME as e:  # the probe could not run: the store is unverified, which is not ready
+        return f"unverified: {e}"
     return None if sh.ok else sh.note
 
 

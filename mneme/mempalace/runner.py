@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from mneme import atomic as _atomic
+
 from .mine_report import SkipNotice, parse_skips
 
 if TYPE_CHECKING:
@@ -202,14 +204,15 @@ def _is_sidecar(name: str) -> bool:
     write was interrupted (`.mneme-*.json.<rand>.tmp`)."""
     if name.startswith("mneme-") and name.endswith(".json"):
         return True
-    return name.startswith(".mneme-") and ".json." in name and name.endswith(".tmp")
+    return name.startswith(".mneme-") and _atomic.is_temp(name)
 
 
 def holds_no_palace(store: Path) -> bool:
-    """No palace there yet: the directory is missing, or holds only mneme's own sidecar
-    records (e.g. the former-wings record written the moment the store is known empty)."""
+    """No palace there yet: the store path is not a directory (missing, or a stray file), or
+    holds only mneme's own sidecar records (e.g. the former-wings record written the moment
+    the store is known empty)."""
     store = Path(store)
-    if not store.exists():
+    if not store.is_dir():
         return True
     try:
         return all(_is_sidecar(p.name) for p in store.iterdir())
@@ -323,7 +326,8 @@ class MempalaceRunner:
         self, palace: Path | str | None = None, wing: str | None = None
     ) -> list[SourceRecord] | None:
         """Every `(wing, source_file)` in the store, or None when it cannot be read: rc != 0
-        or unparseable output is unknown, never an empty list (FR-017, 007 R3). Never raises."""
+        or unparseable output is unknown, never an empty list (FR-017, 007 R3). Raises
+        `MempalaceError` only when the binary cannot be launched."""
         sub = ["sources", "--json"] + (["--wing", wing] if wing else [])
         out = self._call(self._with_palace(palace, *sub))
         if out.returncode != 0:
