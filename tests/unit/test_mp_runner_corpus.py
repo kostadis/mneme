@@ -165,5 +165,36 @@ def test_supports_corpus_false_when_help_lacks_skips_json(stub, monkeypatch):
     assert "mine --skips-json" in r.too_old_message()
 
 
-def test_supports_corpus_false_when_binary_missing():
-    assert MempalaceRunner("/nonexistent/mempalace").supports_corpus() is False
+def test_probe_failure_raises_and_is_not_cached():
+    import subprocess
+
+    calls = []
+
+    def run(cmd):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="Traceback: boom")
+
+    r = MempalaceRunner("mempalace", run)
+    with pytest.raises(MempalaceError, match="cannot probe mempalace capabilities.*boom"):
+        r.supports_corpus()
+    with pytest.raises(MempalaceError):
+        r.supports_corpus_read()
+    assert len(calls) == 2  # nothing cached from a failed probe
+
+
+def test_supports_corpus_binary_missing_cannot_probe():
+    with pytest.raises(MempalaceError, match="cannot probe"):
+        MempalaceRunner("/nonexistent/mempalace").supports_corpus()
+
+
+def test_read_capability_is_separate_from_mining(stub, monkeypatch):
+    import subprocess
+
+    _, _, _ = stub
+    monkeypatch.setenv("MNEME_STUB_OLD", "skips")
+
+    def run(cmd):
+        return subprocess.run([sys.executable, str(STUB), *cmd[1:]], capture_output=True, text=True)
+
+    r = MempalaceRunner("mempalace", run)
+    assert r.supports_corpus_read() is True and r.supports_corpus() is False

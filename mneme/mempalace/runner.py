@@ -197,6 +197,18 @@ def resolve_binary(venv: Path | None) -> str:
     return "mempalace"
 
 
+def holds_no_palace(store: Path) -> bool:
+    """No palace there yet: the directory is missing, or holds only mneme's own sidecar
+    records (e.g. the former-wings record written the moment the store is known empty)."""
+    store = Path(store)
+    if not store.exists():
+        return True
+    try:
+        return all(p.name.startswith("mneme-") and p.suffix == ".json" for p in store.iterdir())
+    except OSError:
+        return False
+
+
 class MempalaceRunner:
     def __init__(
         self,
@@ -208,7 +220,8 @@ class MempalaceRunner:
         self.runner = runner
         # The hypostasis-declared overlay (e.g. MEMPALACE_BACKEND), exposed for assertions.
         self.env: dict[str, str] = dict(env or {})
-        self._corpus_gaps: list[str] | None = None
+        self._read_gaps: list[str] | None = None
+        self._mine_gaps: list[str] | None = None
 
     @classmethod
     def for_venv(
@@ -350,28 +363,55 @@ class MempalaceRunner:
         paths = tuple(m.group(1) for m in _FORGET_LINE_RE.finditer(text))
         return ForgetReport(int(ns.group(1)), int(nd.group(1)), paths)
 
+    def _help(self, args: list[str]) -> str:
+        """`mempalace <args> --help` stdout. A probe that cannot run (crash, broken venv,
+        missing binary) raises: that is not "too old", and nothing is cached from it."""
+        out = self._call([*args, "--help"])
+        if out.returncode != 0:
+            detail = (out.stderr or out.stdout or "").strip()[-200:] or "no output"
+            raise MempalaceError(
+                f"cannot probe mempalace capabilities: `{' '.join([*args, '--help'])}` "
+                f"failed (rc {out.returncode}): {detail}"
+            )
+        return out.stdout or ""
+
+    def read_gaps(self) -> list[str]:
+        """What this mempalace lacks to READ and FORGET a corpus: the `sources` / `forget`
+        verbs. Empty = supported. Probed once per runner (a failed probe raises, uncached)."""
+        if self._read_gaps is None:
+            top = self._help([])
+            self._read_gaps = [f"`{v}`" for v in _CORPUS_VERBS if v not in top]
+        return self._read_gaps
+
+    def mine_gaps(self) -> list[str]:
+        """What this mempalace lacks to MINE a corpus: `mine --files-from` / `--skips-json`."""
+        if self._mine_gaps is None:
+            mine = self._help(["mine"])
+            self._mine_gaps = [f"`mine {f}`" for f in _MINE_FLAGS if f not in mine]
+        return self._mine_gaps
+
     def corpus_gaps(self) -> list[str]:
-        """What this mempalace lacks for corpus mining, named: the `sources` / `forget` verbs
-        (`--help`) and the `mine --files-from` / `--skips-json` flags (`mine --help`). Empty =
-        supported. Probed once per runner."""
-        if self._corpus_gaps is None:
-            top = self._call(["--help"])
-            mine = self._call(["mine", "--help"])
-            top_ok, mine_ok = top.returncode == 0, mine.returncode == 0
-            self._corpus_gaps = [
-                *(f"`{v}`" for v in _CORPUS_VERBS if not top_ok or v not in (top.stdout or "")),
-                *(f"`mine {f}`" for f in _MINE_FLAGS
-                  if not mine_ok or f not in (mine.stdout or "")),
-            ]
-        return self._corpus_gaps
+        """Everything the full mining capability lacks, named (read gaps first). Empty =
+        supported."""
+        return [*self.read_gaps(), *self.mine_gaps()]
+
+    def supports_corpus_read(self) -> bool:
+        """`sources` + `forget` only: enough for status, prune and corpus reads (they never
+        mine)."""
+        return not self.read_gaps()
 
     def supports_corpus(self) -> bool:
-        """True iff `corpus_gaps()` is empty (007 Dependency 1; `--skips-json`, GM 2026-10-24)."""
+        """The full mining capability (007 Dependency 1; `--skips-json`, GM 2026-10-24):
+        `corpus_gaps()` is empty. Refresh / bringup / regenerate need this."""
         return not self.corpus_gaps()
 
     def too_old_message(self) -> str:
         """The refusal for a mempalace that cannot mine a corpus, naming what is missing."""
         return f"mempalace too old for corpus mining (missing {', '.join(self.corpus_gaps())})"
+
+    def read_too_old_message(self) -> str:
+        """The refusal for a mempalace that cannot read or forget a corpus."""
+        return f"this mempalace lacks corpus support (missing {', '.join(self.read_gaps())})"
 
     def status(self, palace: Path | str | None = None) -> bool:
         """True iff `mempalace --palace <p> status` answers cleanly (the store is openable)."""

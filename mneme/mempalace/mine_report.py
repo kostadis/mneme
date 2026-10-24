@@ -13,7 +13,8 @@ from dataclasses import dataclass
 
 KINDS = (
     "chunk_cap", "purge_failed", "symlink", "not_regular", "too_large", "stat_error",
-    "missing", "unsupported_ext", "outside_dir", "other",
+    "missing", "unsupported_ext", "outside_dir", "too_short", "excluded", "limit",
+    "write_failed", "failed", "other",
 )
 
 _CHUNK_RE = re.compile(

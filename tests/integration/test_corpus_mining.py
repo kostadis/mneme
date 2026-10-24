@@ -161,7 +161,7 @@ def test_exactly_the_listed_same_named_file_is_dropped_from_the_record(tmp_path,
     write(w.camp, "docs/s/001/session-summary.md", "one")
     write(w.camp, "docs/s/002/session-summary.md", "two")
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [docs/s]\n")
-    _skips_json(monkeypatch, ("docs/s/001/session-summary.md", "chunk_cap", "900 chunks"))
+    _skips_json(monkeypatch, ("docs/s/001/session-summary.md", "too_large", "900 chunks"))
     _render_and_refresh(w)
     files = corpus_record.read(w.store).files
     assert set(files) == {"docs/s/002/session-summary.md"}
@@ -172,7 +172,7 @@ def test_skip_of_a_root_file_does_not_drop_a_same_named_nested_one(tmp_path, mon
     write(w.camp, "a.md", "one")
     write(w.camp, "sub/a.md", "two")
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    files: [a.md]\n    dirs: [sub]\n")
-    _skips_json(monkeypatch, ("a.md", "chunk_cap", ""))
+    _skips_json(monkeypatch, ("a.md", "too_large", ""))
     _render_and_refresh(w)
     assert set(corpus_record.read(w.store).files) == {"sub/a.md"}
 
@@ -202,7 +202,7 @@ def test_listed_skips_are_gaps_and_not_recorded_as_mined(tmp_path, monkeypatch):
     )
     (res,) = _render_and_refresh(w)
     assert {(n.name, n.kind) for _, n in res.skips} == {
-        ("cx/gone.md", "missing"), ("cx/odd.md", "some_future_code")
+        ("cx/gone.md", "missing"), ("cx/odd.md", "other")
     }
     assert any("cx/gone.md" in ln and "file not found" in ln for ln in res.warnings())
     assert set(corpus_record.read(w.store).files) == {"cx/ok.md"}
@@ -227,7 +227,7 @@ def test_missing_or_garbled_skips_json_records_nothing_and_warns(tmp_path, monke
         monkeypatch.setenv("MNEME_STUB_SKIPS_OUT", mode)
         (res,) = _render_and_refresh(w)
         assert not res.failed, res.error
-        assert corpus_record.read(w.store).files == {}, mode
+        assert corpus_record.read(w.store) is None, mode
         assert any("--skips-json" in ln for ln in res.warnings()), mode
 
 

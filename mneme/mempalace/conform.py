@@ -38,7 +38,7 @@ from .models import (
     State,
 )
 from .recipe import RecipeError
-from .runner import MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner, holds_no_palace
 
 
 def _mp_root(entity):
@@ -110,7 +110,7 @@ def _embedder_row(ref, cfg, entity, prober) -> ConformanceRow | None:
     No row when the store dir doesn't exist (the `store` row already says not provisioned)."""
     from . import embedder_guard as _guard
 
-    if not cfg.store.path.is_dir():
+    if not cfg.store.path.is_dir() or holds_no_palace(cfg.store.path):
         return None
     r = _guard.check(entity, cfg.store.path, prober)
     if r.state is _guard.GuardState.MISMATCH:
@@ -302,14 +302,20 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
     why = None
     if cfg.store is None:
         why = "no store pointer, so the palace cannot be read"
-    elif not Path(cfg.store.path).is_dir():
+    elif not Path(cfg.store.path).is_dir() or holds_no_palace(Path(cfg.store.path)):
         why = "the store is not provisioned (`mneme mp bringup`)"
-    elif not runner.supports_corpus():
-        why = f"this mempalace lacks corpus support ({', '.join(runner.corpus_gaps())})"
     else:
-        sources = runner.sources(cfg.store.path)
-        if sources is None:
-            why = "`mempalace sources` failed or returned unparseable output"
+        try:
+            capable = runner.supports_corpus_read()
+        except MempalaceError as e:  # a probe that could not run is unknown, not too old
+            capable, why = False, str(e)
+        else:
+            if not capable:
+                why = runner.read_too_old_message()
+        if capable:
+            sources = runner.sources(cfg.store.path)
+            if sources is None:
+                why = "`mempalace sources` failed or returned unparseable output"
     record = None
     rec_err = None
     if cfg.store is not None:

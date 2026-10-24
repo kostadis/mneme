@@ -605,6 +605,7 @@ def regenerate(
     typer.echo(f"regenerated {campaign} → {store} (mined: {', '.join(mined) or 'nothing'})")
     _echo_gaps(
         _mine_report.warning_lines(campaign, fm.skips)
+        + list(fm.warnings)
         + ([fm.record_warning] if fm.record_warning else [])
     )
 

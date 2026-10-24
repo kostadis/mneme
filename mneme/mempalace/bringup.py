@@ -161,7 +161,7 @@ def bringup(
         steps.append(BringUpStep("backup", "skipped", note="--no-backup"))
 
     return BringUpReport(campaign, tuple(steps), skips=tuple(fm.skips),
-        warnings=(record_warning,) if record_warning else (),
+        warnings=(*fm.warnings, *((record_warning,) if record_warning else ())),
     )
 
 

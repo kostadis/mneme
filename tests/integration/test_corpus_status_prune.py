@@ -222,7 +222,63 @@ def test_regenerate_with_an_old_mempalace_deletes_nothing(w, monkeypatch):
 
     (w.store / "keep").write_text("precious")
     monkeypatch.setenv("MNEME_STUB_OLD", "1")
-    w.runner._corpus_gaps = None  # the runner probes once; force a re-probe against the old CLI
+    w.runner._read_gaps = w.runner._mine_gaps = None  # force a re-probe against the old CLI
     with pytest.raises(MempalaceError, match="nothing was deleted"):
         backup.regenerate(w.entity, "corp", runner=w.runner)
     assert (w.store / "keep").read_text() == "precious"
+
+
+# ── round 4: capability split, probe failure, sidecar-only store ─────────────
+
+
+def _fake_help(w, monkeypatch, *, mine=None, top=None):
+    """Make the stub's `--help` probes answer as given: (rc, stdout) per probe, else real."""
+    real = w.runner.runner
+    w.runner._read_gaps = w.runner._mine_gaps = None
+
+    def run(cmd):
+        if "--help" in cmd:
+            ans = mine if "mine" in cmd else top
+            if ans is not None:
+                return subprocess.CompletedProcess(cmd, ans[0], stdout=ans[1], stderr="boom")
+        return real(cmd)
+
+    monkeypatch.setattr(w.runner, "runner", run)
+
+
+def test_status_and_prune_need_only_sources_and_forget(w, monkeypatch):
+    # I1: a mempalace without `mine --skips-json` still reads and forgets.
+    _fake_help(w, monkeypatch, mine=(0, "usage: mine DIR [--files-from F]"))
+    assert corpus_row(w).state is State.CONFORMANT
+    mine_decoy(w)
+    ok, _ = _prune(w)
+    assert ok
+    assert w.runner.supports_corpus() is False
+    assert "mine --skips-json" in w.runner.too_old_message()
+    assert "sources" not in w.runner.too_old_message()
+
+
+def test_unrunnable_probe_is_unknown_not_too_old(w, monkeypatch):
+    # I2: `--help` crashing is not "too old", and the failure is not cached.
+    _fake_help(w, monkeypatch, top=(1, ""), mine=(1, ""))
+    row = corpus_row(w)
+    assert row.state is State.CORPUS_UNKNOWN
+    assert "cannot probe mempalace capabilities" in row.note and "too old" not in row.note
+    assert "lacks corpus support" not in row.note
+    monkeypatch.undo()
+    w.runner._read_gaps = w.runner._mine_gaps = None
+    assert w.runner.supports_corpus() is True
+
+
+def test_sidecar_only_store_reads_as_not_provisioned(w, monkeypatch):
+    # I3: a failed first bringup leaves only mneme-*.json in the store dir.
+    import shutil
+
+    shutil.rmtree(w.store)
+    w.store.mkdir(parents=True)
+    (w.store / "mneme-former-wings.json").write_text("{}")
+    monkeypatch.setenv("MNEME_STUB_SOURCES", "rc1")  # a real mempalace cannot open no palace
+    row = corpus_row(w)
+    assert row.state is State.CORPUS_UNKNOWN
+    assert "not provisioned" in row.note and "sources" not in row.note
+    assert "embedder" not in rows(w)[0]

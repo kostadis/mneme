@@ -179,9 +179,8 @@ def _prune_corpus(
     `undeclared ∪ (missing − not_materialized)`, bound by `--expect N` drawers, backed up,
     removed with `forget`, and re-verified with `sources`."""
     store = cfg.store.path
-    if not runner.supports_corpus():
-        gaps = ", ".join(runner.corpus_gaps())
-        raise MempalaceError(f"this mempalace lacks corpus support ({gaps})")
+    if not runner.supports_corpus_read():  # prune uses `sources` and `forget`, never mines
+        raise MempalaceError(runner.read_too_old_message())
     try:
         rec = _recipe.load(cfg.recipe_version)
         ccfg = _cconfig.load(ref.path, rec)

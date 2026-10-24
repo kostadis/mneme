@@ -26,7 +26,7 @@ from mneme.corpus import toc as _toc
 
 from . import corpus_record as _crec
 from . import mine_record as _record
-from .mine_report import SkipNotice, WingSkips
+from .mine_report import KINDS, SkipNotice, WingSkips
 from .models import Recipe
 from .runner import ListedSkip, MempalaceError, MempalaceRunner, SourceRecord
 
@@ -82,10 +82,22 @@ def _norm(root: Path, rel: str) -> str:
     return os.path.normpath(os.path.join(root, rel))
 
 
+# mempalace's `--skips-json` reason codes -> mine_report.KINDS (identity where they agree).
+_REASON_KIND = {
+    "purge_skipped": "purge_failed",
+    **{k: k for k in KINDS if k != "other"},
+}
+
+
 def _as_notice(s: ListedSkip) -> SkipNotice:
-    """A `--skips-json` entry in the shape the report/record code prints (path + reason)."""
+    """A `--skips-json` entry in the shape the report/record code prints (path + reason). The
+    kind is in mine_report's vocabulary (unknown code -> 'other'); the raw code stays in the
+    detail whenever it differs from the kind."""
+    kind = _REASON_KIND.get(s.reason, "other")
     detail = s.detail or s.reason
-    return SkipNotice(s.path, s.reason, detail, f"{s.path} ({s.reason}) {s.detail}".strip())
+    if s.reason != kind:
+        detail = f"{detail} [{s.reason}]"
+    return SkipNotice(s.path, kind, detail, f"{s.path} ({s.reason}) {s.detail}".strip())
 
 
 def _holds_no_palace(store: Path) -> bool:
@@ -168,6 +180,7 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
                  for f in k.files}
     skips: list[tuple[str, SkipNotice]] = []
     mined_kinds: list[str] = []
+    unknown_kinds: list[str] = []  # skip list unavailable: neither clean nor recorded
 
     for kind, rk in resolved.kinds.items():
         files = [f for f in rk.files if f.minable and f.mined_as == kind]
@@ -227,26 +240,40 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
                 )
             raise
         if listed is None:
-            # unknown, never "nothing skipped": record none of this kind, so it shows UNMINED
+            # unknown, never "nothing skipped": record none of this kind and leave its prior
+            # record entries untouched (so a later re-point can still fire)
+            unknown_kinds.append(kind)
             out.warnings.append(
                 f"WARN mempalace gave no usable --skips-json for {kind}: cannot tell which "
                 f"files it skipped, so none are recorded as mined"
             )
-        notices = tuple(_as_notice(s) for s in listed or ())
+            continue
+        notices = tuple(_as_notice(s) for s in listed)
         skips.extend((kind, n) for n in notices)
-        skipped = {_norm(campaign_dir, s.path): s for s in listed or ()}
+        # chunk_cap = mined but truncated: recorded (so status converges), still a reported gap
+        skipped = {_norm(campaign_dir, s.path): s for s in listed if s.reason != "chunk_cap"}
         mined_kinds.append(kind)
         if store is not None:
             entries = {
                 f.path: {"kind": kind, "sha256": f.sha256, "target": f.mined_path}
                 for f in files
-                if listed is not None and not _skipped(campaign_dir, f.mined_path, skipped)
+                if not _skipped(campaign_dir, f.mined_path, skipped)
             }
             out.record_warning = _crec.try_merge_kind(
                 store, campaign, cfg.corpus_sha256, kind, entries
             ) or out.record_warning
     out.skips = tuple(skips)
     if store is not None and not dry_run:  # GH #31: remember the gaps for `mp status`
+        # an unknown skip list is not "no gaps": status's gaps row treats a failed record as
+        # unverified, so that is how it is recorded
+        extra = {}
+        if unknown_kinds:
+            extra = {
+                "status": "failed",
+                "error": f"skip list unknown for {', '.join(unknown_kinds)} "
+                "(mempalace gave no usable --skips-json)",
+            }
         out.record_warning = (
-            _record.try_write(store, campaign, mined_kinds, out.skips) or out.record_warning
+            _record.try_write(store, campaign, mined_kinds, out.skips, **extra)
+            or out.record_warning
         )

@@ -28,13 +28,16 @@ class FirstMine(tuple):
 
     skips: WingSkips
     record_warning: str | None
+    warnings: tuple[str, ...]  # 007: the corpus mine's WARN lines (no skip list, TOC, record)
 
     def __new__(
-        cls, store: Path, mined: list[str], skips: WingSkips = (), record_warning: str | None = None
+        cls, store: Path, mined: list[str], skips: WingSkips = (),
+        record_warning: str | None = None, warnings: tuple[str, ...] = (),
     ):
         obj = super().__new__(cls, (store, mined))
         obj.skips = tuple(skips)
         obj.record_warning = record_warning
+        obj.warnings = tuple(warnings)
         return obj
 
 
@@ -59,7 +62,9 @@ def first_mine(
             campaign_dir, cfg.campaign, store.path, runner,
             _recipe.load(cfg.recipe_version), dry_run=dry_run,
         )
-        return FirstMine(store.path, res.mined, res.skips, res.record_warning)
+        return FirstMine(
+            store.path, res.mined, res.skips, res.record_warning, tuple(res.warnings)
+        )
     mined: list[str] = []
     wing_names: list[str] = []
     skips: list[tuple[str, SkipNotice]] = []
