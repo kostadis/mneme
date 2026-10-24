@@ -193,6 +193,18 @@ def test_walked_tool_state_dir_is_not_in_the_corpus(camp):
     assert res.mine_targets("npcs") == ["docs/s/001.md"]
 
 
+def test_dropped_link_does_not_name_its_ignored_target(camp):
+    # a link inside ignored tool state is not in the corpus, so its ignored target isn't named
+    write(camp, ".gitignore", ".zvec-grep/\ncache/\n")
+    write(camp, "docs/s/001.md")
+    write(camp, "cache/blob.json")
+    (camp / "docs" / "s" / ".zvec-grep").mkdir(parents=True)
+    os.symlink("../../../cache/blob.json", camp / "docs" / "s" / ".zvec-grep" / "link.json")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [docs]\n")
+    assert res.valid
+    assert [f.path for f in res.kinds["npcs"].files] == ["docs/s/001.md"]
+
+
 def test_gitignored_file_named_in_files_is_a_finding(camp):
     write(camp, ".gitignore", "*.secret.md\n")
     write(camp, "docs/x.secret.md")

@@ -353,25 +353,25 @@ def resolve(cfg: CorpusConfig, campaign_dir: Path, recipe: Recipe) -> ResolvedCo
         per_kind[name] = (ents, nm, miss)
 
     # Rule 4: one batched check-ignore. A path NAMED in corpus.yaml (a `files` entry of any
-    # kind, a declared dir, the target of any symlink) that git ignores is a finding. A file
-    # merely FOUND by walking a declared dir that git ignores is not in the corpus: dropped
-    # silently, before rule 6 sees it ("if it's not worth putting in git, it's not worth
-    # remembering", GM, mneme#64).
+    # kind, a declared dir) that git ignores is a finding, and so is the ignored target of a
+    # symlink that stays in the corpus. A file merely FOUND by walking a declared dir that git
+    # ignores is not in the corpus: dropped silently, before rule 6 sees it ("if it's not
+    # worth putting in git, it's not worth remembering", GM, mneme#64).
     named = {p for decl in cfg.kinds.values() for p in decl.dirs + decl.files}
     named_files = {p for decl in cfg.kinds.values() for p in decl.files}
-    walked: set[str] = set()
+    probe = set(named)
     for ents, _nm, _miss in per_kind.values():
-        for e in ents:
-            walked.add(e.path)
-            if e.target:
-                named.add(e.target)
-    ignored = git.ignored(sorted(named | walked))
+        probe.update(e.path for e in ents)
+        probe.update(e.target for e in ents if e.target)
+    ignored = git.ignored(sorted(probe))
+    dropped = ignored - named_files
+    for name, (ents, nm, miss) in per_kind.items():
+        kept = [e for e in ents if e.path not in dropped]
+        named.update(e.target for e in kept if e.target)  # a dropped link names nothing
+        per_kind[name] = (kept, nm, miss)
     for p in sorted(ignored & named):
         findings.append(Finding("gitignored", "git ignores this path; mempalace would skip it "
                                 "and `mp prune` would drop its drawers", path=p))
-    dropped = ignored - named_files
-    for name, (ents, nm, miss) in per_kind.items():
-        per_kind[name] = ([e for e in ents if e.path not in dropped], nm, miss)
 
     # Rule 6 on the real files (R2): group by the resolved file, since that is what mempalace
     # dedups on. The mining kind is the single `mined_as` mark among the kinds reaching it.
