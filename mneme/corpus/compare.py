@@ -42,6 +42,9 @@ class CorpusFinding:
     drawers: int = 0
     remedy: str = ""
     detail: str = ""
+    # UNMINED only: the subset of ``files`` the last mine recorded as `too_short` (mempalace's
+    # minimum chunk size). `mp refresh` can never index those, so their remedy differs.
+    too_short: tuple[str, ...] = ()
 
     @property
     def count(self) -> int:
@@ -166,6 +169,7 @@ def compare(
     *,
     record_error: str | None = None,
     sources_error: str | None = None,
+    too_short: frozenset[str] = frozenset(),
 ) -> CorpusFindings:
     """Every finding for one campaign. ``sources`` None means the palace could not be read
     (UNKNOWN); ``record_error`` means the corpus mine record exists but is unreadable
@@ -208,7 +212,13 @@ def compare(
                 if f.minable and f.mined_as == rk.name]
         unmined = sorted(f.path for f in mine if f.path not in c.held)
         if unmined:
-            found.append(CorpusFinding(UNMINED, tuple(unmined), remedy="mneme mp refresh"))
+            # normalised mined paths the last mine skipped as too_short (never fixable by refresh)
+            short = {f.path for f in mine
+                     if os.path.normpath(os.path.join(root, f.mined_path)) in too_short}
+            found.append(CorpusFinding(
+                UNMINED, tuple(unmined), remedy="mneme mp refresh",
+                too_short=tuple(p for p in unmined if p in short),
+            ))
         if record_error is not None:
             unknown.append(f"the corpus mine record is unreadable ({record_error}); "
                            "staleness cannot be verified")

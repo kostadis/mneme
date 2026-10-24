@@ -108,6 +108,7 @@ inspection and for status's `toc-stale` check; it can be stale or hand-edited.
 | `undeclared-drawers` (palace holds files the corpus does not) | `mneme mp prune CAMPAIGN` (preview, then `--confirm --expect N`; former canon wings also need `--include-former-canon WING`; a store rebuilt or first built from the corpus records no former wings, so migrate with `mneme mp regenerate CAMPAIGN --confirm`, a fresh rebuild) |
 | `missing` (a declared path is gone, not merely outside this sparse checkout) | fix or remove the path in `.mneme/corpus.yaml`; `mneme mp prune` drops its drawers |
 | `unmined`, `stale` or `wrong-wing` (declared files not yet mined, changed, re-pointed, or mined under another kind) | `mneme mp refresh CAMPAIGN` |
+| `unmined` and status says `too short to index` (mempalace skipped the file as under its minimum chunk size) | do NOT refresh (it can never index it): add content to the file, or remove it from `.mneme/corpus.yaml` |
 | `toc-stale` (snapshot differs from a fresh resolution) | `mneme mp render CAMPAIGN` |
 | `out-of-scope` (drawers point outside the campaign: a moved campaign or a foreign store) | `mneme mp regenerate CAMPAIGN --confirm` |
 | `invalid` (the configuration or a path is wrong) | edit `.mneme/corpus.yaml`, check with `mneme corpus check CAMPAIGN` |

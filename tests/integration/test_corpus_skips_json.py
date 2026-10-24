@@ -92,3 +92,71 @@ def test_reason_codes_map_into_the_report_vocabulary(tmp_path, monkeypatch):
     }
     assert set(kinds.values()) <= set(mine_report.KINDS)
     assert any("brand_new_code" in ln for ln in res.warnings())
+
+
+def _corpus_note(w):
+    from mneme.mempalace import conform
+
+    rep = conform.report(w.entity, "corp", runner=w.runner)
+    row = next(r for r in rep.rows if r.dimension == "corpus")
+    return row
+
+
+def test_too_short_file_stays_unmined_with_its_own_remedy(tmp_path, monkeypatch):
+    """GM 2026-10-24: a too_short file is still a failing UNMINED finding, but `mp refresh`
+    can never fix it, so the remedy says add content or undeclare."""
+    from mneme.mempalace.models import State
+
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "cx/a.md", "one")
+    write(w.camp, "cx/tiny.md", "x")
+    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [cx]\n")
+    _skips_json(monkeypatch, ("cx/tiny.md", "too_short", "under minimum"))
+    _render_and_refresh(w)
+    row = _corpus_note(w)
+    assert row.state is State.UNMINED, row
+    assert "cx/tiny.md" in row.note
+    assert "too short to index" in row.note and ".mneme/corpus.yaml" in row.note
+    assert "mp refresh" not in row.note
+
+
+def test_too_short_and_other_unmined_show_both_remedies(tmp_path, monkeypatch):
+    w = corpus_world(tmp_path, monkeypatch)
+    write(w.camp, "cx/a.md", "one")
+    write(w.camp, "cx/tiny.md", "x")
+    _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [cx]\n")
+    _skips_json(monkeypatch, ("cx/tiny.md", "too_short", "under minimum"))
+    _render_and_refresh(w)
+    write(w.camp, "cx/new.md", "fresh")  # declared by the dir, not yet mined
+    note = _corpus_note(w).note
+    assert "mneme mp refresh corp" in note and "too short to index" in note, note
+
+
+def test_refresh_cli_shows_a_clean_error_when_the_capability_probe_cannot_run(
+    tmp_path, monkeypatch
+):
+    """`supports_corpus()` raises MempalaceError when `--help` fails: a clean FAIL line, no
+    traceback."""
+    import subprocess
+
+    from typer.testing import CliRunner
+
+    from mneme.cli import app
+    from mneme.mempalace.runner import MempalaceRunner
+
+    w = corpus_world(tmp_path, monkeypatch)
+    _render_and_refresh(w)
+
+    def run(cmd):
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="Traceback: boom")
+
+    monkeypatch.setattr(
+        MempalaceRunner, "for_entity", classmethod(lambda cls, entity, **kw: cls("mempalace", run))
+    )
+    monkeypatch.setattr("mneme.mempalace.cli._load_or_exit", lambda _c: w.entity)
+    r = CliRunner().invoke(app, ["mp", "refresh", "corp"])
+    assert r.exit_code != 0
+    assert r.exception is None or isinstance(r.exception, SystemExit), repr(r.exception)
+    out = r.output
+    assert "cannot probe mempalace capabilities" in out, out
+    assert "Traceback (most recent" not in out

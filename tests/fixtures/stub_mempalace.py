@@ -104,6 +104,12 @@ def _mine_files(dir_: str, subargs: list[str]) -> list[dict]:
     wing = _opt(subargs, "--wing") or "stub"
     rows = _load_state()
     have = {r["source_file"] for r in rows}
+    # injected skips (not chunk_cap, which is mined-but-truncated) are not mined, as in real life
+    injected = {
+        str((Path(e["path"]) if os.path.isabs(e["path"]) else Path(dir_) / e["path"]).resolve())
+        for e in json.loads(os.environ.get("MNEME_STUB_MINE_SKIPS_JSON") or "[]")
+        if isinstance(e, dict) and "path" in e and e.get("reason") != "chunk_cap"
+    }
     for rel in _read_list(_opt(subargs, "--files-from") or "-"):
         p = Path(rel) if os.path.isabs(rel) else Path(dir_) / rel
         if not p.is_file() or p.is_symlink():
@@ -111,7 +117,7 @@ def _mine_files(dir_: str, subargs: list[str]) -> list[dict]:
             skipped.append({"path": rel, "reason": "not_regular", "detail": "not a regular file"})
             continue
         ab = str(p.resolve())
-        if ab in have:
+        if ab in have or ab in injected:
             continue
         have.add(ab)
         rows.append(

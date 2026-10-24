@@ -10,6 +10,7 @@ an undispositioned one is "needs a decision" and IS (FR-027). mneme never guesse
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 from pathlib import Path
 
@@ -274,9 +275,34 @@ def _finding_text(f: _compare.CorpusFinding, campaign: str) -> str:
         if f.detail:
             body += f" [{f.detail}]"
     remedy = f.remedy
+    if f.too_short:
+        short = f"too short to index (under mempalace's minimum): add content or undeclare " \
+                f"it in .mneme/corpus.yaml [{', '.join(f.too_short[:_SHOWN])}]"
+        if len(f.too_short) == f.count:
+            return f"{head}: {body} -> {short}"
+        body += f" ({len(f.too_short)} too short)"
+        remedy = f"{remedy} {campaign} (the others); {short}"
+        return f"{head}: {body} -> {remedy}"
     if re.fullmatch(r"mneme mp \w+", remedy):
         remedy += f" {campaign}"
     return f"{head}: {body} -> {remedy}"
+
+
+def _too_short_paths(campaign_dir, cfg) -> frozenset[str]:
+    """Normalised paths the last mneme-run mine skipped as `too_short` (empty when there is no
+    readable record: such a file then keeps the generic `mp refresh` remedy)."""
+    if cfg.store is None:
+        return frozenset()
+    try:
+        rec = _record.read(cfg.store.path)
+    except _record.MineRecordError:
+        return frozenset()
+    if rec is None:
+        return frozenset()
+    return frozenset(
+        os.path.normpath(os.path.join(campaign_dir, e["name"]))
+        for entries in rec.wings.values() for e in entries if e.get("kind") == "too_short"
+    )
 
 
 def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFindings:
@@ -326,6 +352,7 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
     return _compare.compare(
         resolved, sources, record, toc_check, ref.path,
         record_error=rec_err, sources_error=why,
+        too_short=_too_short_paths(ref.path, cfg),
     )
 
 

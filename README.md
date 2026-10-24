@@ -123,6 +123,9 @@ For a corpus campaign the `mp` commands behave differently:
 - `mp render` / `mp faces` derive the wings from the kinds, write the root `mempalace.yaml` and
   the TOC snapshot, and remove wing-model renders.
 - `mp refresh` mines per kind from the resolved file list; nothing outside the corpus is mined.
+  A declared file mempalace skips as `too_short` (under its minimum chunk size) stays an `unmined`
+  finding, but status's remedy is to add content to it or remove it from `.mneme/corpus.yaml`,
+  not `mp refresh`, which can never index it.
 - `mp status` adds a `corpus` row (the palace equals the declaration) and takes the `index` row
   from that same comparison. A fleet-level `consumers` row counts non-compliant consumers; like
   an undeclared corpus it is owed work, exit 0, never a failure (an invalid `consumers.yaml` is).
