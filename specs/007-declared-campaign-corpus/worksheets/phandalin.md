@@ -1,11 +1,28 @@
-# Corpus worksheet — phandalin
+# Corpus worksheet — Phandalin
 
-- Surveyed path: `/home/kostadis/phandalin/Phandalin` (git root is the parent, `/home/kostadis/phandalin`; `core.sparseCheckout` is true there)
+- Surveyed path: `/home/kostadis/phandalin/Phandalin`. The git root is the parent, `/home/kostadis/phandalin`, which is a sparse checkout of the campaigns monorepo (`kostadis/campaigns`) with `core.sparseCheckout` true. Files at that repo's top level appear in every campaign's checkout.
 - HEAD: `520afd44` (`git -C /home/kostadis/phandalin rev-parse HEAD` = `520afd441df1cc5a0a3c5eb5ea22e22a36aab99c`, committed 2026-10-22)
 - Date: 2026-10-24
 - There is **no** `.mneme/` directory (no mneme authority). `config/config.yaml` has no `mempalace:` section; CampaignGenerator falls back to defaults (canon wing `narrative`, index wings `chronicle` and the campaign name).
 
-Observations only. Nothing here is a decision; the GM writes `.mneme/corpus.yaml`.
+Sections 1–6 are observations only. The GM writes `.mneme/corpus.yaml`; the GM decisions taken so far are in section 0.
+
+## 0. GM decisions and conversion steps (2026-10-24)
+
+Decisions:
+- **Campaign name:** `campaign: Phandalin`, with the capitalization of the folder in `kostadis/campaigns` on GitHub. mempalace lowercases palace names, so the palace is `~/.mempalace/palaces/phandalin`.
+- **`hillsfar` is not Phandalin's.** The `mempalace.yaml` at the repo root (`palace: hillsfar`) is the Hillsfar campaign's, committed at the monorepo root in `4c9e7dcc3` (2026-07-19, "chore(hillsfar): wire up mempalace search…"). It appears in every campaign checkout.
+- **Allow list:** files and folders may exist without being integrated. Discovery lists `gm-assistant/` and `scripts/` under `~/phandalin` as `unintegrated` campaigns; that is by design and needs no action. Never integrate them.
+- **Gitignored means not part of mneme** (mneme#64, PR #65): "if it's not worth putting in git, it's not worth remembering." Gitignored files found inside a declared folder are not in the corpus. A path named in `corpus.yaml` that git ignores is still an error. **Until PR #65 is merged**, a folder declaration that contains ignored files is invalid; see section 5.
+
+Conversion steps. Phandalin has no `.mneme/` and no palace on this host, so it is brought up from its corpus. `mp regenerate` needs an existing `.mneme/mempalace.yaml` and refuses here.
+1. `mneme integrate Phandalin` (bringup does not write `.mneme/owner.yaml`).
+2. Write `.mneme/corpus.yaml` from section 7.
+3. `mneme corpus check Phandalin` until it says valid.
+4. `mneme mp bringup Phandalin`. This writes `.mneme/mempalace.yaml`, builds the palace from the corpus, and records no former wings.
+5. `mneme mp status`, expecting `corpus: OK`. Then commit `.mneme/` in the campaign repo.
+
+The ordering rule from the rollout still applies: CampaignGenerator#593 Part A ships first, because once Phandalin has a corpus, its wings are the kinds, not `narrative` / `chronicle` / `phandalin`.
 
 Sparse-checkout state: `git ls-files -t` across the whole parent repo shows 15172 `H` and 40330 `S`. Restricted to `Phandalin/` it shows 15097 `H` and no `S`. Under `docs notes summaries characters voice wiki` there are 0 `S` entries.
 
@@ -19,7 +36,7 @@ State: **no mneme authority**. There is no `.mneme/mempalace.yaml`, so there are
 
 `mempalace.yaml` files anywhere under the campaign:
 - Under the surveyed directory `/home/kostadis/phandalin/Phandalin`: **none found** (`find Phandalin -name 'mempalace.yaml*'` returns nothing). `docs/chapters/mempalace.yaml`, `notes/mempalace.yaml` and `summaries/mempalace.yaml` do not exist here. (`notes/.mempalaceignore` mentions `mempalace.yaml` in its "self-referential" lines.)
-- One in the git root, outside the surveyed directory: `/home/kostadis/phandalin/mempalace.yaml`. It is tracked, carries the header `# mneme-rendered; source-sha256: 2fe24e74...; do-not-edit`, and reads `palace: hillsfar`, `wing: hillsfar`, rooms `npcs party world arcs general`. It names no source path and no trust.
+- One in the git root, outside the surveyed directory: `/home/kostadis/phandalin/mempalace.yaml`. It is tracked, carries the header `# mneme-rendered; source-sha256: 2fe24e74...; do-not-edit`, and reads `palace: hillsfar`, `wing: hillsfar`, rooms `npcs party world arcs general`. It names no source path and no trust. It is the Hillsfar campaign's file at the monorepo root (commit `4c9e7dcc3`), not Phandalin's; the same holds for the mneme-rendered git-root `.mempalaceignore`. mneme's corpus render only cleans up inside the campaign folder, so bringup leaves both in place.
 
 So the wings that "mine today" cannot be read from any `mempalace.yaml` in the surveyed directory. The only mining-related files in it are:
 
@@ -82,7 +99,9 @@ Wings named by the horizon file and the ignore comments: a `narrative` wing from
 
 Palace contents: `~/.mempalace/palaces/` holds only `chat`, `hallways.json`. `~/.mempalace/config.json` registers only the `chat` palace. No Phandalin palace exists under `~/.mempalace/`, and no palace path is named by any `mempalace.yaml` in the campaign (the git-root one names palace `hillsfar`, which is not present under `~/.mempalace/palaces/`). Per-wing counts: not readable. No status command was run; nothing under `~/.mempalace` was queried.
 
-Palace contents not surveyed: no read-only source listing exists until T005.
+Palace contents not surveyed: there is no Phandalin palace on this host to list (`mempalace sources --json`, T005, has shipped).
+
+**None of the `.mempalaceignore` files above affect a corpus campaign.** mneme mines with `mempalace mine --files-from`, which bypasses ignore files entirely. Only `.gitignore` matters (section 5). The hand-written `.mempalaceignore` files are unstamped, so mneme leaves them in place.
 
 ## 2. Files at each standard kind's usual locations
 
@@ -99,6 +118,7 @@ Palace contents not surveyed: no read-only source listing exists until T005.
 - No `.dedup_state.json` or draft/backup-named files at the top level of `docs/npcs/`.
 - No file named for the four PCs at the top level of `docs/npcs/` (no `brewbarry`, `vukradin`, `soma`, `valphine`), although `.mempalaceignore` lists five such paths.
 - Related, outside `docs/npcs/`: `docs/distill/npcs/` (492 files), `docs/synthesize_npc/` (9), `notes/npcs/` (11), `notes/npc_agent/` (99), `notes/npc_delta/` (41).
+- Declaring `dirs: [docs/npcs]` takes in all 991 files, including the 891 pipeline files under `summary_native/` (drafts, runs, evidence). Only the 100 top-level dossiers are published NPCs. A dry resolve confirmed 991.
 - Reproduce: `find docs/npcs -type f | wc -l`
 
 ### summaries
@@ -186,6 +206,7 @@ Reproduce: `find docs notes characters summaries \( -iname '*_draft*' -o -iname 
   - `notes/npc_delta/ch058-059/__pycache__/changes.cpython-314.pyc`
   - `summaries/`: 5 `.m4a` (`*.m4a` ignored) and 3 files in `logs/` of chapters 58 and 59
   - Reproduce: `find docs notes summaries characters voice wiki -type f | git check-ignore --stdin`
+  - Effect on a declaration: once PR #65 (mneme#64) is merged, these files are simply not in the corpus when they sit under a declared folder. Before it, any folder declaration containing them is invalid. A dry resolve of `summaries: {dirs: [docs/summaries]}` gave 92 `gitignored` findings; the same holds for `notes`, `summaries` and `docs/ensemble`. With PR #65's code, the same sample corpus was valid, and `docs/summaries` resolved to exactly the 58 published summaries. Naming an ignored file in `files:` stays an error either way.
 - Skip-worktree / sparse (`git ls-files -t`): 0 `S` entries under the surveyed directory or under any of the dirs above.
 - Nested git: `Phandalin/.git` exists as an **empty directory** (not a repo). `summaries/` session dirs hold `.cg/` dirs (14).
 - Non-text extensions under `docs notes summaries characters voice wiki`: `docs/background/3627966-Factions_of_Phandalin_4.5.1.pdf`; `summaries/2026-09-15-chapter_56-the-fall-of-the-rift-weaver-prime/session_2026_09_15_chapter_53_the_fall_of_the_rift_weaver_prime_transcript.docx`; 5 `.m4a` under `summaries/` (gitignored): chapters 54, 55, 57, 58, 59. `.mempalaceignore` also names `vukradin-6.pdf` and `docs/npcs.backup-*.tar.gz` (neither found). Binary store files (`.sst`, rocksdb, `.zvec`) sit inside `.zvec-grep/` and `.tgrep/` dirs.
@@ -224,7 +245,7 @@ Leave blank; GM fills in.
 Blank skeleton:
 
 ```yaml
-campaign: phandalin
+campaign: Phandalin
 
 kinds:
   npcs:
