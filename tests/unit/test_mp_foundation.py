@@ -16,9 +16,9 @@ def _write_authority(campaign_dir, body):
 # ── recipe ────────────────────────────────────────────────────────────────────
 
 
-def test_recipe_current_loads_v2_standard():
-    rec = recipe.current()
-    assert rec.version == "2.0.0"  # v2 is the new standard (GH #24)
+def test_recipe_v2_standard():
+    rec = recipe.load("2.0.0")
+    assert rec.version == "2.0.0"  # v2 is the 6-wing standard (GH #24); current() is v3 (007)
     # notes/ and summaries/ are WINGS in v2, no longer baseline exclusions
     assert "summaries/" not in rec.mechanical.baseline_exclusions
     assert "notes/" not in rec.mechanical.baseline_exclusions
@@ -126,3 +126,57 @@ def test_render_coherence_detects_tampering(tmp_path):
     (full / "docs" / "chapters" / "mempalace.yaml").write_text("wing: hacked\nrooms: []\n")
     drifted = render.coherent(cfg, rec, full)
     assert any(str(d) == "docs/chapters/mempalace.yaml" for d in drifted)
+
+
+# ── dual authority (007 T016, R8, FR-001a) ───────────────────────────────────
+
+_NO_WINGS = 'campaign: c\nrecipe_version: "3.0.0"\nstore:\n  alias: c\n'
+
+
+def _corpus(campaign_dir):
+    (campaign_dir / ".mneme").mkdir(parents=True, exist_ok=True)
+    (campaign_dir / ".mneme" / "corpus.yaml").write_text(
+        "campaign: c\nkinds:\n  npcs:\n    dirs: [docs]\n"
+    )
+
+
+def test_corpus_campaign_allows_authority_without_wings(tmp_path):
+    _corpus(tmp_path)
+    _write_authority(tmp_path, _NO_WINGS)
+    cfg = authority.load(tmp_path)
+    assert cfg.wings == () and cfg.store.alias == "c"
+
+
+def test_no_corpus_still_requires_wings(tmp_path):
+    _write_authority(tmp_path, _NO_WINGS)
+    with pytest.raises(authority.AuthorityError, match="at least one wing"):
+        authority.load(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "extra, key",
+    [
+        ("wings:\n  - name: w\n    source: .\n    trust: reference\n", "wings"),
+        ("extra_exclusions:\n  - scratch/\n", "extra_exclusions"),
+    ],
+)
+def test_corpus_plus_wing_keys_is_dual_authority(tmp_path, extra, key):
+    _corpus(tmp_path)
+    _write_authority(tmp_path, _NO_WINGS + extra)
+    with pytest.raises(authority.AuthorityError) as ei:
+        authority.load(tmp_path)
+    (msg,) = ei.value.problems
+    assert msg.startswith("dual-authority") and f"`{key}:`" in msg
+    assert "mempalace.yaml" in msg and "corpus.yaml" in msg
+
+
+def test_both_wing_keys_report_both(tmp_path):
+    _corpus(tmp_path)
+    _write_authority(
+        tmp_path,
+        _NO_WINGS + "wings:\n  - name: w\n    source: .\n    trust: reference\n"
+        "extra_exclusions: [x/]\n",
+    )
+    with pytest.raises(authority.AuthorityError) as ei:
+        authority.load(tmp_path)
+    assert len(ei.value.problems) == 2

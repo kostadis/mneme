@@ -47,6 +47,13 @@ _verbose_opt = typer.Option(
 )
 
 
+# 007 FR-018a — prune's former-canon guard; one flag per wing, repeatable.
+_former_canon_opt = typer.Option(
+    None, "--include-former-canon",
+    help="Corpus campaigns: allow deleting drawers of this former-canon wing (repeatable)",
+)
+
+
 def _load_or_exit(config_path: str) -> ConfigEntity:
     try:
         return cfg.load(config_path)
@@ -122,6 +129,7 @@ def prune(
     no_backup: bool = typer.Option(
         False, "--no-backup", help="With --confirm: skip the bindings backup taken first"
     ),
+    include_former_canon: list[str] = _former_canon_opt,
     verbose: bool = _verbose_opt,
     config: str = _config_opt,
 ) -> None:
@@ -157,6 +165,7 @@ def prune(
             backup=not no_backup,
             verbose=verbose,
             emit=emit,
+            include_former_canon=tuple(include_former_canon or ()),
         )
     except _prune.PruneAbort as e:
         typer.echo(f"FAIL prune: {e}", err=True)
@@ -249,7 +258,15 @@ def render(
             raise typer.Exit(EXIT_RUNTIME)
         typer.echo(f"{campaign}: derived files coherent with authority")
         raise typer.Exit(EXIT_OK)
-    written = _render.write_all(cfg_obj, rec, ref.path)
+    from mneme.corpus.config import CorpusConfigError, has_corpus
+
+    try:
+        written = _render.write_all(cfg_obj, rec, ref.path)
+        if has_corpus(ref.path):  # 007: the CG search face is part of the corpus render
+            written.append(_render.render_config_yaml(cfg_obj, ref.path, rec))
+    except CorpusConfigError as e:
+        typer.echo(f"FAIL render: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
     for w in written:
         typer.echo(f"rendered {w.relative_to(ref.path)}")
 
@@ -265,6 +282,7 @@ def publish(
 ) -> None:
     """Stage a recipe upgrade for every campaign on a proposal branch (not the active checkout)."""
     from . import publish as _publish
+    from .corpus_guard import CorpusRefusal
     from .workcopy import WorkingCopyError
 
     entity = _load_or_exit(config)
@@ -274,7 +292,7 @@ def publish(
         raise typer.Exit(EXIT_OK)
     try:
         branch, plans = _publish.publish(entity, recipe_version=recipe_version)
-    except WorkingCopyError as e:
+    except (WorkingCopyError, CorpusRefusal) as e:
         typer.echo(f"FAIL publish: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     for plan in plans:
@@ -294,6 +312,7 @@ def adopt(
     """Campaign-side gate: stage the upgrade on a branch (default), or --here to write it
     directly into the active checkout for review (FR-021/FR-030)."""
     from . import publish as _publish
+    from .corpus_guard import CorpusRefusal
     from .workcopy import WorkingCopyError
 
     entity = _load_or_exit(config)
@@ -309,7 +328,7 @@ def adopt(
             raise typer.Exit(EXIT_OK)
         try:
             written, _ = _publish.adopt_in_place(entity, campaign)
-        except WorkingCopyError as e:
+        except (WorkingCopyError, CorpusRefusal) as e:
             typer.echo(f"FAIL adopt: {e}", err=True)
             raise typer.Exit(EXIT_RUNTIME) from None
         for w in written:
@@ -318,7 +337,7 @@ def adopt(
         raise typer.Exit(EXIT_OK)
     try:
         branch = _publish.adopt(entity, campaign)
-    except WorkingCopyError as e:
+    except (WorkingCopyError, CorpusRefusal) as e:
         typer.echo(f"FAIL adopt: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"staged adoption for '{campaign}' on branch: {branch} (merge/pull to take it)")
@@ -351,6 +370,19 @@ def migrate(
         ),
         approved_by_human=bool(raw.get("approved_by_human", False)),
     )
+    from mneme.corpus.config import has_corpus
+
+    from . import discover as _discover
+    from .corpus_guard import CorpusRefusal, refusal
+
+    try:  # 007 T042: refuse before validating, planning or cloning anything
+        if has_corpus(_discover.resolve(entity, campaign).path):
+            raise refusal("migrate", campaign, _migrate.MIGRATE_REASON)
+    except CorpusRefusal as e:
+        typer.echo(f"REFUSED: {e}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    except _discover.DiscoveryError:
+        pass  # not in the active checkout: apply_plan checks the working copy
     problems = _migrate.validate_plan(mplan)
     if problems:
         for p in problems:
@@ -397,12 +429,13 @@ def bootstrap(
 ) -> None:
     """Write a starter (or consolidated) authority into a campaign via the working copy."""
     from . import bootstrap as _bootstrap
+    from .corpus_guard import CorpusRefusal
     from .workcopy import WorkingCopyError
 
     entity = _load_or_exit(config)
     try:
         branch = _bootstrap.bootstrap(entity, campaign, consolidate=consolidate)
-    except WorkingCopyError as e:
+    except (WorkingCopyError, CorpusRefusal) as e:
         typer.echo(f"FAIL bootstrap: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"bootstrapped '{campaign}' on branch: {branch} (merge/pull to take it)")
@@ -566,12 +599,14 @@ def regenerate(
         _echo_gaps(
             _mine_report.warning_lines(campaign, getattr(e, "skips", ()))
             + ([record_warning] if record_warning else [])
+            + list(getattr(e, "warnings", ()))
         )
         typer.echo(f"FAIL regenerate: {_err_text(e)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"regenerated {campaign} → {store} (mined: {', '.join(mined) or 'nothing'})")
     _echo_gaps(
         _mine_report.warning_lines(campaign, fm.skips)
+        + list(fm.warnings)
         + ([fm.record_warning] if fm.record_warning else [])
     )
 
@@ -586,6 +621,8 @@ def faces(
     config: str = _config_opt,
 ) -> None:
     """Re-render the four faces (cli/cg_search/global_alias/mcp) from an existing authority."""
+    from mneme.corpus import config as _cconfig
+
     from . import bringup as _bringup
     from . import discover as _discover
     from .authority import AuthorityError
@@ -596,7 +633,7 @@ def faces(
     except (AuthorityError,) as e:
         typer.echo(f"FAIL faces: {'; '.join(e.problems)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
-    except _discover.DiscoveryError as e:
+    except (_discover.DiscoveryError, _cconfig.CorpusConfigError) as e:
         typer.echo(f"FAIL faces: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     for w in written:

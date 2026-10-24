@@ -68,3 +68,46 @@ def test_mempalace_not_ready_logic(tmp_path):
     authority.write(cfg, camp)
     reason = lifecycle.mempalace_not_ready(camp)
     assert reason and "no store" in reason
+
+
+@pytest.mark.parametrize("kind", ["missing", "non-exec"])
+def test_up_says_the_binary_cannot_run_and_does_not_suggest_bringup(tmp_path, monkeypatch, kind):
+    e = _entity(tmp_path)
+    camp = tmp_path / "campaigns" / "oota"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))  # no mempalace to fall back on
+    store = tmp_path / "home" / ".mempalace" / "palaces" / "oota"
+    (store / "turbovec" / "c").mkdir(parents=True)
+    (store / "turbovec" / "c" / "store.sqlite3").write_text("")
+    authority.write(CampaignMempalaceConfig(
+        campaign="oota", recipe_version="1.0.0",
+        wings=(Wing("oota", ".", "reference", ()),), store=StorePointer("oota", store),
+    ), camp)
+    if kind == "non-exec":
+        (tmp_path / "venv" / "bin").mkdir(parents=True)
+        (tmp_path / "venv" / "bin" / "mempalace").write_text("#!/bin/sh\n")
+    with pytest.raises(lifecycle.LifecycleError) as ei:
+        lifecycle.up(e, "oota", prober=lambda s: True, runner=_ok_runner(), render=False)
+    msg = str(ei.value)
+    assert "cannot run mempalace" in msg and "hypostasis install" in msg
+    assert "mp bringup" not in msg
+
+
+def test_up_with_a_stray_file_as_the_store_names_it_and_does_not_suggest_bringup(
+    tmp_path, monkeypatch
+):
+    e = _entity(tmp_path)
+    camp = tmp_path / "campaigns" / "oota"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    store = tmp_path / "home" / ".mempalace" / "palaces" / "oota"
+    store.parent.mkdir(parents=True)
+    store.write_text("not a directory")
+    authority.write(CampaignMempalaceConfig(
+        campaign="oota", recipe_version="1.0.0",
+        wings=(Wing("oota", ".", "reference", ()),), store=StorePointer("oota", store),
+    ), camp)
+    with pytest.raises(lifecycle.LifecycleError) as ei:
+        lifecycle.up(e, "oota", prober=lambda s: True, runner=_ok_runner(), render=False)
+    msg = str(ei.value)
+    assert f"store path is not a directory: {store}" in msg and "remove or fix" in msg
+    assert "bringup" not in msg

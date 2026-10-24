@@ -63,3 +63,7 @@ def test_regenerate_re_mines(tmp_path, monkeypatch):
     backup.regenerate(entity, "saga", runner=MempalaceRunner(binary="mempalace", runner=run))
     assert any(c[0:1] == ["mempalace"] and "mine" in c for c in calls)  # re-embed happened
     assert not (store / "chroma.sqlite3").exists()  # store was cleared first
+    # wing-model regenerate records no former-wings record of its own (corpus-only behaviour)
+    from mneme.mempalace import former_wings
+
+    assert former_wings.read(store) is None

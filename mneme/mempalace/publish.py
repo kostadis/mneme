@@ -13,6 +13,7 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
+from mneme.corpus.config import has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
@@ -20,6 +21,7 @@ from . import recipe as _recipe
 from . import render as _render
 from . import target as _target
 from . import workcopy as _workcopy
+from .corpus_guard import refusal, shadowed_kinds
 from .discover import campaigns_roots
 from .models import TargetConfig
 
@@ -53,15 +55,37 @@ def preview(entity: ConfigEntity) -> list[CampaignPlan]:
             cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
         except _authority.AuthorityError:
             continue
-        plans.append(CampaignPlan(ref.name, _target.resolve(cfg, rec)))
+        target = _target.resolve(cfg, rec)
+        if has_corpus(ref.path) and (clash := shadowed_kinds(ref.path, rec)):
+            target = replace(target, conflicts=(*target.conflicts, *_shadow_notes(clash)))
+        plans.append(CampaignPlan(ref.name, target))
     return plans
+
+
+def _shadow_notes(clash: list[str]) -> tuple[str, ...]:
+    return tuple(f"shadowed-kind: '{n}'" for n in clash)
+
+
+def _upgrade(cfg, rec, camp_dir: Path):
+    """The authority with only `recipe_version` moved. A corpus campaign's authority never
+    gains `wings:` or `extra_exclusions:` (007 T042, FR-001a)."""
+    upgraded = replace(cfg, recipe_version=rec.version)
+    if has_corpus(camp_dir):
+        upgraded = replace(upgraded, wings=(), extra_exclusions=())
+    return upgraded
 
 
 def _apply_to_workcopy(wc: _workcopy.WorkingCopy, campaign: str, rec) -> None:
     """Write the upgraded authority + re-rendered derived files for one campaign."""
     camp_dir = wc.path / campaign
     cfg = _authority.load(camp_dir)
-    upgraded = replace(cfg, recipe_version=rec.version)
+    if has_corpus(camp_dir) and (clash := shadowed_kinds(camp_dir, rec)):
+        raise refusal(
+            "adopt/publish", campaign,
+            f"shadowed-kind: recipe {rec.version} makes {', '.join(clash)} a standard kind, "
+            "which this campaign defines itself; nothing was written",
+        )
+    upgraded = _upgrade(cfg, rec, camp_dir)
     _authority.write(upgraded, camp_dir)
     _render.write_all(upgraded, rec, camp_dir)
 
@@ -112,6 +136,8 @@ def publish(
     branch = f"mneme/recipe-{rec.version}"
     wc.checkout_branch(branch)
     for plan in plans:
+        if any(c.startswith("shadowed-kind") for c in plan.target.conflicts):
+            continue  # reported in the plan line; never written
         _apply_to_workcopy(wc, plan.campaign, rec)
     if wc.commit_all(f"mneme: propose recipe {rec.version} for all campaigns"):
         wc.push(branch)
@@ -128,6 +154,12 @@ def adopt(
     """Manual per-campaign gate: stage the upgrade for ONE campaign on its own branch."""
     rec = _recipe.current()
     ref = _discover.resolve(entity, campaign)  # 005 — adopt targets the campaign's own tree
+    if has_corpus(ref.path) and (clash := shadowed_kinds(ref.path, rec)):
+        raise refusal(  # 007 T042: before cloning anything
+            "adopt", campaign,
+            f"shadowed-kind: recipe {rec.version} makes {', '.join(clash)} a standard kind, "
+            "which this campaign defines itself; nothing was written",
+        )
     wc = _clone_workcopy(entity, state_dir, git_runner, root=ref.tree)
     branch = f"mneme/adopt-{campaign}-{rec.version}"
     wc.checkout_branch(branch)
@@ -150,7 +182,13 @@ def adopt_in_place(entity: ConfigEntity, campaign: str) -> tuple[list[Path], Tar
         )
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     diff = _target.resolve(cfg, rec)
-    upgraded = replace(cfg, recipe_version=rec.version)
+    if has_corpus(ref.path) and (clash := shadowed_kinds(ref.path, rec)):
+        raise refusal(
+            "adopt", campaign,
+            f"shadowed-kind: recipe {rec.version} makes {', '.join(clash)} a standard kind, "
+            "which this campaign defines itself; nothing was written",
+        )
+    upgraded = _upgrade(cfg, rec, ref.path)
     written = [_authority.write(upgraded, ref.path)]
     written += _render.write_all(upgraded, rec, ref.path)
     return written, diff

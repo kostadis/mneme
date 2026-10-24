@@ -14,6 +14,7 @@ from hypostasis import config as cfg
 from hypostasis.models import ConfigEntity, MnemeIdentity
 
 from . import lifecycle
+from .corpus.cli import app as corpus_app
 from .mempalace import discover as _discover
 from .mempalace import ownership as _ownership
 from .mempalace.cli import app as mp_app
@@ -29,6 +30,7 @@ app = typer.Typer(
 )
 
 app.add_typer(mp_app, name="mp", help="Manage per-campaign mempalaces.")
+app.add_typer(corpus_app, name="corpus", help="Declared campaign corpus (007).")
 
 _config_opt = typer.Option(
     str(cfg.default_config_path()), "--config", "-c", help="Path to hypostasis.yaml"

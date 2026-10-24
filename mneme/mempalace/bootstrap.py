@@ -14,12 +14,19 @@ from pathlib import Path
 import yaml
 
 from hypostasis.models import ConfigEntity
+from mneme.corpus.config import has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
 from . import recipe as _recipe
 from . import render as _render
+from .corpus_guard import refusal
 from .models import CampaignMempalaceConfig, Recipe, Room, StorePointer, Wing
+
+_BOOTSTRAP_REASON = (
+    "the campaign already has a corpus authority; bootstrap would write wings. "
+    "Edit .mneme/corpus.yaml instead"
+)
 
 
 def _trust_for(wing_name: str, recipe: Recipe) -> str:
@@ -101,6 +108,8 @@ def consolidate_config(
     campaign: str, campaign_dir: Path, recipe: Recipe
 ) -> CampaignMempalaceConfig:
     """FR-017: build one authority from existing scattered per-wing mempalace.yaml files."""
+    if has_corpus(campaign_dir):  # 007: the root mempalace.yaml is not a wing here
+        raise refusal("bootstrap", campaign, _BOOTSTRAP_REASON)
     wings: list[Wing] = []
     for wing_dir in _discover._existing_wing_dirs(campaign_dir):  # deepest-first
         try:
@@ -151,10 +160,17 @@ def bootstrap(
     from .publish import _clone_workcopy
 
     rec = _recipe.current()
+    try:  # 007 T042: the active checkout may hold a corpus.yaml the clone does not yet
+        if has_corpus(_discover.resolve(entity, campaign).path):
+            raise refusal("bootstrap", campaign, _BOOTSTRAP_REASON)
+    except _discover.DiscoveryError:
+        pass  # not discoverable here (new campaign): the working copy is checked below
     wc = _clone_workcopy(entity, state_dir, git_runner)
     branch = f"mneme/bootstrap-{campaign}"
     wc.checkout_branch(branch)
     camp_dir = wc.path / campaign
+    if has_corpus(camp_dir):  # 007 T042: refuse before anything is written
+        raise refusal("bootstrap", campaign, _BOOTSTRAP_REASON)
     if consolidate or _authority.has_authority(camp_dir):
         cfg = consolidate_config(campaign, camp_dir, rec)
     else:

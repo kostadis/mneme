@@ -9,11 +9,19 @@ an undispositioned one is "needs a decision" and IS (FR-027). mneme never guesse
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from pathlib import Path
 
 from hypostasis.models import ConfigEntity
+from mneme.corpus import compare as _compare
+from mneme.corpus import config as _cconfig
+from mneme.corpus import resolve as _cresolve
+from mneme.corpus import toc as _toc
+from mneme.corpus.config import has_corpus
 
 from . import authority as _authority
+from . import corpus_record as _crec
 from . import discover as _discover
 from . import mine_record as _record
 from . import ownership as _ownership
@@ -30,7 +38,7 @@ from .models import (
     State,
 )
 from .recipe import RecipeError
-from .runner import MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner, StoreKind, store_state
 
 
 def _mp_root(entity):
@@ -56,7 +64,9 @@ def _scaffold_matches(cfg: CampaignMempalaceConfig, recipe: Recipe) -> bool:
     return False
 
 
-def _recipe_row(cfg: CampaignMempalaceConfig, recipe: Recipe) -> ConformanceRow:
+def _recipe_row(
+    cfg: CampaignMempalaceConfig, recipe: Recipe, *, corpus: bool = False
+) -> ConformanceRow:
     # 1) version behind current → upgrade available (pending by default; deliberate if recorded)
     if cfg.recipe_version != recipe.version:
         disp = cfg.disposition_for(DIV_VERSION_BEHIND)
@@ -72,7 +82,7 @@ def _recipe_row(cfg: CampaignMempalaceConfig, recipe: Recipe) -> ConformanceRow:
             note="upgrade available, not yet adopted",
         )
     # 2) scaffold deviation (advisory) → needs a decision only when undispositioned
-    if not _scaffold_matches(cfg, recipe):
+    if not corpus and not _scaffold_matches(cfg, recipe):  # a corpus campaign has no wings
         disp = cfg.disposition_for(DIV_SCAFFOLD_NOMATCH)
         if disp and disp.kind == "deliberate":
             return ConformanceRow(
@@ -100,7 +110,7 @@ def _embedder_row(ref, cfg, entity, prober) -> ConformanceRow | None:
     No row when the store dir doesn't exist (the `store` row already says not provisioned)."""
     from . import embedder_guard as _guard
 
-    if not cfg.store.path.is_dir():
+    if store_state(cfg.store.path).kind is not StoreKind.PRESENT:
         return None
     r = _guard.check(entity, cfg.store.path, prober)
     if r.state is _guard.GuardState.MISMATCH:
@@ -130,14 +140,21 @@ def _store_backup_rows(ref, cfg, entity, runner, prober=None) -> list[Conformanc
         return []
     rows: list[ConformanceRow] = []
     h = _health.health(cfg.store.path, runner=runner)
+    # (an unrunnable mempalace is UNVERIFIED; the embedder / backup / faces rows below need no
+    # mempalace, so they are still produced)
     if h.state is StoreState.HEALTHY:
         rows.append(ConformanceRow(ref.name, "store", State.BUILT, note="store healthy"))
     elif h.state is StoreState.DEGRADED:
         rows.append(ConformanceRow(ref.name, "store", State.STALE_RENDER, note=h.note))
+    elif h.state is StoreState.UNVERIFIED:
+        rows.append(
+            ConformanceRow(ref.name, "store", State.INDEX_UNVERIFIED, note=f"unverified: {h.note}")
+        )
     else:  # missing — not a hard fail; it's a to-do (run bringup)
         rows.append(
             ConformanceRow(
-                ref.name, "store", State.MISSING_CONFIG, note="not provisioned — `mneme mp bringup`"
+                ref.name, "store", State.MISSING_CONFIG,
+                note="not provisioned — `mneme mp bringup`",
             )
         )
     emb = _embedder_row(ref, cfg, entity, prober)
@@ -208,7 +225,12 @@ def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow
             note="no store pointer — index not checked (won't query an unknown palace)",
         )
     palace, extra = sync_scope(ref, cfg)
-    chk = runner.is_stale(ref.path, palace=palace, roots=extra)
+    try:
+        chk = runner.is_stale(ref.path, palace=palace, roots=extra)
+    except MempalaceError as e:
+        return ConformanceRow(
+            ref.name, "index", State.INDEX_UNVERIFIED, note=f"unverified: {e}"
+        )
     if chk.stale is None:
         return ConformanceRow(
             ref.name, "index", State.INDEX_UNVERIFIED, note=f"unverified: {chk.reason}"
@@ -233,6 +255,142 @@ def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow
         ref.name, "index", State.BUILT,
         note="no orphaned drawers (new/changed files are not detected)",
     )
+
+
+_SHOWN = 10  # files named per finding in a status note (display only; the data is complete)
+
+_CODE_STATE = {
+    _compare.INVALID: State.CORPUS_INVALID,
+    _compare.UNKNOWN: State.CORPUS_UNKNOWN,
+    _compare.MISSING: State.CORPUS_MISSING,
+    _compare.UNDECLARED: State.UNDECLARED_DRAWERS,
+    _compare.OUT_OF_SCOPE: State.OUT_OF_SCOPE,
+    _compare.UNMINED: State.UNMINED,
+    _compare.STALE: State.CORPUS_STALE,
+    _compare.WRONG_WING: State.WRONG_WING,
+    _compare.TOC_STALE: State.TOC_STALE,
+}
+
+
+def _names(files: list[str], sep: str = ", ", shown: int = _SHOWN) -> str:
+    """Up to ``shown`` names joined by ``sep``, then the one '(+N more)' marker."""
+    more = f" (+{len(files) - shown} more)" if len(files) > shown else ""
+    return sep.join(files[:shown]) + more
+
+
+def _finding_text(f: _compare.CorpusFinding, campaign: str) -> str:
+    head = f.code.upper()
+    if f.code in (_compare.INVALID, _compare.UNKNOWN):
+        body = _names(list(f.files), "; ")
+    elif f.code == _compare.TOC_STALE:
+        body = f.detail
+    else:
+        drawers = f" ({f.drawers} drawers)" if f.drawers else ""
+        body = f"{f.count} file(s){drawers}: {_names(list(f.files))}"
+        if f.detail:
+            body += f" [{f.detail}]"
+    remedy = f.remedy
+    if f.skipped:  # skips a refresh cannot fix: one remedy group per distinct remedy
+        groups: dict[str, list[str]] = {}
+        for path, fix in f.skipped:
+            groups.setdefault(fix, []).append(path)
+        fixed = {p for p, _ in f.skipped}
+        refreshable = [p for p in f.files if p not in fixed]
+        parts = []
+        if refreshable:
+            parts.append(f"{remedy} {campaign} [{_names(refreshable)}]")
+        parts += [f"{r} [{_names(ps)}]" for r, ps in groups.items()]
+        return f"{head}: {body} -> {'; '.join(parts)}"
+    if re.fullmatch(r"mneme mp \w+", remedy):
+        remedy += f" {campaign}"
+    return f"{head}: {body} -> {remedy}"
+
+
+def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFindings:
+    """Resolve the declaration fresh and compare it with the palace. Never raises: whatever
+    cannot be read is a finding (invalid / unknown), never a silent OK (FR-017). The campaign
+    is resolved exactly once per status run: its TOC document goes into ``docs`` (None when
+    the declaration is invalid) for the consumers row to reuse."""
+    try:
+        ccfg = _cconfig.load(ref.path, rec)
+    except _cconfig.CorpusConfigError as e:
+        if docs is not None:
+            docs[ref.path] = None
+        return _compare.CorpusFindings((_compare.CorpusFinding(
+            _compare.INVALID, tuple(f.line() for f in e.findings),
+            remedy="edit .mneme/corpus.yaml (`mneme corpus check`)",
+        ),), verified=False)
+    resolved = _cresolve.resolve(ccfg, ref.path, rec)
+    doc = _toc.build(resolved, ccfg, rec)
+    if docs is not None:
+        docs[ref.path] = doc
+    toc_check = _toc.verify(ref.path, doc)
+    sources = None
+    why = None
+    if cfg.store is None:
+        why = "no store pointer, so the palace cannot be read"
+    elif (state := store_state(Path(cfg.store.path))).kind is StoreKind.BROKEN:
+        why = state.reason
+    elif state.unprovisioned:
+        why = "the store is not provisioned (`mneme mp bringup`)"
+    else:
+        try:
+            capable = runner.supports_corpus_read()
+        except MempalaceError as e:  # a probe that could not run is unknown, not too old
+            capable, why = False, str(e)
+        else:
+            if not capable:
+                why = runner.read_too_old_message()
+        if capable:
+            res = runner.read_sources(cfg.store.path)
+            sources = res.rows
+            if sources is None:
+                why = res.why()
+    record = None
+    rec_err = None
+    if cfg.store is not None:
+        try:
+            record = _crec.read(cfg.store.path)
+        except _crec.CorpusRecordError as e:
+            rec_err = str(e)
+    return _compare.compare(
+        resolved, sources, record, toc_check, ref.path,
+        record_error=rec_err, sources_error=why,
+    )
+
+
+def _corpus_rows(ref, cfg, rec, runner, docs=None) -> tuple[ConformanceRow, ConformanceRow]:
+    """007 US2: the `corpus` row, and the `index` row derived from the SAME comparison
+    (a corpus campaign's `sync --dry-run` scope would be a different question)."""
+    res = _corpus_findings(ref, cfg, rec, runner, docs)
+    if res.ok:
+        corpus = ConformanceRow(
+            ref.name, "corpus", State.CONFORMANT,
+            note="palace equals the declared corpus; every drawer is current",
+        )
+    else:
+        corpus = ConformanceRow(
+            ref.name, "corpus", _CODE_STATE[res.findings[0].code],
+            observed=",".join(res.codes),
+            note=" | ".join(_finding_text(f, ref.name) for f in res.findings),
+        )
+    drawer_codes = {_compare.UNDECLARED, _compare.OUT_OF_SCOPE, _compare.UNMINED,
+                    _compare.STALE, _compare.WRONG_WING, _compare.MISSING}
+    if not res.verified:
+        index = ConformanceRow(
+            ref.name, "index", State.INDEX_UNVERIFIED,
+            note="unverified: the corpus comparison could not read the palace",
+        )
+    elif any(c in drawer_codes for c in res.codes):
+        index = ConformanceRow(
+            ref.name, "index", State.STALE,
+            note="palace differs from the corpus — see the corpus row",
+        )
+    else:
+        index = ConformanceRow(
+            ref.name, "index", State.BUILT, note="palace drawer sources equal the corpus",
+        )
+    return corpus, index
 
 
 def _gaps_row(ref: CampaignRef, cfg) -> ConformanceRow | None:
@@ -264,11 +422,10 @@ def _gaps_row(ref: CampaignRef, cfg) -> ConformanceRow | None:
             ref.name, "gaps", State.CONFORMANT,
             note=f"no files skipped at last mine ({rec.mined_at}){carried}",
         )
-    shown = ", ".join(names[:_GAPS_SHOWN])
-    more = f" (+{len(names) - _GAPS_SHOWN} more)" if len(names) > _GAPS_SHOWN else ""
     return ConformanceRow(
         ref.name, "gaps", State.INDEX_GAPS, observed=str(len(names)),
-        note=f"{len(names)} file(s) skipped at last mine: {shown}{more}{carried}",
+        note=f"{len(names)} file(s) skipped at last mine: "
+        f"{_names(names, shown=_GAPS_SHOWN)}{carried}",
     )
 
 
@@ -277,7 +434,7 @@ _GAPS_SHOWN = 5
 
 def _campaign_rows(
     ref: CampaignRef, recipe: Recipe, runner: MempalaceRunner, entity=None, prober=None,
-    *, mp_root=None, check_index: bool = True,
+    *, mp_root=None, check_index: bool = True, docs: dict | None = None,
 ) -> list[ConformanceRow]:
     if not ref.has_authority:
         return [
@@ -304,7 +461,17 @@ def _campaign_rows(
     except RecipeError:
         rec = recipe  # fall back to current for the comparison
 
-    rows = [_recipe_row(cfg, recipe)]
+    corpus = has_corpus(ref.path)
+    rows = [_recipe_row(cfg, recipe, corpus=corpus)]
+
+    if not corpus:  # 007 FR-019: owed work, listed but never a failure
+        rows.append(
+            ConformanceRow(
+                ref.name, "corpus", State.CORPUS_UNDECLARED,
+                note="UNDECLARED (owed): wing-model mining is unchanged until the corpus is "
+                     f"declared -> mneme corpus init {ref.name}",
+            )
+        )
 
     drifted = _render.coherent(cfg, rec, ref.path)
     if drifted:
@@ -319,7 +486,9 @@ def _campaign_rows(
             ConformanceRow(ref.name, "render", State.CONFORMANT, note="derived files coherent")
         )
 
-    if check_index:
+    if corpus:
+        rows.extend(_corpus_rows(ref, cfg, rec, runner, docs))
+    elif check_index:
         rows.append(_index_row(ref, cfg, runner))
     rows.extend(_store_backup_rows(ref, cfg, entity, runner, prober))
     if entity is not None and (gaps := _gaps_row(ref, cfg)) is not None:
@@ -339,6 +508,102 @@ def _campaign_rows(
     return rows
 
 
+FLEET = "(fleet)"
+
+
+def _glob_match(path: str, pattern: str) -> bool:
+    """Glob semantics on campaign-relative POSIX paths, identical on every supported Python
+    (it mirrors `PurePosixPath.full_match`): `*`, `?` and `[...]` stay inside one segment; a
+    whole-segment `**` spans zero or more directories, but a trailing `**` needs at least one
+    more segment (`docs/**` does not match `docs`)."""
+    segs, pats = path.split("/"), pattern.split("/")
+
+    def go(i: int, j: int) -> bool:
+        if j == len(pats):
+            return i == len(segs)
+        if pats[j] == "**":
+            if j == len(pats) - 1:
+                return i < len(segs)
+            return any(go(k, j + 1) for k in range(i, len(segs) + 1))
+        return i < len(segs) and fnmatch.fnmatchcase(segs[i], pats[j]) and go(i + 1, j + 1)
+
+    return go(0, 0)
+
+
+def _consumers_fleet_row() -> tuple[ConformanceRow, tuple]:
+    """007 FR-024: ONE fleet-level row. Non-compliant consumers are owed work (never a
+    failure); an unreadable inventory IS a failure (a broken GM record must not pass)."""
+    from mneme.corpus import consumers as _consumers
+
+    try:
+        allc = _consumers.load(_consumers.DEFAULT)
+    except _consumers.ConsumersError as e:
+        return ConformanceRow(
+            FLEET, "consumers", State.INVALID_CONFIG,
+            note="consumers.yaml is invalid: " + "; ".join(e.problems),
+        ), ()
+    bad = _consumers.noncompliant(allc)
+    if not bad:
+        return ConformanceRow(
+            FLEET, "consumers", State.CONFORMANT,
+            note=f"all {len(allc)} known consumers are compliant",
+        ), ()
+    partial = sum(1 for c in bad if _consumers.compliance(c) == "partial")
+    return ConformanceRow(
+        FLEET, "consumers", State.CONSUMERS_OWED, observed=str(len(bad)),
+        note=f"{len(bad)} non-compliant consumers ({partial} partial) "
+             "-> mneme corpus consumers --noncompliant",
+    ), bad
+
+
+def _campaign_files(root: Path) -> list[str]:
+    import os
+
+    out: list[str] = []
+    for dp, dns, fns in os.walk(root):
+        dns[:] = [d for d in dns if d != ".git"]
+        base = Path(dp).relative_to(root)
+        out.extend((base / f).as_posix() for f in fns)
+    return out
+
+
+def _consumers_campaign_row(ref, consumers, doc) -> ConformanceRow | None:
+    """Per corpus campaign: for each non-compliant consumer with `reads`, (a) files its reads
+    match that the resolved corpus lacks, (b) corpus files of its kinds its reads miss. An
+    extra `consumers` row (owed, never a failure); None when nothing differs or the corpus
+    did not resolve (``doc`` is the TOC document `_corpus_findings` already built, or None;
+    the `corpus` row reports an invalid declaration)."""
+    if doc is None or not doc.get("valid", False):
+        return None
+    in_corpus = {f["path"] for k in doc["kinds"].values() for f in k.get("files", [])}
+    on_disk = None
+    parts: list[str] = []
+    for c in consumers:
+        if not c.reads:
+            continue
+        if on_disk is None:
+            on_disk = _campaign_files(ref.path)
+        matched = {p for p in on_disk if any(_glob_match(p, r) for r in c.reads)}
+        outside = sorted(matched - in_corpus)
+        missed = sorted(
+            f["path"] for kind in c.kinds
+            for f in (_toc.files_for(doc, kind) or [])
+            if not any(_glob_match(f["path"], r) for r in c.reads)
+        )
+        for label, files in (
+            ("reads outside the corpus", outside), ("corpus files it does not read", missed),
+        ):
+            if files:
+                more = f" (+{len(files) - _SHOWN} more)" if len(files) > _SHOWN else ""
+                parts.append(f"{c.name} {label}: {', '.join(files[:_SHOWN])}{more}")
+    if not parts:
+        return None
+    return ConformanceRow(
+        ref.name, "consumers", State.CONSUMERS_OWED, observed=str(len(parts)),
+        note="OWED: " + " | ".join(parts),
+    )
+
+
 def check_dir(
     campaign_dir, *, runner: MempalaceRunner | None = None, entity=None,
     check_index: bool = True,
@@ -353,11 +618,17 @@ def check_dir(
     from pathlib import Path
 
     from hypostasis import config as _config
+    from mneme.corpus.config import CORPUS_REFUSAL
 
     from . import authority as _auth
     from .discover import CampaignRef, _existing_wing_dirs
 
     cdir = Path(campaign_dir)
+    if has_corpus(cdir):
+        # 007: wing_dirs of a corpus campaign is its root; a wing-model check would be a lie.
+        return ConformanceReport(rows=(
+            ConformanceRow(cdir.name, "recipe", State.INVALID_CONFIG, note=CORPUS_REFUSAL),
+        ))
     ref = CampaignRef(
         name=cdir.name,
         path=cdir,
@@ -387,14 +658,24 @@ def report(
     else:
         refs = _discover.discover(entity)
     rows: list[ConformanceRow] = []
+    docs: dict = {}  # campaign path -> its TOC document (names repeat across roots), resolved once
     for ref in refs:
-        rows.extend(_campaign_rows(ref, recipe, runner, entity, prober))
+        rows.extend(_campaign_rows(ref, recipe, runner, entity, prober, docs=docs))
+    fleet, consumers = _consumers_fleet_row()
+    rows.append(fleet)
+    for ref in refs:
+        if consumers and has_corpus(ref.path):
+            diff = _consumers_campaign_row(ref, consumers, docs.get(ref.path))
+            if diff is not None:
+                rows.append(diff)
     return ConformanceReport(rows=tuple(rows))
 
 
 def format_row(row: ConformanceRow) -> str:
     if row.state in FAIL_STATES:
         flag = "FAIL"
+    elif row.state in (State.CORPUS_UNDECLARED, State.CONSUMERS_OWED):
+        flag = "todo"  # owed work: neither green nor a failure
     elif not row.ok:
         flag = "??  "  # unverified: not ok, but not a (non-strict) failure
     else:

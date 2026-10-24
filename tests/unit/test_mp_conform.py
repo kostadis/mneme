@@ -51,7 +51,7 @@ def test_missing_config_is_reported_not_failed(tmp_path):
 def test_version_behind_is_pending_upgrade(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
     auth = root / "full" / ".mneme" / "mempalace.yaml"
-    auth.write_text(auth.read_text().replace('recipe_version: "2.0.0"', 'recipe_version: "0.9.0"'))
+    auth.write_text(auth.read_text().replace('recipe_version: "3.0.0"', 'recipe_version: "0.9.0"'))
     report = conform.report(entity_for(root), campaign="full", runner=runner_clean())
     recipe_row = next(r for r in report.for_campaign("full") if r.dimension == "recipe")
     assert recipe_row.state == State.DIVERGENT_PENDING
@@ -63,7 +63,7 @@ def test_undispositioned_scaffold_is_a_failure(tmp_path):
     # Replace full's wings with a non-standard single wing + no disposition for it.
     auth = root / "full" / ".mneme" / "mempalace.yaml"
     auth.write_text(
-        'campaign: full\nrecipe_version: "2.0.0"\n'
+        'campaign: full\nrecipe_version: "3.0.0"\n'
         "wings:\n  - {name: weird, source: '.', trust: reference, rooms: []}\n"
     )
     report = conform.report(entity_for(root), campaign="full", runner=runner_clean())
@@ -77,7 +77,7 @@ def test_deliberate_disposition_clears_the_failure(tmp_path):
     root = make_campaigns(tmp_path / "campaigns")
     auth = root / "full" / ".mneme" / "mempalace.yaml"
     auth.write_text(
-        'campaign: full\nrecipe_version: "2.0.0"\n'
+        'campaign: full\nrecipe_version: "3.0.0"\n'
         "wings:\n  - {name: weird, source: '.', trust: reference, rooms: []}\n"
         "dispositions:\n  - {divergence: scaffold.nomatch, kind: deliberate, "
         "rationale: 'single-wing on purpose', recorded: '2026-06-25'}\n"
@@ -98,3 +98,17 @@ def test_invalid_config_isolated_in_report(tmp_path):
     assert bad.state == State.INVALID_CONFIG and bad.ok is False
     # full still reported fine alongside
     assert _states(report, "full")["recipe"] == State.CONFORMANT
+
+
+def test_status_never_writes_the_former_wings_record(tmp_path):
+    """`mp status` is read-only (007 B2): only refresh records the wings for prune's guard."""
+    from mneme.mempalace import authority, former_wings
+
+    mp = tmp_path / "mp"
+    root = make_campaigns(tmp_path / "campaigns")
+    add_store_pointer(root)
+    ent = entity_for(root, mempalace=mp)
+    cfg = authority.load(root / "full", mempalace_root=mp)
+    cfg.store.path.mkdir(parents=True)
+    conform.report(ent, campaign="full", runner=runner_clean())
+    assert former_wings.read(cfg.store.path) is None

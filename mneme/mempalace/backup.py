@@ -18,15 +18,20 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
+from mneme.corpus import config as _cconfig
+from mneme.corpus import resolve as _cresolve
+from mneme.corpus.config import has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
 from . import embedder_guard as _guard
+from . import former_wings as _former
 from . import health as _health
 from . import mine_record as _mine_record
 from . import provision as _provision
+from . import recipe as _recipe
 from .models import FAIL_STATES, BindingsBackup, ConformanceRow, State
-from .runner import MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner, StoreKind, store_state
 
 MARKER = ".mneme-backup"  # labels a backup dir as derived/disposable
 
@@ -268,12 +273,44 @@ def regenerate(
     ref = _discover.resolve(entity, campaign, campaign_dir)
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     store = _authority.require_store(cfg).path
+    if (state := store_state(Path(store))).kind is StoreKind.BROKEN:
+        raise MempalaceError(f"{state.reason} — nothing was deleted")
+    runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
+    if has_corpus(ref.path):
+        # 007 T032: validate BEFORE the store is deleted (a bad declaration or an old
+        # mempalace must not cost the user their palace), then first-mine through the corpus.
+        try:
+            rec = _recipe.load(cfg.recipe_version)
+            ccfg = _cconfig.load(ref.path, rec)
+        except (_recipe.RecipeError, _cconfig.CorpusConfigError) as e:
+            raise MempalaceError(f"{e} — nothing was deleted") from None
+        resolved = _cresolve.resolve(ccfg, ref.path, rec)
+        if not resolved.valid:
+            why = "; ".join(f.line() for f in resolved.findings)
+            raise MempalaceError(f"invalid corpus ({why}) — nothing was deleted")
+        if not runner.supports_corpus():
+            raise MempalaceError(f"{runner.too_old_message()} — nothing was deleted")
     # GH #26: verify the embedder answers BEFORE deleting — else a down endpoint leaves
     # the user with no store and a failed mine.
     _guard.require_embedder_answers(entity, prober)
     if store.is_dir():
         shutil.rmtree(store)
-    runner = runner or MempalaceRunner.for_entity(entity, stream=verbose)
     # store was just cleared ⇒ the GH #26 guard sees EMPTY and allows (this IS the remedy).
-    return _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
+    warn = None
+    if has_corpus(ref.path):
+        # GM 2026-10-24: a store rebuilt from the corpus provably holds no former wings —
+        # recorded now it is empty, so a failed rebuild still leaves it.
+        warn = _former.try_record_empty(store, cfg.campaign)
+    try:
+        fm = _provision.first_mine(cfg, ref.path, runner, entity=entity, prober=prober)
+    except (MempalaceError, OSError, _authority.AuthorityError, _discover.DiscoveryError) as e:
+        # the record warning must still reach cli.regenerate, whatever stopped the rebuild
+        if warn:
+            e.record_warning = "; ".join(
+                w for w in (getattr(e, "record_warning", None), warn) if w
+            )
+        raise
+    if warn:
+        fm.record_warning = "; ".join(w for w in (fm.record_warning, warn) if w)
+    return fm
 

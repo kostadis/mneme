@@ -10,10 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from hypostasis.models import ConfigEntity
+from mneme.corpus.config import has_corpus
 
 from . import authority as _authority
 from . import embedder_guard as _guard
 from . import mine_record as _record
+from . import recipe as _recipe
+from .corpus_mine import mine_corpus
 from .mine_report import SkipNotice, WingSkips
 from .models import CampaignMempalaceConfig
 from .runner import MempalaceError, MempalaceRunner
@@ -25,13 +28,16 @@ class FirstMine(tuple):
 
     skips: WingSkips
     record_warning: str | None
+    warnings: tuple[str, ...]  # 007: the corpus mine's WARN lines (no skip list, TOC, record)
 
     def __new__(
-        cls, store: Path, mined: list[str], skips: WingSkips = (), record_warning: str | None = None
+        cls, store: Path, mined: list[str], skips: WingSkips = (),
+        record_warning: str | None = None, warnings: tuple[str, ...] = (),
     ):
         obj = super().__new__(cls, (store, mined))
         obj.skips = tuple(skips)
         obj.record_warning = record_warning
+        obj.warnings = tuple(warnings)
         return obj
 
 
@@ -51,6 +57,14 @@ def first_mine(
     GH #31: on a real, successful run the aggregated skips are recorded in the store."""
     store = _authority.require_store(cfg)
     _guard.require_writable(entity, store.path, prober)
+    if has_corpus(campaign_dir):  # 007: never mine a corpus campaign by wings
+        res = mine_corpus(
+            campaign_dir, cfg.campaign, store.path, runner,
+            _recipe.load(cfg.recipe_version), dry_run=dry_run,
+        )
+        return FirstMine(
+            store.path, res.mined, res.skips, res.record_warning, tuple(res.warnings)
+        )
     mined: list[str] = []
     wing_names: list[str] = []
     skips: list[tuple[str, SkipNotice]] = []

@@ -12,7 +12,9 @@ import re
 from dataclasses import dataclass
 
 KINDS = (
-    "chunk_cap", "purge_failed", "symlink", "not_regular", "too_large", "stat_error", "other",
+    "chunk_cap", "purge_failed", "symlink", "not_regular", "too_large", "stat_error",
+    "missing", "unsupported_ext", "outside_dir", "too_short", "excluded", "limit",
+    "write_failed", "failed", "other",
 )
 
 _CHUNK_RE = re.compile(
@@ -26,10 +28,13 @@ _PURGE_RE = re.compile(
 # Exact emitters (current kostadis-dev): miner.py:2312 / convo_miner.py:626 (symlink),
 # miner.py:2330 / convo_miner.py:642 (not a regular file), miner.py:2337-2338 /
 # convo_miner.py:649-650 (`(X.X MB) exceeds N MB limit`), miner.py:2349 / convo_miner.py:659
-# (stat error). The 46fcfc2 pin has no `SKIP:` lines at all.
+# (stat error); and the `--files-from` filter, cli/cmd_mine.py:_prepare_files_from, which also
+# prints `missing`, `unsupported extension .X` and `outside the mined directory` (the label is
+# the path as listed). The 46fcfc2 pin has no `SKIP:` lines at all.
 _SKIP_RE = re.compile(
     r"^\s*SKIP:\s+(?P<name>.+?)\s+\("
-    r"(?P<why>symlink|not a regular file|(?P<mb>[\d.]+) MB|stat error: .*?)\)"
+    r"(?P<why>symlink|not a regular file|missing|unsupported extension .*?"
+    r"|outside the mined directory|(?P<mb>[\d.]+) MB|stat error: .*?)\)"
     r"(?P<tail>\s+exceeds\s+(?P<limit>\d+)\s+MB\s+limit)?\s*$"
 )
 _SUMMARY_RE = re.compile(r"^\s*Files skipped \(chunk cap (?P<cap>\d+)\):\s+(?P<k>\d+)")
@@ -52,6 +57,12 @@ def _skip_kind(why: str, limit: str | None = None) -> tuple[str, str]:
         return "not_regular", "not a regular file"
     if why.startswith("stat error"):
         return "stat_error", why
+    if why == "missing":
+        return "missing", "file not found"
+    if why.startswith("unsupported extension"):
+        return "unsupported_ext", why
+    if why == "outside the mined directory":
+        return "outside_dir", why
     if re.fullmatch(r"[\d.]+ MB", why):
         over = f"over the {limit} MB limit" if limit else "over the size limit"
         return "too_large", f"{why}, {over}"

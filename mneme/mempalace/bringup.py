@@ -14,16 +14,19 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
+from mneme.corpus import config as _cconfig
+from mneme.corpus import resolve as _cresolve
 
 from . import authority as _authority
 from . import bootstrap as _bootstrap
 from . import discover as _discover
 from . import embedder_guard as _guard
+from . import former_wings as _former
 from . import provision as _provision
 from . import recipe as _recipe
 from . import render as _render
-from .models import BringUpReport, BringUpStep, StorePointer
-from .runner import MempalaceError, MempalaceRunner
+from .models import BringUpReport, BringUpStep, CampaignMempalaceConfig, StorePointer
+from .runner import MempalaceError, MempalaceRunner, StoreKind, store_state
 
 
 def default_config_json(mempalace_root: Path | None = None) -> Path:
@@ -43,10 +46,29 @@ def _plan_config(campaign: str, campaign_dir: Path, recipe, mempalace_root: Path
         cfg = _authority.load(campaign_dir, mempalace_root=mempalace_root)
         if cfg.store is None:
             cfg = replace(cfg, store=_default_store(campaign, mempalace_root))
+    elif _cconfig.has_corpus(campaign_dir):
+        # 007: the corpus file declares the wings, so the authority carries none (FR-001a).
+        # Its `campaign:` must equal corpus.yaml's (rule 1), so take the name from there.
+        name = _corpus_campaign(campaign_dir) or campaign
+        cfg = CampaignMempalaceConfig(
+            campaign=name, recipe_version=recipe.version, wings=(),
+            store=_default_store(name, mempalace_root),
+        )
     else:
         cfg = _bootstrap.starter_config(campaign, campaign_dir, recipe)
         cfg = replace(cfg, store=_default_store(campaign, mempalace_root))
     return cfg
+
+
+def _corpus_campaign(campaign_dir: Path) -> str | None:
+    import yaml
+
+    try:
+        raw = yaml.safe_load(_cconfig.corpus_path(campaign_dir).read_text())
+    except (OSError, yaml.YAMLError):
+        return None
+    name = str(raw.get("campaign") or "").strip() if isinstance(raw, dict) else ""
+    return name or None
 
 
 def bringup(
@@ -70,6 +92,27 @@ def bringup(
     steps: list[BringUpStep] = []
     cfg = _plan_config(campaign, ref.path, rec, mp_root)  # in-memory; no write yet
 
+    if (state := store_state(Path(cfg.store.path))).kind is StoreKind.BROKEN:
+        problem = state.reason
+        steps.append(BringUpStep("configure", "skipped", note=f"nothing written: {problem}"))
+        steps.append(BringUpStep("first_mine", "failed", note=problem))
+        return BringUpReport(campaign, tuple(steps))
+
+    resolved = None
+    if _cconfig.has_corpus(ref.path):  # 007: an invalid declaration writes nothing (dry run too)
+        try:
+            vrec = _recipe.load(cfg.recipe_version)  # the recipe the authority carries
+            ccfg = _cconfig.load(ref.path, vrec)
+            resolved = _cresolve.resolve(ccfg, ref.path, vrec)  # the disk too, like regenerate
+            why = "; ".join(f.line() for f in resolved.findings) if not resolved.valid else ""
+        except (_recipe.RecipeError, _cconfig.CorpusConfigError) as e:
+            why = str(e)
+        if why:
+            steps.append(BringUpStep("configure", "skipped", note="nothing written: bad corpus"))
+            steps.append(BringUpStep("first_mine", "failed", note=why))
+            return BringUpReport(campaign, tuple(steps))
+        rec = vrec  # one recipe serves validation, render and first_mine
+
     if dry_run:
         steps.append(
             BringUpStep("configure", "skipped", note=f"would configure; store={cfg.store.alias}")
@@ -89,6 +132,14 @@ def bringup(
     steps.append(
         BringUpStep("configure", "ok", observed=f".mneme/mempalace.yaml; store={cfg.store.alias}")
     )
+    store_existed = Path(cfg.store.path).is_dir()
+    record_warning = None
+    if _cconfig.has_corpus(ref.path) and not store_existed:
+        # GM 2026-10-24: a store first built from the corpus holds no former wings — recorded
+        # now, so a failed first mine (or a re-run) still leaves it. An EXISTING store (maybe
+        # with old wings) is left alone, so prune stays fail-closed.
+        record_warning = _former.try_record_empty(cfg.store.path, cfg.campaign)
+    # the render re-resolves AFTER its own deletes/rewrites, so the TOC snapshot is current
     _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 
@@ -97,10 +148,13 @@ def bringup(
         store_path, mined = fm
     except MempalaceError as e:
         steps.append(BringUpStep("first_mine", "failed", note=str(e)))
-        warns = (e.record_warning,) if getattr(e, "record_warning", None) else ()
+        warns = tuple(
+            w for w in (record_warning, getattr(e, "record_warning", None)) if w
+        ) + tuple(getattr(e, "warnings", ()))
         return BringUpReport(  # not-ready (FR-008)
             campaign, tuple(steps), skips=tuple(getattr(e, "skips", ())), warnings=warns
         )
+    record_warning = "; ".join(x for x in (record_warning, fm.record_warning) if x) or None
     steps.append(BringUpStep("provision", "ok", observed=str(store_path)))
     steps.append(
         BringUpStep("first_mine", "ok", observed=f"mined: {', '.join(mined) or 'nothing yet'}")
@@ -113,7 +167,7 @@ def bringup(
         steps.append(BringUpStep("backup", "skipped", note="--no-backup"))
 
     return BringUpReport(campaign, tuple(steps), skips=tuple(fm.skips),
-        warnings=(fm.record_warning,) if fm.record_warning else (),
+        warnings=(*fm.warnings, *((record_warning,) if record_warning else ())),
     )
 
 

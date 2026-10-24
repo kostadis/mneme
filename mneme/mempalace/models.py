@@ -39,12 +39,22 @@ class MechanicalRules:
 
 
 @dataclass(frozen=True)
+class KindDef:
+    """A standard corpus kind (feature 007). Its name becomes the wing name."""
+
+    name: str
+    default_trust: str
+    rooms_hint: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Recipe:
     """The shared best practice — owned by mneme, versioned (FR-007/015)."""
 
     version: str
     mechanical: MechanicalRules
     scaffold: tuple[ScaffoldPattern, ...] = ()
+    kinds: tuple[KindDef, ...] = ()  # v3+; v1/v2 yield none (feature 007, R6)
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +163,23 @@ class State(StrEnum):
     # GH #31 — the last mine skipped named files (a known index gap). Like INDEX_UNVERIFIED:
     # not a FAIL state, rendered `??`, fails only under --strict.
     INDEX_GAPS = "index_gaps"
+    # 007 US2 — the `corpus` row's finding states (data-model § Corpus finding states).
+    # All but CORPUS_UNKNOWN are FAIL states; UNKNOWN behaves like INDEX_UNVERIFIED.
+    UNDECLARED_DRAWERS = "undeclared_drawers"
+    UNMINED = "unmined"
+    CORPUS_STALE = "corpus_stale"
+    WRONG_WING = "wrong_wing"
+    CORPUS_MISSING = "corpus_missing"
+    CORPUS_INVALID = "corpus_invalid"
+    TOC_STALE = "toc_stale"
+    OUT_OF_SCOPE = "out_of_scope"
+    CORPUS_UNKNOWN = "corpus_unknown"
+    # 007 US4 — a wing-model campaign that has not declared a corpus yet: owed work, never a
+    # failure (not in FAIL_STATES, not a --strict failure; GM decision 2026-10-23).
+    CORPUS_UNDECLARED = "corpus_undeclared"
+    # 007 US5 — non-compliant consumers of campaign files (FR-024): owed work, never a failure
+    # (not in FAIL_STATES, not a --strict failure).
+    CONSUMERS_OWED = "consumers_owed"
 
 
 # States that count as a genuine FAIL (non-zero exit). A deliberate, recorded
@@ -164,11 +191,21 @@ FAIL_STATES = frozenset(
         State.STALE_RENDER,
         State.EMBEDDER_MISMATCH,
         State.EMBEDDER_UNVERIFIED,
+        State.UNDECLARED_DRAWERS,
+        State.UNMINED,
+        State.CORPUS_STALE,
+        State.WRONG_WING,
+        State.CORPUS_MISSING,
+        State.CORPUS_INVALID,
+        State.TOC_STALE,
+        State.OUT_OF_SCOPE,
     }
 )
 
 # Not failures (exit 0) but never green: the index is unverified or has known gaps.
-_NOT_OK_STATES = frozenset({State.INDEX_UNVERIFIED, State.INDEX_GAPS})
+_NOT_OK_STATES = frozenset(
+    {State.INDEX_UNVERIFIED, State.INDEX_GAPS, State.CORPUS_UNKNOWN}
+)
 
 
 @dataclass(frozen=True)
@@ -198,7 +235,9 @@ class ConformanceReport:
             if r.state in FAIL_STATES:
                 return 1
             # strict = "the index must be verified fresh" (GH #22)
-            if strict and r.state in (State.STALE, State.INDEX_UNVERIFIED, State.INDEX_GAPS):
+            if strict and r.state in (
+                State.STALE, State.INDEX_UNVERIFIED, State.INDEX_GAPS, State.CORPUS_UNKNOWN,
+            ):
                 return 1
         return 0
 
@@ -266,6 +305,7 @@ class StoreState(StrEnum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     MISSING = "missing"
+    UNVERIFIED = "unverified"  # the probe could not run mempalace: unknown, not healthy
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,939 @@
+# Consumer inventory (feature 007, contracts/consumers-yaml.md).
+# Every known consumer of campaign files and how it picks them. GM-reviewed 2026-10-23:
+# seeded from a read-only code sweep (unreviewed model output), then each row confirmed,
+# corrected or dropped by the GM on the review page
+# https://claude.ai/artifact/5jtLz4tFuf8pvqMxKnx1dy and in chat (cg.npc_agent; the
+# gm-assistant batch row split into quest-log, social-encounter and statblock after a
+# real read; gm-module-inventory, gm-voice-reconstruction and cg.new_workspace dropped
+# as not consumers). `reads:` drafted from each consumer's code (unreviewed model output),
+# then approved row by row by the GM on the same page, 2026-10-24 (all 52 kept as drafted).
+# Edit this file to change classification; status never infers it.
+# mode: palace | toc (compliant) · partial · independent (non-compliant, owed work).
+schema: 1
+consumers:
+- name: cg.prep (session prep)
+  repo: CampaignGenerator
+  entry: pipelines/session_prep/prep.py:43-53
+  kinds:
+  - grounding
+  - party
+  mode: independent
+  via: Reads every doc listed in config.yaml documents[] (label to path).
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/mechanics.md
+  - docs/planning.md
+  - docs/party.md
+  other: every configured doc
+  note: documents[] is a second list of corpus files; converting it removes a second authority.
+  issue: kostadis/CampaignGenerator#593
+- name: cg.rlm.mcp_server — read_document / resources
+  repo: CampaignGenerator
+  entry: pipelines/rlm/mcp_server.py:88-97, 220-224
+  kinds:
+  - grounding
+  - party
+  mode: independent
+  via: config.yaml documents[] labels; falls back to hardcoded docs/party.md.
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/planning.md
+  - docs/mechanics.md
+  - docs/party.md
+  other: mechanics
+  issue: kostadis/CampaignGenerator#593
+- name: cg.rlm.mcp_server — search_document / list_sessions / notes
+  repo: CampaignGenerator
+  entry: pipelines/rlm/mcp_server.py:254-274, 293, 100, 364
+  kinds:
+  - summaries
+  - prep
+  mode: independent
+  via: Hardcoded campaign_dir/'summaries' and 'notes', then rglob *.md.
+  reads:
+  - docs/**/*.md
+  - summaries/**/*.md
+  - notes/**/*.md
+  - '**/*.md'
+  - summaries/*/session-summary.md
+  - summaries/*/summary.md
+  - summaries/*/gm-assist.md
+  - summaries/*/gm_assist.md
+  - summaries/*/gmassist.md
+  - summaries/*/plan.md
+  - summaries/*/scene_extractions/plan.md
+  - notes/**
+  other: docs/*
+  issue: kostadis/CampaignGenerator#593
+- name: cg.rlm.mcp_server — query_lore
+  repo: CampaignGenerator
+  entry: pipelines/rlm/mcp_server.py:546-552
+  kinds:
+  - summaries
+  mode: independent
+  via: Tries three hardcoded summaries.md paths in order.
+  reads:
+  - summaries.md
+  - summaries/summaries.md
+  - docs/summaries.md
+  other: narrative bible
+  issue: kostadis/CampaignGenerator#593
+- name: cg.rlm.mcp_server — mempalace tools
+  repo: CampaignGenerator
+  entry: pipelines/rlm/mcp_server.py:103-107, 428-530
+  kinds:
+  - npcs
+  - summaries
+  - party
+  - grounding
+  - prep
+  mode: palace
+  via: 'Mempalace search; wings come from config.yaml mempalace: (the search face).'
+  reads: []
+  note: Reads a single canon_wing today; needs canon_wings after 007 (research R8).
+  issue: kostadis/CampaignGenerator#593
+- name: cg.arc_triggers
+  repo: CampaignGenerator
+  entry: pipelines/grounding/arc_triggers.py:30, 93, 106
+  kinds: []
+  mode: partial
+  via: Mempalace search, then globs a hardcoded TRACKING_DIR; hardcoded MP_BIN at :31.
+  reads:
+  - docs/tracking/*.md
+  other: docs/tracking
+  issue: kostadis/CampaignGenerator#593
+- name: cg.dossier_proposer
+  repo: CampaignGenerator
+  entry: pipelines/rlm/dossier_proposer.py:30
+  kinds:
+  - npcs
+  mode: palace
+  via: Mempalace search against a hardcoded palace path.
+  reads: []
+  note: Hardcoded palace path is a separate Principle II problem.
+  issue: kostadis/CampaignGenerator#593
+- name: cg.grounding CLIs (campaign_state, distill, party, planning)
+  repo: CampaignGenerator
+  entry: pipelines/grounding/campaign_state.py:22, 296; planning.py:396, 831; party.py:221
+  kinds:
+  - summaries
+  - npcs
+  - grounding
+  mode: independent
+  via: CLI args (summaries.md, --context, --output); planning globs --dossier-dir/*.md, default docs/npcs/distilled/.
+  reads:
+  - summaries.md
+  - docs/npcs/distilled/*.md
+  - docs/ensemble/drafts/world_state_draft.md
+  - docs/ensemble/threads.md
+  - docs/campaign_state.md
+  - docs/party.md
+  issue: kostadis/CampaignGenerator#593
+- name: cg.event_spine / thread_registry
+  repo: CampaignGenerator
+  entry: pipelines/grounding/event_spine.py:127, 184; thread_registry.py:124
+  kinds:
+  - summaries
+  mode: independent
+  via: Glob passed as --corpus GLOB.
+  reads:
+  - docs/ensemble/per_chapter/*/merged.json
+  other: per-chapter corpus
+  issue: kostadis/CampaignGenerator#593
+- name: cg.grounding_sections
+  repo: CampaignGenerator
+  entry: pipelines/grounding/grounding_sections.py:16, 133, 143, 153
+  kinds:
+  - party
+  - npcs
+  - grounding
+  mode: independent
+  via: Prefix globs plus --tracking-glob.
+  reads:
+  - docs/ensemble/merged_dossiers/*.md
+  - docs/ensemble/state_dossiers/*.md
+  - docs/ensemble/events.jsonl
+  - docs/thread_registry.yaml
+  - docs/ensemble/thread_proposals.yaml
+  - docs/tracking*.txt
+  - docs/party.md
+  - docs/planning_notes.md
+  - notes/thread_speculations.md
+  - docs/ensemble/narrative_importance.yaml
+  other: planning notes
+  issue: kostadis/CampaignGenerator#593
+- name: cg.summary_native (build/extract/synth/key_npcs/npc_publish/notes)
+  repo: CampaignGenerator
+  entry: pipelines/summary_native/key_npcs.py:201; notes.py:69; pointers.py:52-56; npc_publish.py:384
+  kinds:
+  - summaries
+  - npcs
+  mode: independent
+  via: --summaries-dir (usually docs/summaries) plus glob *.md; docs/npcs hardcoded via schema constants
+    (schema.py:147-153).
+  reads:
+  - docs/summaries/*.md
+  - docs/npcs/*.md
+  - docs/npcs/authored/*.md
+  - docs/npcs/distilled/*.md
+  - docs/summary_native/**
+  issue: kostadis/CampaignGenerator#593
+- name: cg.npc_agent CLI
+  repo: CampaignGenerator
+  entry: pipelines/npc_agent/cli.py:111-117, 874; corpus.py:278
+  kinds:
+  - summaries
+  - npcs
+  mode: independent
+  via: Probes summaries/+npcs/, then docs/summaries/+docs/npcs/, then globs *.md.
+  reads:
+  - summaries/*.md
+  - npcs/*.md
+  - docs/summaries/*.md
+  - docs/npcs/*.md
+  issue: kostadis/CampaignGenerator#593
+- name: cg.campaignlib.npc (alias map, dossier guard)
+  repo: CampaignGenerator
+  entry: campaignlib/npc.py:51-75, 277
+  kinds:
+  - npcs
+  mode: independent
+  via: Globs docs/npcs/*.md; checks the docs/npcs layout by directory names.
+  reads:
+  - docs/npcs/distilled/*.md
+  - docs/entity_registry.yaml
+  issue: kostadis/CampaignGenerator#593
+- name: cg.grounding_bundle
+  repo: CampaignGenerator
+  entry: campaignlib/grounding_bundle.py:27-30, 407
+  kinds:
+  - grounding
+  - party
+  mode: independent
+  via: Four grounding filenames hardcoded; open_grounding_snapshot at :407.
+  reads:
+  - docs/world_state.md
+  - docs/campaign_state.md
+  - docs/party.md
+  - docs/planning.md
+  - docs/canon_events_timeline.md
+  - docs/reference/**
+  - docs/grounding/**
+  note: A second authority for which files are grounding.
+  issue: kostadis/CampaignGenerator#593
+- name: cg.session_doc CLIs (enhance_summary, scene_extract, sd_narrate, sd_plan, sd_agent, sd_consistency)
+  repo: CampaignGenerator
+  entry: session_doc/sd_narrate.py:555; scene_extract.py:18, 301; sd_consistency.py:38
+  kinds:
+  - party
+  - npcs
+  - grounding
+  mode: independent
+  via: CLI args; callers pass hardcoded docs/party.md.
+  reads:
+  - summaries/*/session-summary.md
+  - summaries/*/gm-assist.md
+  - docs/party.md
+  - config/party.yaml
+  - config/players.yaml
+  - config/session_doc.yaml
+  - docs/npcs/*.md
+  - docs/entity_registry.yaml
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/chapters/*.md
+  - docs/dossier_proposal.md
+  - summaries/*/scene_extractions*/*.md
+  - summaries/*/plan.md
+  issue: kostadis/CampaignGenerator#593
+- name: cg.check_consistency
+  repo: CampaignGenerator
+  entry: session_doc/check_consistency.py:9, 70
+  kinds:
+  - grounding
+  - party
+  mode: independent
+  via: config.yaml plus CLI args; registry path hardcoded.
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/entity_registry.yaml
+  other: entity_registry.yaml
+  note: Registry path taken from the consistency-check skill text, not verified in this file.
+  issue: kostadis/CampaignGenerator#593
+- name: cg.server ensemble router
+  repo: CampaignGenerator
+  entry: server/routers/ensemble.py:69-72, 344-361, 554-555
+  kinds:
+  - grounding
+  - party
+  - npcs
+  mode: independent
+  via: Hardcoded map of the four docs; globs npc_glob and cfg.paths.corpus_glob.
+  reads:
+  - docs/world_state.md
+  - docs/campaign_state.md
+  - docs/party.md
+  - docs/planning.md
+  - docs/ensemble/drafts/*.md
+  - docs/ensemble/merged_dossiers/npc_*.md
+  - docs/ensemble/state_dossiers/*.md
+  - docs/ensemble/per_chapter/*/merged.json
+  - docs/chapters/chapter_*.md
+  other: corpus
+  issue: kostadis/CampaignGenerator#593
+- name: cg.server scene_editor router
+  repo: CampaignGenerator
+  entry: server/routers/scene_editor.py:1389-1391
+  kinds:
+  - party
+  mode: independent
+  via: Hands the synthesized party.md path to scene_extract.
+  reads:
+  - docs/party.md
+  - config/party.yaml
+  - config/players.yaml
+  - config/session_doc.yaml
+  issue: kostadis/CampaignGenerator#593
+- name: cg.server platform_config_service
+  repo: CampaignGenerator
+  entry: server/platform_config_service.py:1137-1190
+  kinds:
+  - grounding
+  - party
+  - summaries
+  - npcs
+  mode: independent
+  via: Probes whether the four docs exist, tries summaries.md / all_summaries.md / docs/summaries.md,
+    globs docs/npcs/distilled/*.md.
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/party.md
+  - docs/planning.md
+  - summaries.md
+  - all_summaries.md
+  - docs/summaries.md
+  - docs/npcs/distilled/*.md
+  - config/party.yaml
+  - summaries/*/gm-assist.md
+  - summaries/*/gm_assist.md
+  - summaries/*/gmassistant.md
+  - summaries/*/recap.md
+  - voice
+  - examples
+  issue: kostadis/CampaignGenerator#593
+- name: cg.kanka (sync/push/mcp)
+  repo: CampaignGenerator
+  entry: pipelines/integrations/kanka/kanka_push.py:42
+  kinds:
+  - grounding
+  mode: independent
+  via: CLI --input, documented as docs/world_state.md.
+  reads:
+  - docs/world_state.md
+  issue: kostadis/CampaignGenerator#593
+- name: cg.migrate_grounding_bundle / migrate_npc_dossiers
+  repo: CampaignGenerator
+  entry: server/migrate_npc_dossiers.py, server/migrate_grounding_bundle.py
+  kinds:
+  - grounding
+  - npcs
+  mode: independent
+  via: Hardcoded; one-time migration tools.
+  reads:
+  - docs/npcs/**
+  - docs/npcs/migration_classification.yaml
+  - docs/world_state.md
+  - docs/campaign_state.md
+  - docs/party.md
+  - docs/planning.md
+  - docs/canon_events_timeline.md
+  - docs/reference/**
+  - config/config.yaml
+  - config/grounding.yaml
+  - config/planning.yaml
+  note: Probably out of scope.
+  issue: kostadis/CampaignGenerator#593
+- name: skill.campaign-prep
+  repo: ~/.claude/skills
+  entry: campaign-prep/SKILL.md:23-26
+  kinds:
+  - grounding
+  - party
+  mode: independent
+  via: Four hardcoded paths; mempalace only as a fallback (:47).
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/planning.md
+  - docs/party.md
+  issue: kostadis/mytools#87
+- name: skill.campaign-chapter-review
+  repo: ~/.claude/skills
+  entry: campaign-chapter-review/SKILL.md:20-23
+  kinds:
+  - grounding
+  - party
+  - summaries
+  mode: independent
+  via: Hardcoded CAMPAIGN_ROOT/docs/*.md.
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/party.md
+  - docs/planning.md
+  - voice/*.md
+  - examples/*.md
+  - summaries/*/*.md
+  issue: kostadis/mytools#87
+- name: skill.consistency-check
+  repo: ~/.claude/skills
+  entry: consistency-check/SKILL.md:68, 113-130, 177-179
+  kinds:
+  - grounding
+  - party
+  - prep
+  - npcs
+  mode: independent
+  via: Config for canon; ls/find/grep sweep of notes/ that the GM confirms.
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/entity_registry.yaml
+  - docs/party.md
+  - notes/vtt_transcription_corrections.md
+  - notes/vtt_known_additions.md
+  - notes/session_prep/*.md
+  - notes/sessions/**
+  - notes/prep/*
+  - notes/canon/*
+  - notes/threads/*
+  - notes/npcs/*
+  - docs/npcs/*.md
+  - notes/handouts/*
+  - notes/*.md
+  - docs/planning.md
+  - docs/recent_events.md
+  - docs/chapters/*.md
+  - summaries/*/gm-assist.md
+  - summaries/*/session-summary.md
+  - config/config.yaml
+  other: notes/vtt_* glossaries
+  issue: kostadis/mytools#87
+- name: skill.staged-consistency
+  repo: ~/.claude/skills
+  entry: staged-consistency/SKILL.md:43-57
+  kinds:
+  - summaries
+  - grounding
+  - party
+  - prep
+  mode: independent
+  via: ls -t summaries/ plus hardcoded docs.
+  reads:
+  - docs/entity_registry.yaml
+  - docs/party.md
+  - notes/vtt_transcription_corrections.md
+  - notes/vtt_known_additions.md
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/chapters/*.md
+  - notes/session_prep/*.md
+  - notes/sessions/**
+  - summaries/*/gm-assist.md
+  - summaries/*/gm-assist-update.md
+  - summaries/*/session-summary.md
+  - summaries/*/scene_extractions/*.md
+  - summaries/*/scene_extractions_new/*.md
+  - summaries/*/narration/*.md
+  - summaries/*/consistency_*stage*.sources.yaml
+  - summaries/*/.cg/activity.jsonl
+  - config/config.yaml
+  issue: kostadis/mytools#87
+- name: skill.gmassist-precheck
+  repo: ~/.claude/skills
+  entry: gmassist-precheck/SKILL.md:20-33
+  kinds:
+  - summaries
+  - party
+  mode: independent
+  via: ls -t summaries/, --party docs/party.md.
+  reads:
+  - summaries/*/gm-assist.md
+  - docs/party.md
+  issue: kostadis/mytools#87
+- name: skill.scene-extract
+  repo: ~/.claude/skills
+  entry: scene-extract/SKILL.md:19-24, 128
+  kinds:
+  - summaries
+  - party
+  - npcs
+  mode: independent
+  via: ls -t summaries/ plus hardcoded paths.
+  reads:
+  - summaries/*/session-summary.md
+  - docs/party.md
+  - config/party.yaml
+  - config/players.yaml
+  - config/session_doc.yaml
+  - summaries/*/players.session.yaml
+  issue: kostadis/mytools#87
+- name: skill.session-doc-run
+  repo: ~/.claude/skills
+  entry: session-doc-run/SKILL.md
+  kinds:
+  - party
+  mode: independent
+  via: Hardcoded.
+  reads:
+  - docs/party.md
+  - config/party.yaml
+  - config/players.yaml
+  - config/session_doc.yaml
+  - summaries/*/gm-assist.md
+  - summaries/*/players.session.yaml
+  issue: kostadis/mytools#87
+- name: skill.grounding-refresh
+  repo: ~/.claude/skills
+  entry: grounding-refresh/SKILL.md:39, 62-75
+  kinds:
+  - summaries
+  - grounding
+  - prep
+  mode: independent
+  via: Hardcoded --summaries-dir docs/summaries.
+  reads:
+  - docs/summaries/*.md
+  - docs/summary_native/**
+  - docs/thread_registry.yaml
+  - docs/world_state.md
+  - docs/campaign_state.md
+  - docs/party.md
+  - docs/planning.md
+  - docs/canon_events_timeline.md
+  - docs/reference/**
+  - docs/grounding/**
+  - docs/entity_registry.yaml
+  - docs/authority/**
+  - docs/reviews/**
+  - notes/session_prep/*
+  - notes/batch_rulings_*
+  - config/config.yaml
+  - config/grounding.yaml
+  - docs/grounding_patches.md
+  issue: kostadis/mytools#87
+- name: skill.chapter-enhance
+  repo: ~/.claude/skills
+  entry: chapter-enhance/SKILL.md:61-62
+  kinds:
+  - summaries
+  mode: independent
+  via: Glob / newest summaries/<date>.
+  reads:
+  - docs/chapters/chapter_*.md
+  - summaries/*/session-summary.md
+  - docs/chapter_provenance.md
+  - docs/entity_registry.yaml
+  - summaries/attempts/haiku/**
+  - summaries/attempts/dgx-deep-seek/**
+  - summaries/attempts/hand-edited/**
+  other: docs/chapters
+  issue: kostadis/mytools#87
+- name: skill.chapter-summarise
+  repo: ~/.claude/skills
+  entry: chapter-summarise/SKILL.md:95
+  kinds: []
+  mode: independent
+  via: Glob docs/chapters/chapter_*.md.
+  reads:
+  - docs/chapters/chapter_*.md
+  - docs/*.md
+  other: docs/chapters
+  note: Reads chapters, not a declared kind today.
+  issue: kostadis/mytools#87
+- name: skill.vtt-spell-pass
+  repo: ~/.claude/skills
+  entry: vtt-spell-pass/SKILL.md:66-73
+  kinds:
+  - summaries
+  - npcs
+  mode: independent
+  via: Glob summaries/*/[Gg][Mm][Tt]*.vtt; hardcoded docs/npcs/ and the notes glossary.
+  reads:
+  - summaries/*/[Gg][Mm][Tt]*.vtt
+  - notes/vtt_transcription_corrections.md
+  - docs/npcs/*.md
+  - docs/entity_registry.yaml
+  - docs/entity_inventory.md
+  - notes/proper_nouns_adventure.txt
+  - notes/vtt_known_additions.md
+  - notes/session_start_trims.json
+  - notes/.vtt_spell_pass_state.json
+  other: notes glossary, session VTTs
+  issue: kostadis/mytools#87
+- name: skill.session-summary-consistency
+  repo: ~/.claude/skills
+  entry: session-summary-consistency/SKILL.md:15-17, 42
+  kinds:
+  - summaries
+  mode: independent
+  via: Walks up from cwd to find the glossary; hardcoded.
+  reads:
+  - summaries/*/scene_extractions_new/*.md
+  - summaries/*/scene_extractions/*.md
+  - notes/vtt_transcription_corrections.md
+  - docs/entity_registry.yaml
+  - docs/entity_inventory.md
+  other: notes glossary
+  issue: kostadis/mytools#87
+- name: skill.voice-smooth
+  repo: ~/.claude/skills
+  entry: voice-smooth/SKILL.md:112
+  kinds:
+  - npcs
+  - prep
+  mode: independent
+  via: Hardcoded dirs (notes/session_prep/, notes/sessions/).
+  reads:
+  - summaries/*/scene_extractions/*.md
+  - summaries/*/scene_extractions_new/*.md
+  - config/party.yaml
+  - voice/*.md
+  - voice/_genre.md
+  - docs/npcs/*.md
+  - notes/session_prep/*
+  - notes/sessions/*
+  - notes/vtt_transcription_corrections.md
+  issue: kostadis/mytools#87
+- name: skill.scrub / no-mech
+  repo: ~/.claude/skills
+  entry: scrub/SKILL.md:104-107; no-mech/SKILL.md:105-110
+  kinds:
+  - party
+  - summaries
+  mode: independent
+  via: Hardcoded; 'most recent date'. Uses party.md to detect the campaign root.
+  reads:
+  - summaries/*/narration/session_doc_scene_*.md
+  - docs/party.md
+  - config/party.yaml
+  - config/players.yaml
+  - notes/scrub_register_policy.md
+  - notes/.scrub_state.json
+  - notes/scrub_protect.txt
+  - summaries/*/scene_extractions_smoothed/*.md
+  - summaries/*/plan.md
+  other: notes/ policy
+  issue: kostadis/mytools#87
+- name: skill.dossier-merge
+  repo: ~/.claude/skills
+  entry: dossier-merge/SKILL.md:16-25
+  kinds:
+  - npcs
+  mode: independent
+  via: Path given as an argument (usually docs/npcs/).
+  reads:
+  - docs/npcs/*.md
+  - docs/planning_extractions/*.md
+  - ui_config.yaml
+  other: docs/planning_extractions
+  issue: kostadis/mytools#87
+- name: skill.entity-triage / ensemble-alias-review / module-inventory / voice-critic
+  repo: ~/.claude/skills
+  entry: ensemble-alias-review/SKILL.md:118-120; voice-critic/SKILL.md:42
+  kinds:
+  - party
+  - grounding
+  mode: independent
+  via: Hardcoded; module-inventory reads grounding only as pointers.
+  reads:
+  - docs/entity_registry.yaml
+  - docs/party.yaml
+  - config/party.yaml
+  - docs/party.md
+  - docs/world_state.md
+  - docs/planning.md
+  - docs/npcs/*.md
+  - docs/ensemble/state_dossiers/*.md
+  - docs/ensemble/.alias_decisions.json
+  - docs/ensemble/aliases.json
+  - notes/vtt_transcription_corrections.md
+  - notes/vtt_known_additions.md
+  - voice/*.md
+  - examples/*.md
+  - config/session_doc.yaml
+  - summaries/*/narration/session_doc_scene_*.md
+  - docs/background/*glossary*.md
+  - docs/background/*inventory*.md
+  - docs/background/*
+  other: notes glossaries
+  note: Four skills in one row; split if they differ.
+  issue: kostadis/mytools#87
+- name: skill.voice-examples
+  repo: ~/.claude/skills
+  entry: voice-examples/SKILL.md:27-29
+  kinds:
+  - summaries
+  mode: independent
+  via: <campaign>/summaries/ plus glob chapter_*.md / summary_*.md.
+  reads:
+  - docs/chapters/chapter_*.md
+  - summaries/**/*.md
+  - summaries.md
+  - summary_*.md
+  issue: kostadis/mytools#87
+- name: skill.mempalace-campaign
+  repo: ~/.claude/skills
+  entry: mempalace-campaign/SKILL.md:35-70
+  kinds: []
+  mode: independent
+  via: Directory survey; it builds the mempalace.
+  reads: []
+  other: everything
+  note: A builder, not a reader. Probably 'not a consumer', or superseded by mneme.
+  issue: kostadis/mytools#87
+- name: skill.campaign-recall
+  repo: ~/.claude/skills
+  entry: campaign-recall/SKILL.md:33-44
+  kinds:
+  - summaries
+  mode: independent
+  via: zvec-grep index found from the cwd; picks no directory itself.
+  reads:
+  - summaries/*.md
+  note: The zg indexes found sit at campaigns-public campaign roots, so it may search the whole tree (inferred,
+    not checked).
+  issue: kostadis/mytools#88
+- name: gm.gm-session-prep
+  repo: gm-assistant
+  entry: gm-session-prep/SKILL.md:32-40
+  kinds:
+  - grounding
+  - party
+  - summaries
+  - npcs
+  mode: independent
+  via: Hardcoded plus 'latest 2' summaries/YYYYMMDD/; says not to depend on mempalace (:40).
+  reads:
+  - docs/gm_doctrine.md
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/party_state.md
+  - docs/party.md
+  - docs/background/**
+  - summaries/*/session-summary.md
+  - docs/npcs/*.md
+  other: party_state.md
+  note: Uses party_state.md or party.md.
+  issue: kostadis/campaigns#475
+- name: gm.gm-faction-network
+  repo: gm-assistant
+  entry: gm-faction-network/SKILL.md:30-33
+  kinds:
+  - grounding
+  - npcs
+  - summaries
+  mode: independent
+  via: Hardcoded; greps summaries/ for the place name.
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/npcs/*.md
+  - summaries/**/*.md
+  - docs/background/**
+  issue: kostadis/campaigns#475
+- name: gm.gm-npc-build
+  repo: gm-assistant
+  entry: gm-npc-build/SKILL.md:28-32
+  kinds:
+  - grounding
+  - npcs
+  - summaries
+  mode: independent
+  via: Hardcoded; reads 2-3 local dossiers.
+  reads:
+  - docs/world_state.md
+  - docs/campaign_state.md
+  - docs/npcs/*.md
+  - docs/background/**
+  - summaries/**/*.md
+  issue: kostadis/campaigns#475
+- name: gm.gm-strategy-doc
+  repo: gm-assistant
+  entry: gm-strategy-doc/SKILL.md:30-35
+  kinds:
+  - npcs
+  - grounding
+  - party
+  - summaries
+  mode: independent
+  via: Hardcoded plus grep of summaries.
+  reads:
+  - docs/npcs/*.md
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/party_state.md
+  - summaries/**/*.md
+  - docs/background/**
+  - notes/*_strategy.md
+  - notes/*_network.md
+  other: party_state.md
+  issue: kostadis/campaigns#475
+- name: gm.gm-handout
+  repo: gm-assistant
+  entry: gm-handout/SKILL.md:30-34
+  kinds:
+  - npcs
+  - grounding
+  - summaries
+  - prep
+  mode: independent
+  via: Hardcoded plus listing.
+  reads:
+  - docs/npcs/*.md
+  - notes/*_strategy.md
+  - docs/campaign_state.md
+  - summaries/**/*.md
+  - docs/background/**
+  - notes/handouts/*
+  other: notes/*_strategy.md, notes/handouts
+  issue: kostadis/campaigns#475
+- name: gm.gm-npc-voice
+  repo: gm-assistant
+  entry: gm-npc-voice/SKILL.md:21-28
+  kinds:
+  - npcs
+  - prep
+  mode: independent
+  via: Hardcoded.
+  reads:
+  - docs/npcs/*.md
+  - notes/*_strategy.md
+  other: notes/<slug>_strategy.md
+  issue: kostadis/campaigns#475
+- name: gm.gm-improv
+  repo: gm-assistant
+  entry: gm-improv/SKILL.md:33-35
+  kinds:
+  - grounding
+  - summaries
+  mode: independent
+  via: Hardcoded, 'latest'.
+  reads:
+  - docs/gm_doctrine.md
+  - docs/campaign_state.md
+  - summaries/*/session-summary.md
+  other: gm_doctrine
+  note: Public and private copies differ.
+  issue: kostadis/campaigns#475
+- name: gm.gm-quest-log
+  repo: gm-assistant
+  entry: gm-quest-log/SKILL.md:30-64, 117
+  kinds:
+  - summaries
+  - prep
+  - party
+  - grounding
+  mode: independent
+  via: Globs summaries/*/*.md and picks each dir's summary of record by its own rule (session-summary.md,
+    else session_YYYY_MM_DD_*.md, else gm-assist.md); notes/open.md, notes/session1_*.md; docs/party.md
+    + voice files; greps grounding docs for unresolved names only.
+  reads:
+  - summaries/*/session-summary.md
+  - summaries/*/session_????_??_??_*.md
+  - summaries/*/gm-assist.md
+  - summaries/old/**
+  - notes/open.md
+  - notes/session1_*.md
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/planning.md
+  - docs/party.md
+  - voice/*.md
+  - docs/chapters/*.md
+  - notes/handouts/*
+  other: docs/chapters, voice files
+  note: Explicitly does not read npcs dossiers or notes/*_strategy.md (:103). Public and private copies
+    differ in output naming and handouts dir (:137-139).
+  issue: kostadis/campaigns#475
+- name: gm.gm-social-encounter
+  repo: gm-assistant
+  entry: gm-social-encounter/SKILL.md:36, 59-63
+  kinds:
+  - npcs
+  - grounding
+  mode: independent
+  via: The NPC's docs/npcs/ dossier if any; docs/campaign_state.md for what just happened.
+  reads:
+  - docs/npcs/*.md
+  - notes/*_strategy.md
+  - notes/*_network.md
+  - docs/campaign_state.md
+  - summaries/*/session-summary.md
+  other: ~/src/mytools/flexai-social/RULES.md (not campaign material)
+  issue: kostadis/campaigns#475
+- name: gm.gm-statblock
+  repo: gm-assistant
+  entry: gm-statblock/SKILL.md:34, 42-47, 173
+  kinds:
+  - npcs
+  - party
+  - prep
+  mode: independent
+  via: docs/npcs/ dossier; docs/party_state.md to size CR; notes/{npc}_strategy.md and reflavored blocks
+    under notes/; writes notes/statblocks/.
+  reads:
+  - docs/npcs/*.md
+  - notes/*_strategy.md
+  - docs/party_state.md
+  - docs/background/**
+  - notes/**
+  note: Reads docs/party_state.md, which obelisk/toee/oota don't have (they use docs/party.md).
+  issue: kostadis/campaigns#475
+- name: gm.gm-npc-dossier-cleanup (public copy only)
+  repo: gm-assistant
+  entry: gm-npc-dossier-cleanup/SKILL.md:74, 107
+  kinds:
+  - npcs
+  - summaries
+  mode: independent
+  via: Hardcoded --summaries-dir docs/summaries.
+  reads:
+  - docs/summaries/*.md
+  - docs/npcs/summary_native/**
+  - docs/npcs/*.md
+  - docs/entity_registry.yaml
+  - docs/summary_native/**
+  - docs/reviews/**
+  - docs/authority/**
+  - config/grounding.yaml
+  - summaries/*/session-summary.md
+  issue: kostadis/campaigns#475
+- name: gm.phandalin-chapter-release / oota-chapter-release
+  repo: gm-assistant
+  entry: campaigns/.claude/skills/phandalin-chapter-release/SKILL.md:39, 75-174
+  kinds:
+  - npcs
+  - grounding
+  - summaries
+  mode: independent
+  via: Hardcoded; rebuilds and checks the mempalace.
+  reads:
+  - docs/NeverwinterExpansionismandtheNorth.md
+  - docs/TheUnderdark.md
+  - docs/ensemble/chapters.md
+  - docs/chapters/*.md
+  - docs/chapters/mempalace.yaml
+  - docs/distill_extractions/**
+  - docs/npcs/**
+  - docs/v2/npcs/**
+  - docs/ensemble/merged_dossiers/**
+  - MEMPALACE_HORIZON.md
+  - summaries/*/session-summary.md
+  - .mempalaceignore
+  note: Also drives the palace; may be partial.
+  issue: kostadis/campaigns#475

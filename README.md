@@ -98,6 +98,48 @@ The mneme-owned **recipe** is the enforceable counterpart of the campaigns repo'
 `MEMPALACE_HOWTO.md`; the same method is served on demand by `mneme mp mcp` (so an assistant
 loads it instead of you pasting docs). Design: `specs/002-manage-campaign-mempalaces/`.
 
+### Declared corpus (feature 007)
+
+A campaign can declare exactly which files are its corpus in `.mneme/corpus.yaml`, which
+replaces the wing model for that campaign. Nothing is mined that the file does not name.
+
+| In `corpus.yaml` | Meaning |
+|---|---|
+| `kinds:` (standard kinds) | each maps to `dirs:` (recursive) and/or `files:` (exact), campaign-relative |
+| `campaign_kinds:` | campaign-defined kinds; `trust:` is required (no default) |
+| `trust:` | optional override of the kind's default (`authoritative` / `reference`) |
+| `mined_as: true` | a file reachable from two kinds is mined as this declaration's kind |
+
+```bash
+mneme corpus init CAMPAIGN        # write a skeleton corpus.yaml (never overwrites)
+mneme corpus check CAMPAIGN       # validate the declaration against the disk
+mneme corpus toc CAMPAIGN [--kind K] [--json]   # resolve NOW and print (the consumer entry point)
+mneme corpus current CAMPAIGN     # what the palace actually holds, by file
+mneme corpus consumers [--noncompliant]   # known consumers of campaign files and their compliance
+```
+
+For a corpus campaign the `mp` commands behave differently:
+
+- `mp render` / `mp faces` derive the wings from the kinds, write the root `mempalace.yaml` and
+  the TOC snapshot, and remove wing-model renders.
+- `mp refresh` mines per kind from the resolved file list; nothing outside the corpus is mined.
+  A declared file mempalace skips stays an `unmined` finding, recorded with the skip reason and
+  the content hash it was skipped at. When the reason is one a refresh cannot fix (too short, too
+  large, excluded, unsupported type, bad path) status names its own remedy instead of `mp refresh`;
+  once the file's content changes, the remedy is `mp refresh` again (retry).
+- `mp status` adds a `corpus` row (the palace equals the declaration) and takes the `index` row
+  from that same comparison. A fleet-level `consumers` row counts non-compliant consumers; like
+  an undeclared corpus it is owed work, exit 0, never a failure (an invalid `consumers.yaml` is).
+- `mp prune` deletes undeclared and missing drawers (preview, then `--confirm --expect N`, backed
+  up, re-verified). Drawers of a former authoritative wing need `--include-former-canon WING`. A store rebuilt or first built from the corpus records
+  no former wings, so it needs no flag; migrate a campaign with `mp regenerate --confirm` (a
+  fresh rebuild, never an in-place conversion).
+- `mp regenerate --confirm` rebuilds the palace from the declared corpus.
+
+Consumers must ask `mneme corpus toc` (or the `corpus_files` MCP tool), which resolve the
+declaration fresh. They must never read `.mneme/corpus.toc.json`: it is a derived, git-ignored
+snapshot that status checks for staleness, not an interface.
+
 ## What hypostasis manages (the component model)
 
 | Component | Kind | hypostasis installs? | renders config? |

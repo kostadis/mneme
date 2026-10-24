@@ -14,14 +14,18 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
+from mneme.corpus.config import has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
 from . import embedder_guard as _guard
+from . import former_wings as _former
 from . import mine_record as _record
+from . import recipe as _recipe
+from .corpus_mine import CorpusMine, mine_corpus
 from .discover import CampaignRef
 from .mine_report import WingSkips, warning_lines
-from .runner import MempalaceError, MempalaceRunner
+from .runner import MempalaceError, MempalaceRunner, StoreKind, store_state
 
 
 @dataclass
@@ -34,10 +38,15 @@ class RefreshResult:
     dry_run: bool = False
     skips: WingSkips = ()  # GH #31: (wing, notice) pairs from this mine
     record_warning: str | None = None
+    corpus: CorpusMine | None = None  # 007: set for a corpus campaign
+    corpus_warnings: tuple[str, ...] = ()  # 007: a failed corpus mine's WARN lines
 
     def warnings(self) -> list[str]:
         """GH #31: one `WARN index gap` line per skipped file (never changes the outcome)."""
         lines = warning_lines(self.campaign, self.skips)
+        if self.corpus is not None:
+            lines.extend(self.corpus.warnings)
+        lines.extend(self.corpus_warnings)
         if self.record_warning:
             lines.append(self.record_warning)
         return lines
@@ -48,7 +57,14 @@ class RefreshResult:
         if self.failed:
             return f"{self.campaign:24} FAIL   {self.error}"
         verb = "PLAN" if self.dry_run else "OK"
-        return f"{self.campaign:24} {verb:6} mined: {', '.join(self.wings) or '(none)'}"
+        head = f"{self.campaign:24} {verb:6} mined: {', '.join(self.wings) or '(none)'}"
+        if self.corpus is None:
+            return head
+        extra = self.corpus.summary()
+        head += f"; {extra}" if extra else ""
+        if self.dry_run:  # the per-kind file lists; nothing is mined
+            return "\n".join([head, *self.corpus.detail_lines()])
+        return head
 
 
 def _guard_store(ref: CampaignRef, entity: ConfigEntity, prober):
@@ -63,8 +79,44 @@ def _guard_store(ref: CampaignRef, entity: ConfigEntity, prober):
         raise MempalaceError(
             "authority has no store pointer — cannot verify the palace; run `mneme mp bringup`"
         )
+    if (state := store_state(Path(cfg.store.path))).kind is StoreKind.BROKEN:
+        raise MempalaceError(state.reason)
     _guard.require_writable(entity, cfg.store.path, prober)
     return cfg
+
+
+def _refresh_corpus(ref, runner, dry_run, entity, prober, result: RefreshResult):
+    store: Path | None = None
+    campaign = ref.name
+    if entity is not None:
+        if not ref.has_authority:
+            result.skipped = True
+            result.error = "no mneme authority — run `mneme mp bringup`"
+            return result
+        try:
+            cfg = _guard_store(ref, entity, prober)
+            store, campaign = cfg.store.path, cfg.campaign
+            rec = _recipe.load(cfg.recipe_version)
+        except (MempalaceError, _recipe.RecipeError) as e:
+            result.failed = True
+            result.error = str(e)
+            return result
+    else:
+        rec = _recipe.current()
+    try:
+        res = mine_corpus(ref.path, campaign, store, runner, rec, dry_run=dry_run)
+    except MempalaceError as e:
+        result.failed = True
+        result.error = str(e)
+        result.skips = tuple(getattr(e, "skips", ()))
+        result.record_warning = getattr(e, "record_warning", None)
+        result.corpus_warnings = tuple(getattr(e, "warnings", ()))
+        return result
+    result.corpus = res
+    result.wings = res.mined
+    result.skips = res.skips
+    result.record_warning = res.record_warning
+    return result
 
 
 def _refresh_one(
@@ -75,10 +127,19 @@ def _refresh_one(
     prober=None,
 ) -> RefreshResult:
     result = RefreshResult(campaign=ref.name, dry_run=dry_run)
+    if has_corpus(ref.path):
+        # 007: a corpus campaign keeps a root mempalace.yaml, so wing_dirs would be the whole
+        # tree: never use the wing model here. Mine the declared files only.
+        return _refresh_corpus(ref, runner, dry_run, entity, prober, result)
     if not ref.wing_dirs:
         result.skipped = True
         return result
     store: Path | None = None
+    fw_warn: str | None = None
+
+    def _warn(new: str | None) -> str | None:
+        return "; ".join(w for w in (fw_warn, new) if w) or None
+
     names: dict[str, str] = {}  # wing source -> wing name (for the GH #31 record)
     if entity is not None and not ref.has_authority:
         # spec 002 US1: no configuration ⇒ skipped (not failed, not mined).
@@ -90,6 +151,8 @@ def _refresh_one(
             cfg = _guard_store(ref, entity, prober)
             store = cfg.store.path
             names = {(w.source or "."): w.name for w in cfg.wings}
+            if not dry_run:  # 007 FR-018a: remember the wings for prune's former-canon guard
+                fw_warn = _former.try_record(cfg)
         except MempalaceError as e:
             result.failed = True
             result.error = str(e)
@@ -110,13 +173,17 @@ def _refresh_one(
             result.error = str(e)
             result.skips = tuple(skips)  # earlier wings' skips are still real
             if store is not None and not dry_run:  # no stale "clean" record behind a failure
-                result.record_warning = _record.try_write(
+                result.record_warning = _warn(_record.try_write(
                     store, ref.name, wing_names, result.skips, status="failed", error=str(e)
-                )
+                ))
             return result
     result.skips = tuple(skips)
     if store is not None and not dry_run:  # GH #31: remember this mine's gaps for `mp status`
-        result.record_warning = _record.try_write(store, ref.name, wing_names, result.skips)
+        result.record_warning = _warn(
+            _record.try_write(store, ref.name, wing_names, result.skips)
+        )
+    else:
+        result.record_warning = _warn(None)
     return result
 
 
