@@ -2,7 +2,8 @@
 
 `config.py` says what the GM declared; this says what that declaration is on THIS checkout:
 which files exist, which are minable, which are merely not checked out here (sparse, R7),
-which are symlinks and where they really point (R5), which are gitignored, and which kind
+which are symlinks and where they really point (R5), which are gitignored (a named path is a
+finding; a file only found by walking a dir is dropped, #64), and which kind
 mines each file (R2). Nothing is assumed fine: a path that cannot be classified is a
 finding or is reported in ``git`` rather than silently passed.
 """
@@ -351,6 +352,27 @@ def resolve(cfg: CorpusConfig, campaign_dir: Path, recipe: Recipe) -> ResolvedCo
             walker.declared_file(name, f, ents, nm, miss)
         per_kind[name] = (ents, nm, miss)
 
+    # Rule 4: one batched check-ignore. A path NAMED in corpus.yaml (a `files` entry of any
+    # kind, a declared dir) that git ignores is a finding, and so is the ignored target of a
+    # symlink that stays in the corpus. A file merely FOUND by walking a declared dir that git
+    # ignores is not in the corpus: dropped silently, before rule 6 sees it ("if it's not
+    # worth putting in git, it's not worth remembering", GM, mneme#64).
+    named = {p for decl in cfg.kinds.values() for p in decl.dirs + decl.files}
+    named_files = {p for decl in cfg.kinds.values() for p in decl.files}
+    probe = set(named)
+    for ents, _nm, _miss in per_kind.values():
+        probe.update(e.path for e in ents)
+        probe.update(e.target for e in ents if e.target)
+    ignored = git.ignored(sorted(probe))
+    dropped = ignored - named_files
+    for name, (ents, nm, miss) in per_kind.items():
+        kept = [e for e in ents if e.path not in dropped]
+        named.update(e.target for e in kept if e.target)  # a dropped link names nothing
+        per_kind[name] = (kept, nm, miss)
+    for p in sorted(ignored & named):
+        findings.append(Finding("gitignored", "git ignores this path; mempalace would skip it "
+                                "and `mp prune` would drop its drawers", path=p))
+
     # Rule 6 on the real files (R2): group by the resolved file, since that is what mempalace
     # dedups on. The mining kind is the single `mined_as` mark among the kinds reaching it.
     by_key: dict[str, set[str]] = {}
@@ -362,17 +384,6 @@ def resolve(cfg: CorpusConfig, campaign_dir: Path, recipe: Recipe) -> ResolvedCo
         fs, chosen = shared_file_findings(key, [cfg.kinds[k] for k in sorted(kinds)])
         findings += fs
         mining[key] = chosen
-
-    # Rule 4: gitignored declared paths and targets (and the declared dirs themselves).
-    probe: list[str] = []
-    for name, decl in cfg.kinds.items():
-        probe += decl.dirs + decl.files
-        for e in per_kind[name][0]:
-            probe += [e.path] + ([e.target] if e.target else [])
-    ignored = git.ignored(sorted(set(probe)))
-    for p in sorted(ignored):
-        findings.append(Finding("gitignored", "git ignores this path; mempalace would skip it "
-                                "and `mp prune` would drop its drawers", path=p))
 
     kinds: dict[str, ResolvedKind] = {}
     for name, decl in cfg.kinds.items():

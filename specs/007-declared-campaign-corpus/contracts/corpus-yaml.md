@@ -44,6 +44,9 @@ campaign_kinds:              # campaign-defined kinds (FR-003a)
   kind that resolves to no files, which the TOC records as `declared: true, files: []`.
 - `mined_as` applies to the files *that declaration* names which are also reachable from
   another kind. Exactly one of the overlapping declarations may set it.
+- A gitignored path you name (a `files` entry, a `dirs` entry, or a symlink's target) is an
+  error. A gitignored file merely found inside a `dirs` entry is left out of the corpus, with
+  no finding (mneme#64).
 - Unknown top-level keys and unknown per-kind keys are errors. A misspelled key must not
   disappear silently.
 - Validation is in `data-model.md` § Validation rules. Every violation is a status finding

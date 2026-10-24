@@ -176,8 +176,62 @@ def test_gitignored_declared_path_and_target(camp):
     (camp / "docs").mkdir(exist_ok=True)
     os.symlink("../ignored_dir/t.md", camp / "docs" / "viaignored.md")
     res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [docs]\n")
+    # the walked ignored file is just not in the corpus; a symlink's ignored target is named
     ign = {f.path for f in res.findings if f.code == "gitignored"}
-    assert ign == {"docs/x.secret.md", "ignored_dir/t.md"}
+    assert ign == {"ignored_dir/t.md"}
+    assert "docs/x.secret.md" not in {f.path for f in res.kinds["npcs"].files}
+
+
+def test_walked_tool_state_dir_is_not_in_the_corpus(camp):
+    write(camp, ".gitignore", ".zvec-grep/\n")
+    write(camp, "docs/s/001.md")
+    write(camp, "docs/s/.zvec-grep/a.json")
+    write(camp, "docs/s/.zvec-grep/sub/b.log")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [docs]\n")
+    assert res.valid
+    assert [f.path for f in res.kinds["npcs"].files] == ["docs/s/001.md"]
+    assert res.mine_targets("npcs") == ["docs/s/001.md"]
+
+
+def test_dropped_link_does_not_name_its_ignored_target(camp):
+    # a link inside ignored tool state is not in the corpus, so its ignored target isn't named
+    write(camp, ".gitignore", ".zvec-grep/\ncache/\n")
+    write(camp, "docs/s/001.md")
+    write(camp, "cache/blob.json")
+    (camp / "docs" / "s" / ".zvec-grep").mkdir(parents=True)
+    os.symlink("../../../cache/blob.json", camp / "docs" / "s" / ".zvec-grep" / "link.json")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [docs]\n")
+    assert res.valid
+    assert [f.path for f in res.kinds["npcs"].files] == ["docs/s/001.md"]
+
+
+def test_gitignored_file_named_in_files_is_a_finding(camp):
+    write(camp, ".gitignore", "*.secret.md\n")
+    write(camp, "docs/x.secret.md")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    files: [docs/x.secret.md]\n")
+    assert not res.valid
+    assert {f.path for f in res.findings if f.code == "gitignored"} == {"docs/x.secret.md"}
+
+
+def test_gitignored_declared_dir_is_a_finding(camp):
+    write(camp, ".gitignore", "docs/\n")
+    write(camp, "docs/a.md")
+    write(camp, "keep/b.md")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [docs, keep]\n")
+    assert {f.path for f in res.findings if f.code == "gitignored"} >= {"docs"}
+    assert not res.valid
+
+
+def test_walked_ignored_file_also_named_in_another_kind_is_a_finding(camp):
+    write(camp, ".gitignore", "*.secret.md\n")
+    write(camp, "docs/x.secret.md")
+    write(camp, "docs/ok.md")
+    res = run(
+        camp,
+        "campaign: c\nkinds:\n  npcs:\n    dirs: [docs]\n    mined_as: true\n"
+        "  prep:\n    trust: authoritative\n    files: [docs/x.secret.md]\n",
+    )
+    assert {f.path for f in res.findings if f.code == "gitignored"} == {"docs/x.secret.md"}
 
 
 def test_tracked_file_matching_ignore_still_counts(camp):

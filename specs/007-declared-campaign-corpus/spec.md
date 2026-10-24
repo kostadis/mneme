@@ -294,8 +294,12 @@ one appears in status as owed work with the files it reads outside the TOC.
   out here" as "removed from the corpus", and must not offer to prune drawers on that
   basis.
 - **A declared file is gitignored.** mempalace skips gitignored files when mining, and
-  `mp prune` treats drawers from gitignored sources as orphans. A gitignored declared
-  path is a contradiction, reported as an error naming the path — never mined-then-pruned.
+  `mp prune` treats drawers from gitignored sources as orphans. A gitignored path the GM
+  *named* (a `files` entry, a declared `dirs` entry, or a symlink's target) is a
+  contradiction, reported as an error naming the path — never mined-then-pruned. A gitignored
+  file only *found* by walking a declared dir (tool state such as `.zvec-grep/`) is simply not
+  in the corpus: dropped silently, no finding. "If it's not worth putting in git, it's not
+  worth remembering" (GM, 2026-10-24, mneme#64).
 - **A declared path is a symlink.** mempalace refuses to open a file that is itself a
   symlink (`O_NOFOLLOW`), but follows symlinked directories. A declared symlink whose
   target resolves inside the campaign is allowed: mneme mines the resolved target and the
