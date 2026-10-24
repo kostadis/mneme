@@ -260,7 +260,7 @@ Every user story needs these.
 - [X] T051 [P] Document `mneme corpus` and the corpus behaviour of `mp render/refresh/status/prune` in `README.md` under the `mneme mp` section.
 - [X] T052 [P] Add a corpus scenario to `tests/integration/test_real_mempalace_e2e.py`, behind `MNEME_REAL_MEMPALACE_VENV`: real `mine --files-from`, `sources --json` and `forget` against a throwaway palace. This verifies the research R1–R4 behaviour against the real binary.
 - [X] T053 (Opus) Full gate: `ruff check hypostasis mneme tests`, `pytest`, and the real-binary lane with `MNEME_REAL_MEMPALACE_VENV` set.
-- [ ] T054 (Opus) **Code review phase** (plan § Execution Model): run `/code-review` on the branch diff (`main...007-declared-campaign-corpus`). For each finding, either send it to a Sonnet implementer and re-gate (T053), or record why it is left as is in the PR description. Repeat until the review is clean.
+- [X] T054 (Opus) **Code review phase** (plan § Execution Model): run `/code-review` on the branch diff (`main...007-declared-campaign-corpus`). For each finding, either send it to a Sonnet implementer and re-gate (T053), or record why it is left as is in the PR description. Repeat until the review is clean.
 - [ ] T055 (Opus, GM approves) Push `007-declared-campaign-corpus`, then open the PR via `mcp__github__create_pull_request`. The PR body includes the code-review outcome, the T046 migration results, and the follow-up issues from T050.
 
 ---
