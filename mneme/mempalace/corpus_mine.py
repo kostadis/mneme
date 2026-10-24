@@ -145,7 +145,11 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
         except _crec.CorpusRecordError as e:
             out.warnings.append(f"WARN {e}; treating every file as unrecorded")
     known = dict(record.files) if record else {}
-    sources = runner.sources(store)  # None = unknown: forget candidates are not narrowed
+    # None = unknown: forget candidates are not narrowed. A store that does not exist yet (first
+    # mine) holds nothing, and the real `sources`/`forget` refuse a missing palace.
+    sources = runner.sources(store)
+    if sources is None and store is not None and not Path(store).exists():
+        sources = []
     by_real = _by_real_path(sources) if sources is not None else {}
     skips: list[tuple[str, SkipNotice]] = []
     mined_kinds: list[str] = []

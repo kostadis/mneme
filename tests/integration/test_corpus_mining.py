@@ -132,3 +132,13 @@ def test_bringup_from_corpus_yaml_alone_mines_the_resolved_corpus(tmp_path, monk
         for ln in w.log_lines()
     )
     assert os.path.exists(w.store / "mneme-corpus-mined.json")
+
+
+def test_first_mine_into_a_missing_store_forgets_nothing(tmp_path, monkeypatch):
+    # the real `forget` refuses a palace that does not exist yet (found by the real-binary e2e)
+    w = corpus_world(tmp_path, monkeypatch)
+    assert not w.store.exists()
+    monkeypatch.setattr(w.runner, "sources", lambda palace=None, wing=None: None)  # real: rc 1
+    (res,) = _render_and_refresh(w)
+    assert not res.failed, res.error
+    assert not any(" forget " in f" {ln} " for ln in w.log_lines())
