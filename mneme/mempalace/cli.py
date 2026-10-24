@@ -599,6 +599,7 @@ def regenerate(
         _echo_gaps(
             _mine_report.warning_lines(campaign, getattr(e, "skips", ()))
             + ([record_warning] if record_warning else [])
+            + list(getattr(e, "warnings", ()))
         )
         typer.echo(f"FAIL regenerate: {_err_text(e)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None

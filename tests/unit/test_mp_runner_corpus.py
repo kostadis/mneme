@@ -198,3 +198,27 @@ def test_read_capability_is_separate_from_mining(stub, monkeypatch):
 
     r = MempalaceRunner("mempalace", run)
     assert r.supports_corpus_read() is True and r.supports_corpus() is False
+
+
+def test_a_leftover_atomic_write_temp_file_is_not_palace_content(tmp_path):
+    from mneme import atomic
+    from mneme.mempalace.runner import holds_no_palace
+
+    store = tmp_path / "store"
+    atomic.write_json(store / "mneme-corpus-mined.json", {})
+    (store / ".mneme-corpus-mined.json.ab12cd.tmp").write_text("{")
+    assert holds_no_palace(store)
+    (store / "knowledge_graph.sqlite3").write_text("x")
+    assert not holds_no_palace(store)
+
+
+def test_any_oserror_launching_mempalace_is_a_mempalace_error():
+    import pytest
+
+    from mneme.mempalace.runner import MempalaceError, MempalaceRunner
+
+    def run(cmd):
+        raise PermissionError(13, "Permission denied")
+
+    with pytest.raises(MempalaceError, match="cannot run mempalace"):
+        MempalaceRunner("mempalace", run).sources("/x")

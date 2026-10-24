@@ -30,7 +30,9 @@ class CorpusRecord:
     mined_at: str
     campaign: str
     corpus_sha256: str
-    files: dict[str, dict] = field(default_factory=dict)  # relpath -> {kind, sha256, target}
+    # relpath -> {kind, sha256, target[, skipped]}; `skipped` is mempalace's reason code for a
+    # file it did NOT mine (the entry's sha256 is the content that was skipped)
+    files: dict[str, dict] = field(default_factory=dict)
 
 
 def record_path(store: Path) -> Path:
@@ -73,7 +75,7 @@ def write(
     doc = {
         "schema": SCHEMA, "campaign": campaign, "mined_at": stamp,
         "corpus_sha256": corpus_sha256,
-        "files": {k: {"kind": v["kind"], "sha256": v["sha256"], "target": v["target"]}
+        "files": {k: {f: v[f] for f in ("kind", "sha256", "target", "skipped") if f in v}
                   for k, v in sorted(files.items())},
     }
     return _atomic.write_json(record_path(store), doc, sort_keys=True)
@@ -88,8 +90,8 @@ def merge_kind(
     *,
     now: _dt.datetime | None = None,
 ) -> Path:
-    """Replace ``kind``'s entries with ``entries`` (relpath -> {kind, sha256, target}) and keep
-    every other kind's. Called after each SUCCESSFUL kind mine (R3). An unreadable existing
+    """Replace ``kind``'s entries with ``entries`` (relpath -> {kind, sha256, target[, skipped]})
+    and keep every other kind's. Called after each SUCCESSFUL kind mine (R3). An unreadable existing
     record is replaced rather than extended: it can no longer be trusted for the other kinds."""
     try:
         old = read(store)

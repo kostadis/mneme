@@ -10,7 +10,6 @@ an undispositioned one is "needs a decision" and IS (FR-027). mneme never guesse
 from __future__ import annotations
 
 import fnmatch
-import os
 import re
 from pathlib import Path
 
@@ -140,7 +139,10 @@ def _store_backup_rows(ref, cfg, entity, runner, prober=None) -> list[Conformanc
     if entity is None or cfg.store is None:
         return []
     rows: list[ConformanceRow] = []
-    h = _health.health(cfg.store.path, runner=runner)
+    try:
+        h = _health.health(cfg.store.path, runner=runner)
+    except MempalaceError as e:  # the binary cannot be launched: unknown, never a crash
+        return [ConformanceRow(ref.name, "store", State.INDEX_UNVERIFIED, note=f"unverified: {e}")]
     if h.state is StoreState.HEALTHY:
         rows.append(ConformanceRow(ref.name, "store", State.BUILT, note="store healthy"))
     elif h.state is StoreState.DEGRADED:
@@ -219,7 +221,12 @@ def _index_row(ref: CampaignRef, cfg, runner: MempalaceRunner) -> ConformanceRow
             note="no store pointer — index not checked (won't query an unknown palace)",
         )
     palace, extra = sync_scope(ref, cfg)
-    chk = runner.is_stale(ref.path, palace=palace, roots=extra)
+    try:
+        chk = runner.is_stale(ref.path, palace=palace, roots=extra)
+    except MempalaceError as e:
+        return ConformanceRow(
+            ref.name, "index", State.INDEX_UNVERIFIED, note=f"unverified: {e}"
+        )
     if chk.stale is None:
         return ConformanceRow(
             ref.name, "index", State.INDEX_UNVERIFIED, note=f"unverified: {chk.reason}"
@@ -275,34 +282,21 @@ def _finding_text(f: _compare.CorpusFinding, campaign: str) -> str:
         if f.detail:
             body += f" [{f.detail}]"
     remedy = f.remedy
-    if f.too_short:
-        short = f"too short to index (under mempalace's minimum): add content or undeclare " \
-                f"it in .mneme/corpus.yaml [{', '.join(f.too_short[:_SHOWN])}]"
-        if len(f.too_short) == f.count:
-            return f"{head}: {body} -> {short}"
-        body += f" ({len(f.too_short)} too short)"
-        remedy = f"{remedy} {campaign} (the others); {short}"
-        return f"{head}: {body} -> {remedy}"
+    if f.skipped:  # skips a refresh cannot fix: one remedy group per distinct remedy
+        groups: dict[str, list[str]] = {}
+        for path, reason in f.skipped:
+            groups.setdefault(_compare.skip_remedy(reason) or "", []).append(path)
+        fixed = {p for p, _ in f.skipped}
+        refreshable = [p for p in f.files if p not in fixed]
+        parts = []
+        if refreshable:
+            shown = f" [{', '.join(refreshable[:_SHOWN])}]" if groups else ""
+            parts.append(f"{remedy} {campaign}{shown}")
+        parts += [f"{r} [{', '.join(ps[:_SHOWN])}]" for r, ps in groups.items()]
+        return f"{head}: {body} -> {'; '.join(parts)}"
     if re.fullmatch(r"mneme mp \w+", remedy):
         remedy += f" {campaign}"
     return f"{head}: {body} -> {remedy}"
-
-
-def _too_short_paths(campaign_dir, cfg) -> frozenset[str]:
-    """Normalised paths the last mneme-run mine skipped as `too_short` (empty when there is no
-    readable record: such a file then keeps the generic `mp refresh` remedy)."""
-    if cfg.store is None:
-        return frozenset()
-    try:
-        rec = _record.read(cfg.store.path)
-    except _record.MineRecordError:
-        return frozenset()
-    if rec is None:
-        return frozenset()
-    return frozenset(
-        os.path.normpath(os.path.join(campaign_dir, e["name"]))
-        for entries in rec.wings.values() for e in entries if e.get("kind") == "too_short"
-    )
 
 
 def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFindings:
@@ -352,7 +346,6 @@ def _corpus_findings(ref, cfg, rec, runner, docs=None) -> _compare.CorpusFinding
     return _compare.compare(
         resolved, sources, record, toc_check, ref.path,
         record_error=rec_err, sources_error=why,
-        too_short=_too_short_paths(ref.path, cfg),
     )
 
 

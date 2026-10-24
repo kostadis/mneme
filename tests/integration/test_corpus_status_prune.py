@@ -282,3 +282,24 @@ def test_sidecar_only_store_reads_as_not_provisioned(w, monkeypatch):
     assert row.state is State.CORPUS_UNKNOWN
     assert "not provisioned" in row.note and "sources" not in row.note
     assert "embedder" not in rows(w)[0]
+
+
+def test_prune_of_a_sidecar_only_store_says_store_missing(w):
+    import shutil
+
+    shutil.rmtree(w.store)
+    w.store.mkdir(parents=True)
+    (w.store / "mneme-former-wings.json").write_text("{}")
+    with pytest.raises(authority.AuthorityError, match="store missing"):
+        _prune(w)
+
+
+def test_status_survives_a_mempalace_binary_that_cannot_be_launched(w, monkeypatch):
+    def run(cmd):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(w.runner, "runner", run)
+    w.runner._read_gaps = w.runner._mine_gaps = None
+    row = corpus_row(w)
+    assert row.state is State.CORPUS_UNKNOWN
+    assert "cannot run mempalace" in row.note

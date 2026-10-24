@@ -39,12 +39,14 @@ class RefreshResult:
     skips: WingSkips = ()  # GH #31: (wing, notice) pairs from this mine
     record_warning: str | None = None
     corpus: CorpusMine | None = None  # 007: set for a corpus campaign
+    corpus_warnings: tuple[str, ...] = ()  # 007: a failed corpus mine's WARN lines
 
     def warnings(self) -> list[str]:
         """GH #31: one `WARN index gap` line per skipped file (never changes the outcome)."""
         lines = warning_lines(self.campaign, self.skips)
         if self.corpus is not None:
             lines.extend(self.corpus.warnings)
+        lines.extend(self.corpus_warnings)
         if self.record_warning:
             lines.append(self.record_warning)
         return lines
@@ -106,6 +108,7 @@ def _refresh_corpus(ref, runner, dry_run, entity, prober, result: RefreshResult)
         result.error = str(e)
         result.skips = tuple(getattr(e, "skips", ()))
         result.record_warning = getattr(e, "record_warning", None)
+        result.corpus_warnings = tuple(getattr(e, "warnings", ()))
         return result
     result.corpus = res
     result.wings = res.mined

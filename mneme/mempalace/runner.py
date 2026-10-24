@@ -197,6 +197,14 @@ def resolve_binary(venv: Path | None) -> str:
     return "mempalace"
 
 
+def _is_sidecar(name: str) -> bool:
+    """mneme's own record (`mneme-*.json`), or the temp file `atomic.write_json` leaves when a
+    write was interrupted (`.mneme-*.json.<rand>.tmp`)."""
+    if name.startswith("mneme-") and name.endswith(".json"):
+        return True
+    return name.startswith(".mneme-") and ".json." in name and name.endswith(".tmp")
+
+
 def holds_no_palace(store: Path) -> bool:
     """No palace there yet: the directory is missing, or holds only mneme's own sidecar
     records (e.g. the former-wings record written the moment the store is known empty)."""
@@ -204,7 +212,7 @@ def holds_no_palace(store: Path) -> bool:
     if not store.exists():
         return True
     try:
-        return all(p.name.startswith("mneme-") and p.suffix == ".json" for p in store.iterdir())
+        return all(_is_sidecar(p.name) for p in store.iterdir())
     except OSError:
         return False
 
@@ -259,6 +267,8 @@ class MempalaceRunner:
             return self.runner(cmd)
         except FileNotFoundError:
             return subprocess.CompletedProcess(cmd, 127, stdout="", stderr="mempalace not found")
+        except OSError as e:  # e.g. PermissionError: the binary exists but cannot be launched
+            raise MempalaceError(f"cannot run mempalace: {e}") from None
 
     @staticmethod
     def _with_palace(palace: Path | str | None, *sub: str) -> list[str]:

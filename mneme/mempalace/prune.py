@@ -26,7 +26,7 @@ from . import conform as _conform
 from . import discover as _discover
 from . import former_wings as _former
 from . import recipe as _recipe
-from .runner import MempalaceError, MempalaceRunner, SourceRecord, SyncCheck
+from .runner import MempalaceError, MempalaceRunner, SourceRecord, SyncCheck, holds_no_palace
 
 
 def _need_report(chk: SyncCheck, what: str) -> SyncCheck:
@@ -78,7 +78,7 @@ def prune(
         raise _authority.AuthorityError(
             ["no store pointer — cannot prune an unknown palace (run `mneme mp bringup`)"]
         )
-    if not Path(cfg.store.path).is_dir():
+    if not Path(cfg.store.path).is_dir() or holds_no_palace(Path(cfg.store.path)):
         raise _authority.AuthorityError(
             [f"store missing at {cfg.store.path} — nothing to prune (run `mneme mp bringup`)"]
         )

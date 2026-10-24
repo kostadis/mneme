@@ -35,6 +35,26 @@ ORDER = (INVALID, UNKNOWN, MISSING, UNDECLARED, OUT_OF_SCOPE, UNMINED, STALE, WR
          TOC_STALE)
 
 
+# What the GM can do about a file mempalace skipped, per its reason code. None = transient
+# (a refresh retries it); anything else is a remedy that is NOT `mp refresh`.
+_PATH_REMEDY = "{reason}: fix the path in .mneme/corpus.yaml"
+_SKIP_REMEDY: dict[str, str] = {
+    "too_short": "too short to index: add content (then `mneme mp refresh`) or undeclare it",
+    "too_large": "too large for mempalace: split it or undeclare it",
+    "excluded": "excluded by a mempalace.yaml exclude pattern: remove the pattern or "
+    "undeclare it",
+    "unsupported_ext": "not a file type mempalace reads: undeclare it",
+    **{r: _PATH_REMEDY.format(reason=r)
+       for r in ("symlink", "not_regular", "outside_dir", "missing")},
+}
+
+
+def skip_remedy(reason: str) -> str | None:
+    """The remedy for a skip that `mneme mp refresh` alone can never fix; None when a refresh
+    retries it (limit, write_failed, failed, purge_skipped, stat_error, unknown codes)."""
+    return _SKIP_REMEDY.get(reason)
+
+
 @dataclass(frozen=True)
 class CorpusFinding:
     code: str
@@ -42,9 +62,9 @@ class CorpusFinding:
     drawers: int = 0
     remedy: str = ""
     detail: str = ""
-    # UNMINED only: the subset of ``files`` the last mine recorded as `too_short` (mempalace's
-    # minimum chunk size). `mp refresh` can never index those, so their remedy differs.
-    too_short: tuple[str, ...] = ()
+    # UNMINED only: (file, mempalace skip reason) for the files the last mine skipped and whose
+    # content has not changed since. `mp refresh` cannot fix those (see ``skip_remedy``).
+    skipped: tuple[tuple[str, str], ...] = ()
 
     @property
     def count(self) -> int:
@@ -169,7 +189,6 @@ def compare(
     *,
     record_error: str | None = None,
     sources_error: str | None = None,
-    too_short: frozenset[str] = frozenset(),
 ) -> CorpusFindings:
     """Every finding for one campaign. ``sources`` None means the palace could not be read
     (UNKNOWN); ``record_error`` means the corpus mine record exists but is unreadable
@@ -212,12 +231,25 @@ def compare(
                 if f.minable and f.mined_as == rk.name]
         unmined = sorted(f.path for f in mine if f.path not in c.held)
         if unmined:
-            # normalised mined paths the last mine skipped as too_short (never fixable by refresh)
-            short = {f.path for f in mine
-                     if os.path.normpath(os.path.join(root, f.mined_path)) in too_short}
+            # the corpus record says why a file was skipped, but only for the content it saw:
+            # a changed file is an ordinary unmined one that a refresh retries
+            known_files = record.files if record else {}
+            by_path = {f.path: f for f in mine}
+            fixed: list[tuple[str, str]] = []
+            changed: list[str] = []
+            for p in unmined:
+                r = known_files.get(p) or {}
+                reason = r.get("skipped")
+                if not reason:
+                    continue
+                if r.get("sha256") != by_path[p].sha256:
+                    changed.append(f"{p} changed since it was skipped as {reason}; "
+                                   "refresh to retry")
+                elif skip_remedy(reason):
+                    fixed.append((p, reason))
             found.append(CorpusFinding(
                 UNMINED, tuple(unmined), remedy="mneme mp refresh",
-                too_short=tuple(p for p in unmined if p in short),
+                detail="; ".join(changed), skipped=tuple(fixed),
             ))
         if record_error is not None:
             unknown.append(f"the corpus mine record is unreadable ({record_error}); "

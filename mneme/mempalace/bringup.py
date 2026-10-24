@@ -144,7 +144,7 @@ def bringup(
         steps.append(BringUpStep("first_mine", "failed", note=str(e)))
         warns = tuple(
             w for w in (record_warning, getattr(e, "record_warning", None)) if w
-        )
+        ) + tuple(getattr(e, "warnings", ()))
         return BringUpReport(  # not-ready (FR-008)
             campaign, tuple(steps), skips=tuple(getattr(e, "skips", ())), warnings=warns
         )

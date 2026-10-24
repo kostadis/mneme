@@ -78,10 +78,11 @@ def _real(root: Path, rel: str) -> str:
     return os.path.realpath(root / rel)
 
 
-def _skipped(root: Path, target: str, listed: dict[str, ListedSkip]) -> bool:
-    """Did mempalace report skipping ``target`` (relative to ``root``, the mine dir)? Exact:
-    its mined path is in the `--skips-json` list (matched after normalising, so `./a` == `a`)."""
-    return _norm(root, target) in listed
+def _skipped(root: Path, target: str, listed: dict[str, ListedSkip]) -> ListedSkip | None:
+    """The skip mempalace reported for ``target`` (relative to ``root``, the mine dir), if any.
+    Exact: its mined path is in the `--skips-json` list (matched after normalising, so
+    `./a` == `a`)."""
+    return listed.get(_norm(root, target))
 
 
 def _norm(root: Path, rel: str) -> str:
@@ -123,7 +124,7 @@ def mine_corpus(
     dry_run: bool = False,
 ) -> CorpusMine:
     """Mine the campaign's declared corpus into ``store``. Raises `MempalaceError` (with
-    ``.skips`` / ``.record_warning`` set) when it cannot: old mempalace, an invalid
+    ``.skips`` / ``.record_warning`` / ``.warnings`` set) when it cannot: old mempalace, an invalid
     declaration (nothing is mined), or a failed kind (the run stops; no clean record)."""
     campaign_dir = Path(campaign_dir)
     if not runner.supports_corpus():
@@ -150,8 +151,14 @@ def mine_corpus(
 
     try:
         _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out, dry_run)
-    finally:
+    except MempalaceError as e:
+        snapshot()  # its warning (if any) belongs on the error too
+        e.warnings = tuple(out.warnings)
+        raise
+    except BaseException:
         snapshot()
+        raise
+    snapshot()
     return out
 
 
@@ -249,11 +256,14 @@ def _mine_kinds(campaign_dir, campaign, store, runner, cfg, resolved, out: Corpu
         skipped = {_norm(campaign_dir, s.path): s for s in listed if s.reason != "chunk_cap"}
         mined_kinds.append(kind)
         if store is not None:
-            entries = {
-                f.path: {"kind": kind, "sha256": f.sha256, "target": f.mined_path}
-                for f in files
-                if not _skipped(campaign_dir, f.mined_path, skipped)
-            }
+            # a skipped file is recorded WITH its reason and hash: status then knows why it is
+            # not held, and that the reason only holds while the content is unchanged
+            entries = {}
+            for f in files:
+                entry = {"kind": kind, "sha256": f.sha256, "target": f.mined_path}
+                if (s := _skipped(campaign_dir, f.mined_path, skipped)) is not None:
+                    entry["skipped"] = s.reason
+                entries[f.path] = entry
             out.record_warning = _crec.try_merge_kind(
                 store, campaign, cfg.corpus_sha256, kind, entries
             ) or out.record_warning

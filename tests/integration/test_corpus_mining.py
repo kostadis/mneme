@@ -148,6 +148,11 @@ def _declare(w, body):
     (w.camp / ".mneme" / "corpus.yaml").write_text(body)
 
 
+def _mined(w):
+    """Record entries for files that were embedded (a skipped file's entry says why instead)."""
+    return {p for p, e in corpus_record.read(w.store).files.items() if "skipped" not in e}
+
+
 def _skips_json(monkeypatch, *entries):
     monkeypatch.setenv(
         "MNEME_STUB_MINE_SKIPS_JSON",
@@ -163,8 +168,7 @@ def test_exactly_the_listed_same_named_file_is_dropped_from_the_record(tmp_path,
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [docs/s]\n")
     _skips_json(monkeypatch, ("docs/s/001/session-summary.md", "too_large", "900 chunks"))
     _render_and_refresh(w)
-    files = corpus_record.read(w.store).files
-    assert set(files) == {"docs/s/002/session-summary.md"}
+    assert _mined(w) == {"docs/s/002/session-summary.md"}
 
 
 def test_skip_of_a_root_file_does_not_drop_a_same_named_nested_one(tmp_path, monkeypatch):
@@ -174,7 +178,7 @@ def test_skip_of_a_root_file_does_not_drop_a_same_named_nested_one(tmp_path, mon
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    files: [a.md]\n    dirs: [sub]\n")
     _skips_json(monkeypatch, ("a.md", "too_large", ""))
     _render_and_refresh(w)
-    assert set(corpus_record.read(w.store).files) == {"sub/a.md"}
+    assert _mined(w) == {"sub/a.md"}
 
 
 def test_skip_path_is_not_a_suffix_match(tmp_path, monkeypatch):
@@ -185,7 +189,7 @@ def test_skip_path_is_not_a_suffix_match(tmp_path, monkeypatch):
     _declare(w, "campaign: corp\nkinds:\n  summaries:\n    dirs: [sub, x]\n")
     _skips_json(monkeypatch, ("sub/a.md", "symlink", ""))
     _render_and_refresh(w)
-    assert set(corpus_record.read(w.store).files) == {"x/sub/a.md"}
+    assert _mined(w) == {"x/sub/a.md"}
 
 
 def test_listed_skips_are_gaps_and_not_recorded_as_mined(tmp_path, monkeypatch):
@@ -205,7 +209,7 @@ def test_listed_skips_are_gaps_and_not_recorded_as_mined(tmp_path, monkeypatch):
         ("cx/gone.md", "missing"), ("cx/odd.md", "other")
     }
     assert any("cx/gone.md" in ln and "file not found" in ln for ln in res.warnings())
-    assert set(corpus_record.read(w.store).files) == {"cx/ok.md"}
+    assert _mined(w) == {"cx/ok.md"}
 
 
 def test_stdout_text_notices_are_ignored_by_corpus_mining(tmp_path, monkeypatch):
