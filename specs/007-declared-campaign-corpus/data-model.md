@@ -128,8 +128,13 @@ OK only when there are none (FR-017). `not_materialized` is informational, never
    **not** be one. If a recipe upgrade adds a standard kind with the same name as an existing
    campaign kind, the result is `invalid: shadowed-kind`, reported and never merged.
 3. Paths are relative and normalized, and must not escape the campaign root (`..`).
-4. Declared paths must not be gitignored. mneme asks `git check-ignore`, which also covers
-   `.git/info/exclude`. mempalace does not read that file, but consumers using git do.
+4. Named paths must not be gitignored: a `files` entry, a declared `dirs` entry, or the
+   resolved target of any symlink. A file merely found by walking a declared dir whose own
+   path is gitignored is not in the corpus: it is dropped (not mined, not in the TOC) with no
+   finding. If such a file is also named in some kind's `files`, it is named, so it is a
+   finding. mneme asks `git check-ignore`, which also covers `.git/info/exclude`. mempalace
+   does not read that file, but consumers using git do. GM, 2026-10-24 (mneme#64): "if it's
+   not worth putting in git, it's not worth remembering."
 5. A declared path, or a file inside a declared dir, may be a symlink only if it resolves to a
    regular file inside the campaign. mneme mines the resolved target, since mempalace opens files
    with `O_NOFOLLOW`. Anything else is `invalid: symlink-outside` / `symlink-not-file`.

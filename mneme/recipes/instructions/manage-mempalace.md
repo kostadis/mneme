@@ -80,8 +80,9 @@ campaign_kinds:              # campaign-defined kinds
 - `trust` is `authoritative`, `accelerator` or `reference`; standard kinds have a default.
 - `mined_as: true` on one declaration says a file reachable from two kinds is mined as that
   kind. Exactly one of the overlapping declarations may set it.
-- Unknown keys, gitignored paths, absolute or `..` paths and conflicting declarations are
-  errors, never auto-corrected.
+- Unknown keys, gitignored named paths, absolute or `..` paths and conflicting declarations are
+  errors, never auto-corrected. A gitignored file merely found inside a declared dir (for
+  example `.zvec-grep/` tool state) is left out of the corpus, not an error.
 - **Symlinks.** A declared path may be a symlink whose target is a regular file inside the
   campaign. mneme mines the resolved target; consumers still open the declared `path`. A
   symlink that resolves outside the campaign, or to a non-file, is invalid.
