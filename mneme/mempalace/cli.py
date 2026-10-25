@@ -21,7 +21,7 @@ EXIT_INVALID_CONFIG = 2
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Manage per-campaign mempalaces (status/refresh/prune/publish/adopt/migrate/bootstrap).",
+    help="Manage per-campaign mempalaces (status/refresh/prune/search/publish/adopt/migrate/bootstrap).",
 )
 
 _config_opt = typer.Option(
@@ -679,3 +679,48 @@ def drop_legacy(
         raise typer.Exit(EXIT_OK)
     removed = _health.drop_legacy(store.path)
     typer.echo(f"dropped {len(removed)} legacy item(s) from {store.path}")
+
+
+# ── search (GH #73) ───────────────────────────────────────────────────────────
+
+
+@app.command()
+def search(
+    campaign: str = typer.Argument(..., help="Campaign whose palace to search"),
+    query: str = typer.Argument(..., help="What to search for"),
+    wing: str | None = typer.Option(None, "--wing", help="Restrict to one wing"),
+    room: str | None = typer.Option(None, "--room", help="Restrict to one room"),
+    results: int | None = typer.Option(None, "--results", min=1, help="Number of results"),
+    since: str | None = typer.Option(None, "--since", help="Only drawers on/after this date"),
+    before: str | None = typer.Option(None, "--before", help="Only drawers before this date"),
+    campaign_dir: str = _dir_opt,
+    config: str = _config_opt,
+) -> None:
+    """Search a campaign's palace with the declared embedder (read-only; output streams)."""
+    from hypostasis.models import declared_embedder
+
+    from . import authority as _authority
+    from . import backup as _backup
+    from . import discover as _discover
+
+    entity = _load_or_exit(config)
+    if declared_embedder(entity) is None:
+        # Without it mempalace silently falls back to 384-dim minilm and fails on the palace.
+        typer.echo(
+            "FAIL search: no embedder declared; set MEMPALACE_EMBEDDING_PROVIDER/_MODEL/"
+            "_ENDPOINT in the env: block of hypostasis.yaml",
+            err=True,
+        )
+        raise typer.Exit(EXIT_RUNTIME)
+    try:
+        store = _backup.queryable_store(entity, campaign, campaign_dir)
+        out = MempalaceRunner.for_entity(entity, stream=True).search(
+            query, store, wing=wing, room=room, results=results, since=since, before=before
+        )
+    except (_discover.DiscoveryError, _authority.AuthorityError, MempalaceError) as e:
+        typer.echo(f"FAIL search: {_err_text(e)}", err=True)
+        raise typer.Exit(EXIT_RUNTIME) from None
+    if out.returncode != 0:  # output already streamed; 127 = unlaunchable (reason in stderr)
+        reason = out.stderr.strip() if out.returncode == 127 and out.stderr else None
+        typer.echo(f"FAIL search: {reason or f'mempalace exited {out.returncode}'}", err=True)
+        raise typer.Exit(EXIT_RUNTIME)

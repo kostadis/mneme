@@ -489,6 +489,32 @@ class MempalaceRunner:
         """The refusal for a mempalace that cannot read or forget a corpus."""
         return f"this mempalace lacks corpus support (missing {', '.join(self.read_gaps())})"
 
+    def search(
+        self,
+        query: str,
+        palace: Path | str | None = None,
+        *,
+        wing: str | None = None,
+        room: str | None = None,
+        results: int | None = None,
+        since: str | None = None,
+        before: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        """`mempalace [--palace P] search QUERY [--wing W] [--room R] [--results N] [--since D]
+        [--before D] -- QUERY` (GH #73; `--` keeps a query starting with '-' from being read as
+        an option). Read-only; absent filters are omitted. Returns the process so the caller
+        propagates failure (a stream runner has already shown the output)."""
+        flags = [
+            a
+            for flag, val in (
+                ("--wing", wing), ("--room", room), ("--results", results),
+                ("--since", since), ("--before", before),
+            )
+            if val is not None
+            for a in (flag, str(val))
+        ]
+        return self._call(self._with_palace(palace, "search", *flags, "--", query))
+
     def status(self, palace: Path | str | None = None) -> bool:
         """True iff `mempalace --palace <p> status` answers cleanly (the store is openable)."""
         return self.probe_status(palace).ok
