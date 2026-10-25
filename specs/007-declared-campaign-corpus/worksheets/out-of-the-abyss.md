@@ -2,16 +2,78 @@
 
 - Surveyed path: `/home/kostadis/out-of-the-abyss/out-of-the-abyss` (git root is its parent, `/home/kostadis/out-of-the-abyss`; `git rev-parse --show-prefix` = `out-of-the-abyss/`)
 - HEAD: `141e2fa8` (2026-10-22 18:48:36 -0700)
-- Date: 2026-10-23
+- Date: 2026-10-23 (survey); section 0 and the updates in sections 1, 4, 5 and 7 added 2026-10-25
 - Other copy: `/home/kostadis/src/campaigns/out-of-the-abyss` exists. It has **no** `.mneme/` directory and so no `.mneme/mempalace.yaml`. It was not surveyed.
 
-Observations only. Nothing here is a decision; the GM writes `.mneme/corpus.yaml`.
+Sections 1–6 are observations only. Nothing here is a decision; the GM writes `.mneme/corpus.yaml`. Section 0 is the conversion path, revised with what the Phandalin migration taught.
 
 Sparse-checkout state: the parent repo's `core.sparseCheckout` is true and its patterns include `/out-of-the-abyss/`. `git ls-files -t` run from the surveyed directory shows 26457 entries, all `H`, and none `S`. Across the whole parent repo it shows 26532 `H` and 28968 `S`.
 
 Counting convention: counts are `find <path> -type f` unless stated. Symlinked directories are not followed unless noted.
 
 ---
+
+## 0. Conversion path and lessons from Phandalin (2026-10-25)
+
+Phandalin was the first campaign migrated (integrate + bringup on 2026-10-25, `mneme mp status`: corpus conformant). This section carries over what that run taught. **Nothing here decides out-of-the-abyss membership.** Phandalin's answers appear only as precedent next to a blank for this campaign's answer.
+
+### 0.1 Before you start
+
+- **Pull the checkout.** `~/out-of-the-abyss` is at `141e2fa8`, **21 commits behind `origin/main`** (checked 2026-10-25). It also has uncommitted edits to `docs/gauntlgrym/gauntlgrym_bruenor_scene_script.md`, `docs/gauntlgrym/gauntlgrym_faction_pitches.md` and `notes/session_prep/20261018_chapter_72_the_fixed_point_theory_of_fate_review.md`, plus 26 untracked files under `summaries/2026-10-05-chapter_71` and `summaries/2026-10-19-chapter_73`. The bringup mines what is on disk, so commit or stash, then pull. The counts in sections 1–6 are from `141e2fa8`.
+- **Host versions** (all true on this host on 2026-10-25):
+  - mempalace on `kostadis-dev` at `d23d6a7` or later. This includes `--skips-json` (#56) and the Ollama sub-batching fix (mempalace#57 / PR #58). Without #58 a large file can crash the Windows Ollama runner mid-mine (`dial tcp 127.0.0.1:<port> … actively refused it`). This campaign has two ~1 MB files that may be declared: `docs/TheUnderdark.md` (1,080,062 bytes) and `docs/authority.yaml` (1,165,205 bytes).
+  - mneme at `5831944` or later (#68). Before that, the CampaignGenerator face was written to `<campaign>/config.yaml`, which CampaignGenerator never reads.
+  - CampaignGenerator at `9d4079a` or later (#594, `canon_wings`). Restart any running CampaignGenerator MCP server or UI after migrating.
+
+### 0.2 Steps
+
+This campaign has no `.mneme/` (in either `~/out-of-the-abyss` or `~/src/campaigns/out-of-the-abyss`) and no palace on this host (`~/.mempalace/palaces` holds only `chat` and `phandalin`). So, like Phandalin, it is a **bring-up, not a regenerate**: `mp regenerate` needs an existing `.mneme/mempalace.yaml` and refuses.
+
+1. `mneme integrate out-of-the-abyss` writes `.mneme/owner.yaml`. Bringup does not.
+2. Write `.mneme/corpus.yaml` from section 7.
+3. Run `mneme corpus check out-of-the-abyss` until it reports valid. Then spot-check a kind with `mneme corpus toc out-of-the-abyss --kind <kind> --json`.
+4. Run `mneme mp bringup out-of-the-abyss --verbose` and **let it run to the end**. On Phandalin (331 files, 3 large module books) it took long enough that it looked hung, but it was still running. Two lines are normal and need no action:
+   - a "cannot read sources" line before the first mine (the palace is still empty);
+   - `add/upsert with vectors= bypasses the configured embedder` (turbovecdb logs this when the miner hands it precomputed vectors).
+5. **Check the CampaignGenerator face by hand.** `config/config.yaml` must end with a `mempalace:` block holding `canon_wings:` and `index_wings:`. Today that block is `canon_wing: narrative` and `index_wings: [chronicle, abyss]`, and it is replaced. The rest of the file is preserved byte for byte (#68). `mneme mp status` does not check this block yet (mneme#69), so look at it yourself. If it is missing or stale, run `mneme mp render out-of-the-abyss`.
+6. `mneme mp status out-of-the-abyss`. Expect `corpus: conformant` ("palace equals the declared corpus; every drawer is current"), `index`, `embedder` (1024-dim), `faces` and `owner` ok.
+7. `mneme mp backup out-of-the-abyss`. Status reports `no backup` until you do.
+8. Commit in the campaigns repo, on a branch, through a PR: `.mneme/owner.yaml`, `.mneme/corpus.yaml`, `.mneme/mempalace.yaml`, `config/config.yaml`, `.gitignore`, plus the root `mempalace.yaml` if you decide to keep tracking it (0.3).
+
+### 0.3 Repo hygiene (checked on this checkout)
+
+- `.mneme/mempalace.yaml`: the bare `mempalace.yaml` ignore rule would swallow it. This campaign's `.gitignore` already has the `!.mneme/mempalace.yaml` exception; `git check-ignore -v` confirms it. Phandalin lacked the exception, and it had to be added at commit time.
+- `.mneme/corpus.toc.json` is not ignored yet. The corpus render appends the ignore line itself, so `.gitignore` shows as modified after bringup; commit that change.
+- **The root `mempalace.yaml` is tracked here.** It is the legacy room config (`palace: abyss`, `wing: abyss`, no mneme stamp). The corpus render **overwrites it unconditionally** with a stamped corpus root yaml, so after bringup git shows it modified. (Phandalin's root file was gitignored, so this did not come up there.) obelisk tracks both its root file and `.mneme/mempalace.yaml`. Decide: commit the rendered file / untrack it: ______
+- The tracked `.mempalaceignore` files (root, `summaries/`, `notes/`) are hand-written and unstamped. mneme leaves them in place. They have no effect on a corpus campaign, because mining uses `--files-from`.
+- **Palace name.** `campaign: out-of-the-abyss` (the folder's capitalization on GitHub) gives the palace `~/.mempalace/palaces/out-of-the-abyss`, not the legacy `abyss`. No `abyss` palace exists on this host, so there is nothing to carry over. Confirm the name: ______
+
+### 0.4 How declarations resolve (dry resolve, 2026-10-25)
+
+These are probes of the resolver against this checkout, run in Python with nothing written to the campaign. **They are not a proposed corpus.** Every probe returned no findings.
+
+| Probe declaration | Files resolved | Notes |
+|---|---|---|
+| `files:` `docs/{world_state,campaign_state,planning,canon_events_timeline,party}.md` + `dirs: [docs/reference]` | 13 (all `.md`) | Exactly the live grounding generation. The symlinks resolve to their targets, and the symlinked `docs/reference` dir is followed. |
+| `dirs: [docs/grounding]` | 132 (105 `.md`, 26 `.json`, 1 `.yaml`) | Every generation (`ch071`, `ch072`, `legacy-…`), plus manifests and staging. |
+| `dirs: [docs/npcs]` | 2298 (2180 `.md`, 109 `.json`, 4 `.yaml`, 4 `.html`, 1 `.py`) | Includes the 2198 `summary_native/` pipeline files (drafts, runs, evidence). |
+| `dirs: [docs/summaries]` | 69 (all `.md`) | The published summaries only. |
+| `dirs: [notes]` | 523 (368 `.md`, 134 `.json`, …) | Under the #65 rule, 15 gitignored files (`.tgrep/` etc.) are skipped. |
+| `dirs: [docs/chapters]` | 62 (all `.md`) | `.tgrep/` is gitignored and skipped. |
+
+What carries over from Phandalin:
+- **Gitignored means not in the corpus** (mneme#64 / PR #65, merged). Gitignored files under a declared dir are skipped silently. A gitignored path named in `files:` is still an error.
+- **There is no exclude list inside a declared dir.** To leave out a subtree such as `docs/npcs/summary_native/`, list the files you want under `files:`. Phandalin listed its 100 top-level dossiers this way. The precedent here would be the 96 top-level `docs/npcs/*.md`, plus a decision on `docs/npcs/authored/` (4 `.yaml`): ______
+- **Symlinks** are mined as their targets. When `docs/grounding/current` is re-pointed at a new generation, `mp refresh` replaces the drawers (GM decision 2026-10-24). Declare the stable symlink paths, not a generation path.
+- **A file reachable from two kinds needs `mined_as: true` on exactly one of them.** Phandalin: `docs/party.md` is in `party` and `grounding`, mined as grounding. The candidates here are `docs/party.md` and `docs/reference/party.md` (section 4).
+- **Trust decides which wings are canon.** Kinds with `trust: authoritative` become `canon_wings`, which CampaignGenerator's `grounded_search` verifies against. Kinds with `trust: reference` become `index_wings`. Defaults: `npcs`, `summaries`, `party` and `grounding` are authoritative; `prep` is reference. A campaign kind must state its trust.
+- **Phandalin's campaign kinds, as precedent:** `lore` (authoritative), and `background`, `module` and `prep` (reference). Its rule: "lore is authoritative, everything else is superseded by events". Its book-length module texts went in a reference kind.
+- **Phandalin left `docs/chapters` out** ("should not end up in the mempalace"). Here `docs/chapters/` (62 `.md`) is today's `canon_wing: narrative`. Decide whether it is in: ______
+- **`arcs` is Phandalin-only.** It feeds CampaignGenerator's `arc_triggers` (Phandalin's arc mechanic). This campaign does not need it. `docs/tracking/` here is 3 `.txt` files.
+- Phandalin's `docs/summaries/` files were replicas of `summaries/*/session-summary.md`, and only `docs/summaries` was declared. Here `docs/summaries/` has 69 files; `summaries/` has 74 `session-summary.md`.
+
+---
+
 
 ## 1. What the palace mines today
 
@@ -24,7 +86,7 @@ Counting convention: counts are `find <path> -type f` unless stated. Symlinked d
   - `MEMPALACE.md`, `MEMPALACE_HORIZON.md`
 - No `trust: authoritative` wings are declared anywhere, so the "drops out of the palace unless declared" flag has nothing to attach to.
 
-**Palace contents not surveyed: no read-only source listing exists until T005.**
+**Palace contents:** there is no palace for this campaign on this host (`~/.mempalace/palaces` holds `chat` and `phandalin`; `~/.mempalace/config.json` registers only those two), so there is nothing to list. Checked 2026-10-25.
 
 ---
 
@@ -178,6 +240,8 @@ Staging, extraction, review and similar directories under `docs/` and `notes/` (
 
 Each needs a `mined_as` choice: ______
 
+Precedent (Phandalin): `docs/party.md` was declared in both `party` and `grounding` with `mined_as: true` on grounding. A dir declaration that reaches a file a second time (for example `docs/reference/party.md` via `dirs: [docs/reference]` and a `party` `files:` entry) needs the same choice; `mneme corpus check` reports it if not.
+
 - `docs/party.md` — grounding doc and party data. Symlink to `grounding/current/party.md`. `mined_as` choice: ______
 - `docs/reference/party.md` — under the `docs/reference` symlink; reachable from a `docs/reference` declaration and from any `docs/grounding/current/reference` declaration. `mined_as` choice: ______
 - `docs/grounding/current/*` — the same five files as `docs/world_state.md` etc., reachable twice (symlink path and real path), and also present under each `docs/grounding/generations/*/live/`. `mined_as` choice: ______
@@ -217,6 +281,8 @@ Totals: docs 3725, notes 6, summaries 126, voice 0.
 - Checked paths with no ignored files: `docs/npcs/`, `docs/summaries/`, `docs/grounding/`, `docs/party/`, `notes/sessions/`.
 
 Kinds affected: none of `npcs`, `summaries` (docs), `grounding`, `party`, `prep` (sessions) paths are ignored. Pipeline `summaries/` and `notes/.tgrep/` are.
+
+Since mneme PR #65 (2026-10-24), gitignored files found under a declared dir are simply not in the corpus; only a gitignored path named in `files:` (or a declared dir itself) is an error. None of the gitignored paths above would be named directly.
 
 Untracked, not ignored (`git ls-files -o --exclude-standard docs notes summaries voice`): 26 files, 1 under `summaries/2026-10-05-chapter_71` and 25 under `summaries/2026-10-19-chapter_73` (e.g. `grounding_delta/legacy_application.lock`).
 
@@ -295,6 +361,8 @@ Reproduce: `find docs -mindepth 1 -maxdepth 1 | sort`; `find docs -maxdepth 1 -t
 | `prep` | ______ | ______ | ______ |
 
 Campaign kinds (name, dirs/files, trust — required): ______
+
+Also decide (section 0): `docs/chapters` in or out ______; `docs/npcs/authored/` ______; root `mempalace.yaml` commit or untrack ______; palace name `out-of-the-abyss` ______.
 
 Blank skeleton:
 
