@@ -27,6 +27,8 @@ Phandalin was the first campaign migrated (integrate + bringup on 2026-10-25, `m
 
 ### 0.2 Steps
 
+**Use `--dir`.** This host's `data_roots.campaigns` lists only `~/phandalin`, so `mneme … out-of-the-abyss` by name fails with "campaign workspace not found". Every command below takes `--dir ~/out-of-the-abyss/out-of-the-abyss` (or add `~/out-of-the-abyss` to `data_roots.campaigns` in `hypostasis.yaml`).
+
 This campaign has no `.mneme/` (in either `~/out-of-the-abyss` or `~/src/campaigns/out-of-the-abyss`) and no palace on this host (`~/.mempalace/palaces` holds only `chat` and `phandalin`). So, like Phandalin, it is a **bring-up, not a regenerate**: `mp regenerate` needs an existing `.mneme/mempalace.yaml` and refuses.
 
 1. `mneme integrate out-of-the-abyss` writes `.mneme/owner.yaml`. Bringup does not.
@@ -350,7 +352,199 @@ Reproduce: `find docs -mindepth 1 -maxdepth 1 | sort`; `find docs -maxdepth 1 -t
 
 ---
 
-## 7. Decision checklist
+## 7. GM decisions (2026-10-25)
+
+Every choice below is an explicit GM answer, given in three question rounds on 2026-10-25. The resulting `.mneme/corpus.yaml` dry-resolved to **292 distinct files with 0 findings**, and `mneme corpus check` reports it valid.
+
+| Kind | Trust | Files | Decision |
+|---|---|---|---|
+| `npcs` | authoritative | 96 | Only the top-level `docs/npcs/*.md`, listed under `files:`. Out: `authored/` (4 yaml overrides) and `summary_native/`. |
+| `summaries` | authoritative | 69 | `dirs: [docs/summaries]` only. Out: the pipeline `summaries/*/session-summary.md`. |
+| `party` | authoritative | 8 (+`docs/party.md`) | The current level-9 sheets `docs/{Daz,Gyrgum,Zalthir,Thorin Giantfriend}.md` and the 4 `docs/*_backstory.md`. `docs/party.md` is declared here too, but mined as grounding. Out: the level-8 sheets in `docs/party/`. |
+| `grounding` | authoritative | 15 | The 5 grounding symlinks, `dirs: [docs/reference]`, `docs/grounding_patches.md` and `docs/mechanics.md`; `mined_as: true`. |
+| `prep` | reference | 88 | `notes/{session_prep,sessions,handouts,threads,statblocks,npcs,imported_underdark}` and `docs/gauntlgrym`, plus `notes/{gauntlgrym_faction_summit,conspiracy_intersection_summary,gm_tips,play_log}.md` and `docs/zalthir_power_prompts.md`. |
+| `lore` (campaign kind) | authoritative | 10 | `docs/{campaign_master_plan,campaign_design_frame,canon_guardrails,decision_ladders,risk_levers,heat,coalition_assets_underdark,endgame_extension_rationale,daz_heir,daz_devir_narrative_arc}.md`. |
+| `module` (campaign kind) | reference | 6 | `dirs: [docs/inventory]` and `docs/background/{Out of the Abyss, gracklstugh-revised-inventory, Ilvara reflecting on the Ember Vanguard, post_oota_vhaerun_arc}.md`. Out: the byte-identical inventory copies in `docs/background`, the `.txt` name list, and the 2 Candlekeep JSON files. |
+
+Also decided:
+- **Narrative:** `docs/chapters/` and the bible `docs/TheUnderdark.md` are both left out, as in Phandalin. CampaignGenerator's old `narrative` canon wing goes away.
+- **Left out:** `docs/dead/`, `docs/endgame_design_process.md`, `notes/canon_followups.md`, `notes/bible_divergences.md`, `notes/issues/`, `notes/session_reviews/`, and every pipeline dir (`notes/npc_agent`, `notes/npc_delta`, `docs/summary_native`, `docs/ensemble*`, `docs/distill`, `docs/reviews`, `docs/authority`, `docs/grounding/generations`).
+- **Root `mempalace.yaml`:** untracked (`git rm --cached`) and left to the bare ignore rule, like Phandalin's generated file. The legacy `palace: abyss` content stays in git history.
+- **Palace name:** `out-of-the-abyss`.
+- Canon wings: `npcs`, `summaries`, `party`, `grounding`, `lore`. Index wings: `prep`, `module`.
+
+The `corpus.yaml` as written to `out-of-the-abyss/.mneme/corpus.yaml`:
+
+```yaml
+campaign: out-of-the-abyss
+kinds:
+  npcs:
+    files:
+    - docs/npcs/a-lai-aivenmore.md
+    - docs/npcs/alaundo-the-seer.md
+    - docs/npcs/alkrist.md
+    - docs/npcs/araumycos.md
+    - docs/npcs/asha-vandree.md
+    - docs/npcs/batman.md
+    - docs/npcs/bookwyrm-first-reader.md
+    - docs/npcs/brannum-redmarch.md
+    - docs/npcs/brother-hilmin-thaer.md
+    - docs/npcs/bruenor-battlehammer.md
+    - docs/npcs/brysis-of-khaem.md
+    - docs/npcs/buppido.md
+    - docs/npcs/chef-goromach.md
+    - docs/npcs/chipgrin-goldwhisker.md
+    - docs/npcs/daral-yashenti.md
+    - docs/npcs/dasco-pickshine.md
+    - docs/npcs/dawnbringer.md
+    - docs/npcs/demogorgon.md
+    - docs/npcs/dorbo-diggermattock.md
+    - docs/npcs/droki.md
+    - docs/npcs/dynaphyse.md
+    - docs/npcs/edvaldo-sedanur.md
+    - docs/npcs/eldeth-feldrun.md
+    - docs/npcs/errde-blackskull.md
+    - docs/npcs/fargas-rumblefoot.md
+    - docs/npcs/fembris-lancer.md
+    - docs/npcs/fheminor-scrivenbark.md
+    - docs/npcs/flumph.md
+    - docs/npcs/gartokkar-xundorn.md
+    - docs/npcs/glabbagool.md
+    - docs/npcs/gorglak.md
+    - docs/npcs/grula-munga.md
+    - docs/npcs/gurnik-tapfinger.md
+    - docs/npcs/hemeth.md
+    - docs/npcs/horgar-steelshadow-v.md
+    - docs/npcs/house-t-sarran-spy.md
+    - docs/npcs/ilvara-mizzrym.md
+    - docs/npcs/imbros.md
+    - docs/npcs/inda.md
+    - docs/npcs/irony.md
+    - docs/npcs/jadger.md
+    - docs/npcs/janussi.md
+    - docs/npcs/jimjar.md
+    - docs/npcs/jorlan-duskryn.md
+    - docs/npcs/kaelira-duskryn.md
+    - docs/npcs/kalan-strongbranch.md
+    - docs/npcs/kazook-pickshine.md
+    - docs/npcs/kazryn-nyantani.md
+    - docs/npcs/khell-vire.md
+    - docs/npcs/leuwin.md
+    - docs/npcs/manshoon-simulacrum.md
+    - docs/npcs/manshoon.md
+    - docs/npcs/miirym-the-sentinel-wyrm.md
+    - docs/npcs/miss-hollypocket.md
+    - docs/npcs/moziqodo.md
+    - docs/npcs/narrak.md
+    - docs/npcs/neheedra-duskryn.md
+    - docs/npcs/nibbles.md
+    - docs/npcs/nomi-pathshutter.md
+    - docs/npcs/nym-duskryn.md
+    - docs/npcs/pelek.md
+    - docs/npcs/philemon-master-archivist.md
+    - docs/npcs/pizwog.md
+    - docs/npcs/plinki.md
+    - docs/npcs/prince-derendil.md
+    - docs/npcs/prince-livid.md
+    - docs/npcs/princess-ebonmire.md
+    - docs/npcs/protanther.md
+    - docs/npcs/ront.md
+    - docs/npcs/rumpadump.md
+    - docs/npcs/sarith-kzekarit.md
+    - docs/npcs/senni-diggermattock.md
+    - docs/npcs/shuushar-the-awakened.md
+    - docs/npcs/sister-yvenne.md
+    - docs/npcs/sovereign-basidia.md
+    - docs/npcs/sovereign-phylo.md
+    - docs/npcs/spanner.md
+    - docs/npcs/spiderbait.md
+    - docs/npcs/stonespeaker-hgraam.md
+    - docs/npcs/stool.md
+    - docs/npcs/stroud.md
+    - docs/npcs/sylvira-savikas.md
+    - docs/npcs/tadric.md
+    - docs/npcs/teles-ahvoste.md
+    - docs/npcs/the-flying-iron-owlbear.md
+    - docs/npcs/the-pudding-king.md
+    - docs/npcs/themberchaud.md
+    - docs/npcs/topsy-and-turvy.md
+    - docs/npcs/topsy.md
+    - docs/npcs/turvy.md
+    - docs/npcs/vareth.md
+    - docs/npcs/werz-saltbaron.md
+    - docs/npcs/whistler.md
+    - docs/npcs/yestabrod.md
+    - docs/npcs/yuk-yuk.md
+    - docs/npcs/zuggtmoy.md
+  summaries:
+    dirs:
+    - docs/summaries
+  party:
+    files:
+    - docs/Daz.md
+    - docs/Gyrgum.md
+    - docs/Zalthir.md
+    - docs/Thorin Giantfriend.md
+    - docs/daz_backstory.md
+    - docs/gyrgum_backstory.md
+    - docs/thorin_backstory.md
+    - docs/zalthir_backstory.md
+    - docs/party.md
+  grounding:
+    dirs:
+    - docs/reference
+    files:
+    - docs/world_state.md
+    - docs/campaign_state.md
+    - docs/party.md
+    - docs/planning.md
+    - docs/canon_events_timeline.md
+    - docs/grounding_patches.md
+    - docs/mechanics.md
+    mined_as: true
+  prep:
+    dirs:
+    - notes/session_prep
+    - notes/sessions
+    - notes/handouts
+    - docs/gauntlgrym
+    - notes/threads
+    - notes/statblocks
+    - notes/npcs
+    - notes/imported_underdark
+    files:
+    - notes/gauntlgrym_faction_summit.md
+    - notes/conspiracy_intersection_summary.md
+    - notes/gm_tips.md
+    - notes/play_log.md
+    - docs/zalthir_power_prompts.md
+campaign_kinds:
+  lore:
+    files:
+    - docs/campaign_master_plan.md
+    - docs/campaign_design_frame.md
+    - docs/canon_guardrails.md
+    - docs/decision_ladders.md
+    - docs/risk_levers.md
+    - docs/heat.md
+    - docs/coalition_assets_underdark.md
+    - docs/endgame_extension_rationale.md
+    - docs/daz_heir.md
+    - docs/daz_devir_narrative_arc.md
+    trust: authoritative
+  module:
+    dirs:
+    - docs/inventory
+    files:
+    - docs/background/Out of the Abyss.md
+    - docs/background/gracklstugh-revised-inventory.md
+    - docs/background/Ilvara reflecting on the Ember Vanguard.md
+    - docs/background/post_oota_vhaerun_arc.md
+    trust: reference
+```
+
+## 8. Blank decision checklist (survey-time, superseded by section 7)
+
 
 | Kind | dirs / files | trust override | `mined_as` |
 |---|---|---|---|
