@@ -29,7 +29,7 @@ A render target produced from the authority + store pointer, stamped with the au
 | Face | Target | Render rule |
 |---|---|---|
 | `cli_pointer` | `<campaign>/mempalace.yaml` | `palace: <alias>` + `wing:`/`rooms:` (drives walk-up — FR-016) |
-| `cg_search` | `<campaign>/config.yaml` (`mempalace:` section) | `index_wings`, `canon_wing` from the authority's wings |
+| `cg_search` | `<campaign>/config/config.yaml` (`mempalace:` section) | `index_wings`, `canon_wing` from the authority's wings |
 | `global_alias` | `~/.mempalace/config.json` (`palaces:` map) | **read-modify-merge-write** this campaign's `alias→path`; never clobber other entries; re-stamp |
 | `mcp` | `<campaign>/.mcp.json` (a `mempalace` server) | stdio `mempalace-mcp` with the campaign's palace injected (env/arg) — never hardcoded (FR-017) |
 

@@ -179,13 +179,111 @@ def test_cli_pointer_root_wing_carries_palace(tmp_path):
 
 def test_config_yaml_face_merges_not_clobbers(tmp_path):
     c = tmp_path / "saga"
-    c.mkdir()
-    (c / "config.yaml").write_text(yaml.safe_dump({"campaign_name": "Saga", "other": 1}))
+    (c / "config").mkdir(parents=True)
+    (c / "config" / "config.yaml").write_text(yaml.safe_dump({"campaign_name": "Saga", "other": 1}))
     render.render_config_yaml(_cfg(tmp_path), c)
-    doc = yaml.safe_load((c / "config.yaml").read_text())
+    doc = yaml.safe_load((c / "config" / "config.yaml").read_text())
     assert doc["campaign_name"] == "Saga" and doc["other"] == 1  # preserved
     assert doc["mempalace"]["canon_wing"] == "narrative"
     assert "saga" in doc["mempalace"]["index_wings"]
+
+
+def test_config_yaml_face_wing_model_goes_to_config_dir_only(tmp_path):
+    c = tmp_path / "saga"
+    c.mkdir()  # no config/ yet: it is created
+    path = render.render_config_yaml(_cfg(tmp_path), c)
+    assert path == c / "config" / "config.yaml"
+    doc = yaml.safe_load(path.read_text())
+    assert "canon_wing" in doc["mempalace"] and "index_wings" in doc["mempalace"]
+    assert "canon_wings" not in doc["mempalace"]
+    assert not (c / "config.yaml").exists()  # CG rejects a stray root config.yaml (#67)
+
+
+def test_config_yaml_face_preserves_documents_key(tmp_path):
+    c = tmp_path / "saga"
+    (c / "config").mkdir(parents=True)
+    cfg_file = c / "config" / "config.yaml"
+    cfg_file.write_text("documents:\n  - {label: party, path: docs/party.md}\n")
+    render.render_config_yaml(_cfg(tmp_path), c)
+    doc = yaml.safe_load((c / "config" / "config.yaml").read_text())
+    assert doc["documents"] == [{"label": "party", "path": "docs/party.md"}]
+    assert doc["mempalace"]["canon_wing"]
+
+
+_HAND = (
+    "# CampaignGenerator workspace config\n"
+    "# hand-edited\n"
+    "campaign_name: 'Saga'   # quoted on purpose\n"
+    "\n"
+    "documents:\n"
+    "  # the grounding docs\n"
+    "  - {label: party, path: docs/party.md}\n"
+    "  - {label: world, path: docs/world_state.md}\n"
+    "\n"
+)
+_TAIL = "# agents below\nagents:\n    scribe:   {model: x}\nlog_dir:   logs\n"
+
+
+def _face(tmp_path, text):
+    c = tmp_path / "saga"
+    (c / "config").mkdir(parents=True, exist_ok=True)
+    f = c / "config" / "config.yaml"
+    if text is not None:
+        f.write_text(text)
+    render.render_config_yaml(_cfg(tmp_path), c)
+    return c, f
+
+
+def _block(tmp_path):
+    c = tmp_path / "ref"
+    c.mkdir(exist_ok=True)
+    return render.render_config_yaml(_cfg(tmp_path), c).read_text()
+
+
+def test_config_face_replaces_only_the_mempalace_block_in_the_middle(tmp_path):
+    old = "mempalace:\n  canon_wing: old\n  index_wings: [a]\n  # stale note\n\n"
+    _, f = _face(tmp_path, _HAND + old + _TAIL)
+    assert f.read_text() == _HAND + _block(tmp_path) + "\n" + _TAIL
+
+
+def test_config_face_appends_when_absent(tmp_path):
+    for orig in (_HAND + _TAIL, _HAND + _TAIL.rstrip("\n")):
+        _, f = _face(tmp_path, orig)
+        out = f.read_text()
+        assert out.startswith(orig) and out.endswith(_block(tmp_path))
+        assert "\n\n\n" not in out[len(orig) - 1 :]
+        assert yaml.safe_load(out)["mempalace"]["canon_wing"]
+
+
+def test_config_face_replaces_inline_flow_form(tmp_path):
+    inline = "mempalace: {canon_wing: old, index_wings: [a, b]}\n"
+    _, f = _face(tmp_path, _HAND + inline + _TAIL)
+    assert f.read_text() == _HAND + _block(tmp_path) + _TAIL
+    multi = "mempalace: {canon_wing: old,\n  index_wings: [a]}\n"
+    _, f = _face(tmp_path, _HAND + multi + _TAIL)
+    assert f.read_text() == _HAND + _block(tmp_path) + _TAIL
+
+
+def test_config_face_is_idempotent(tmp_path):
+    c, f = _face(tmp_path, _HAND + "mempalace:\n  canon_wing: old\n" + _TAIL)
+    first = f.read_bytes()
+    render.render_config_yaml(_cfg(tmp_path), c)
+    assert f.read_bytes() == first
+
+
+def test_config_face_check_refuses_when_other_keys_would_change(tmp_path):
+    # a column-0 sequence under the key is not indented, so it is NOT absorbed into the block
+    # and the result would be invalid / change other keys: refuse instead of writing.
+    bad = "mempalace:\n- stray\nother: 1\n"
+    c = tmp_path / "saga"
+    (c / "config").mkdir(parents=True)
+    f = c / "config" / "config.yaml"
+    f.write_text(bad)
+    with pytest.raises(ValueError, match="config.yaml"):
+        render.render_config_yaml(_cfg(tmp_path), c)
+    assert f.read_text() == bad
+    with pytest.raises(ValueError):
+        render._check_only_mempalace_changed("a: 1\n", "a: 2\nmempalace: {x: 1}\n", {"x": 1}, f)
 
 
 def test_global_alias_face_merges_not_clobbers(tmp_path):

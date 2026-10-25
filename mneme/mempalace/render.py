@@ -9,6 +9,7 @@ hand-edited derived file. Reuses `hypostasis.render.subtree_sha256` for hashing.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
@@ -261,11 +262,11 @@ def coherent(cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: Path) -
 
 # ---------------------------------------------------------------------------
 # 003 — the store-naming faces rendered from the authority's store pointer.
-# These three are MERGE-into-existing-file (config.yaml / config.json / .mcp.json),
+# These three are MERGE-into-existing-file (config/config.yaml / config.json / .mcp.json),
 # so they are value-coherence-checked, not stamped (they share files with other data).
 # ---------------------------------------------------------------------------
 
-CONFIG_YAML = "config.yaml"
+CONFIG_YAML = "config/config.yaml"  # CampaignGenerator reads ONLY this path (#67)
 MCP_JSON = ".mcp.json"
 
 
@@ -276,26 +277,69 @@ def _canon_and_index_wings(cfg: CampaignMempalaceConfig) -> tuple[str, list[str]
     return canon, index
 
 
+def _splice_mempalace_block(text: str, section: dict, path: Path) -> str:
+    """Replace only the top-level `mempalace:` block of `text` (or append one), leaving every
+    other byte alone: the file is the GM's hand-edited CampaignGenerator config (#67)."""
+    block = yaml.safe_dump({"mempalace": section}, sort_keys=False)
+    lines = text.splitlines(keepends=True)
+    start = next((i for i, ln in enumerate(lines) if re.match(r"mempalace:(\s|$)", ln)), None)
+    if start is None:
+        out = text if (not text or text.endswith("\n")) else text + "\n"
+        out += block
+    else:
+        end = start + 1  # one past the last line of the block
+        for k in range(start + 1, len(lines)):
+            ln = lines[k]
+            if not ln.strip():
+                continue  # blank: belongs to the block only if indented lines follow
+            if ln[0] in " \t":
+                end = k + 1
+                continue
+            break  # a column-0 key or comment ends the block
+        out = "".join(lines[:start]) + block + "".join(lines[end:])
+    _check_only_mempalace_changed(text, out, section, path)
+    return out
+
+
+def _check_only_mempalace_changed(old: str, new: str, section: dict, path: Path) -> None:
+    try:
+        old_doc = yaml.safe_load(old) if old.strip() else {}
+        new_doc = yaml.safe_load(new)
+    except yaml.YAMLError as e:
+        raise ValueError(f"{path}: cannot safely update the mempalace: section ({e})") from e
+    if old_doc is None:
+        old_doc = {}
+    if not isinstance(old_doc, dict) or not isinstance(new_doc, dict):
+        raise ValueError(f"{path}: not a YAML mapping; refusing to update the mempalace: section")
+    others = {k: v for k, v in old_doc.items() if k != "mempalace"}
+    new_others = {k: v for k, v in new_doc.items() if k != "mempalace"}
+    if new_doc.get("mempalace") != section or new_others != others:
+        raise ValueError(
+            f"{path}: unusual layout; updating the mempalace: section would change other keys "
+            "or not produce the intended section. Edit the file by hand."
+        )
+
+
 def render_config_yaml(
     cfg: CampaignMempalaceConfig, campaign_dir: Path, recipe: Recipe | None = None
 ) -> Path:
-    """Merge the `mempalace:` section into the campaign's config.yaml (CG search face).
+    """Set the `mempalace:` section of the campaign's config/config.yaml (CG search face),
+    textually, so comments and every other key stay byte-identical.
     A corpus campaign gets `canon_wings` + `index_wings` and NO `canon_wing` (007 R8)."""
     path = campaign_dir / CONFIG_YAML
-    doc = {}
-    if path.is_file():
-        doc = yaml.safe_load(path.read_text()) or {}
     if _cconfig.has_corpus(campaign_dir):
         from . import recipe as _recipe
 
         rec = recipe or _recipe.load(cfg.recipe_version)
         canon_wings, index_wings = corpus_wing_split(_load_corpus(rec, campaign_dir), rec)
-        doc["mempalace"] = {"canon_wings": canon_wings, "index_wings": index_wings}
-        path.write_text(yaml.safe_dump(doc, sort_keys=False))
-        return path
-    canon, index = _canon_and_index_wings(cfg)
-    doc["mempalace"] = {"canon_wing": canon, "index_wings": index}
-    path.write_text(yaml.safe_dump(doc, sort_keys=False))
+        section = {"canon_wings": canon_wings, "index_wings": index_wings}
+    else:
+        canon, index = _canon_and_index_wings(cfg)
+        section = {"canon_wing": canon, "index_wings": index}
+    old = path.read_text() if path.is_file() else ""
+    new = _splice_mempalace_block(old, section, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(new)
     return path
 
 

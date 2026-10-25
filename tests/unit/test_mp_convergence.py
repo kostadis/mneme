@@ -80,7 +80,7 @@ def test_render_existing_faces(tmp_path, monkeypatch):
     cj = tmp_path / "home" / ".mempalace" / "config.json"
     written = bringup.render_existing_faces(entity_for(root), "saga", config_json=cj)
     assert "palace: saga" in (camp / "mempalace.yaml").read_text()          # cli pointer
-    assert yaml.safe_load((camp / "config.yaml").read_text())["mempalace"]   # cg_search
+    assert yaml.safe_load((camp / "config" / "config.yaml").read_text())["mempalace"]   # cg_search
     assert "saga" in json.loads(cj.read_text())["palaces"]                   # global alias
     assert (camp / ".mcp.json").exists()                                     # mcp face
     assert len(written) >= 4
