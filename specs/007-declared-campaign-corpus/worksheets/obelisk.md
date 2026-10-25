@@ -2,9 +2,108 @@
 
 - Surveyed path: `/home/kostadis/obelisk/obelisk` (git root is the parent, `/home/kostadis/obelisk`)
 - HEAD: `f80a2be1` (committed 2026-10-19)
-- Date: 2026-10-23
+- Date: 2026-10-23 (survey); section 0 added 2026-10-25
+- Other copy: `/home/kostadis/src/campaigns/obelisk` also has a `.mneme/`, at older commit `2b34ac79`. It was not surveyed.
 
-Observations only. Nothing here is a decision; the GM writes `.mneme/corpus.yaml`.
+Sections 1–7 are observations only. Nothing here is a decision; the GM writes `.mneme/corpus.yaml`. Section 0 is the conversion path, revised with what the Phandalin and out-of-the-abyss migrations taught.
+
+---
+
+## 0. Conversion path and lessons from Phandalin and out-of-the-abyss (2026-10-25)
+
+Phandalin and out-of-the-abyss were both migrated on 2026-10-25, each by integrate + bringup. Both ended with `mneme mp status` all ok and the corpus conformant. This section carries over what those runs taught, plus two things that only obelisk has (0.2). **Nothing here decides obelisk membership.** Earlier answers appear only as precedent, next to a blank for this campaign's answer.
+
+### 0.1 Before you start
+
+- **Pull the checkout.** On 2026-10-25, `~/obelisk` is at `f80a2be1`, **119 commits behind `origin/main`**. None of those commits touch `obelisk/`, so the counts in sections 1–6 still hold.
+- **Clean up the untracked files.** `git status` shows 48 untracked entries:
+  - 46 under `notes/grounding_delta/ch013/` (the `runs/` subtree, candidates, scripts);
+  - `notes/npc_delta/ch013/tailscale_runtime.json`;
+  - `.review-runtime/`.
+- **Untracked does not mean skipped.** Only *gitignored* files are left out of a declared dir (#65). A probe of `dirs: [notes]` resolves 68 untracked files (0.5). Before bringup, decide whether to commit, gitignore or delete them: ______
+- **Host versions** (all true on this host on 2026-10-25):
+  - mempalace on `kostadis-dev`, with `--skips-json` (#56) and Ollama sub-batching (mempalace#57 / PR #58). The large files that might be declared are `docs/background/obelisk.md` (620,642 bytes) and `docs/zenvon-forepot-level-3.pdf` (824,098 bytes).
+  - mneme at `5831944` or later (#68, the CampaignGenerator face goes to `config/config.yaml`). `mneme mp search` (#74) is optional, but it is the safe way to spot-check the palace afterwards. A bare `mempalace search` uses the wrong embedder (#73).
+  - CampaignGenerator at `9d4079a` or later (#594, `canon_wings`). Restart any running CampaignGenerator MCP server or UI after migrating.
+- **`data_roots`.** `~/obelisk` is not in `data_roots.campaigns` in `~/.config/hypostasis/hypostasis.yaml`, so `mneme … obelisk` fails with "campaign workspace not found". Out-of-the-abyss added its root and never needed `--dir` again. `mp adopt` (0.2) has **no `--dir` option**, so obelisk needs either the `data_roots` entry or a hand edit. Add `~/obelisk`: ______
+
+### 0.2 What is different about obelisk
+
+Phandalin and out-of-the-abyss had no `.mneme/`. Obelisk already has one, integrated 2026-07-03:
+- `owner.yaml`, with mneme id `64cf8b36-…` (this host's id, so `mp status` reports `owner: owned`);
+- `mempalace.yaml`, the wing-model authority described in section 1.
+
+That changes the path in three ways.
+
+1. **The recipe has to move to v3.** The authority says `recipe_version: 2.0.0`. Recipe v2 defines no `kinds:`, so once `corpus.yaml` exists, every corpus command refuses with `recipe-no-kinds: recipe v2 defines no kinds; adopt v3 or later (mneme mp adopt)`. `mp status` today shows `recipe divergent_pending  upgrade available, not yet adopted`. Out-of-the-abyss was born on `3.0.0`.
+2. **The `wings:` key has to go.** Once `corpus.yaml` exists, `authority.validate` refuses an authority that still has `wings:` (or `extra_exclusions:`): `dual-authority: .mneme/mempalace.yaml has 'wings:' but .mneme/corpus.yaml exists; the corpus file declares the wings, so remove the key`. Without a `corpus.yaml`, an authority with no wings is also refused (`wings: at least one wing is required`). So **removing `wings:` and writing `corpus.yaml` happen together**, before any mneme command runs. Keep `campaign: obelisk` and `store.alias: obelisk`. The authority's `campaign:` must equal `corpus.yaml`'s (rule 1).
+3. **There are two ways to make the change.** Pick one: ______
+   - **(a) Adopt, then edit.** Run `mneme mp adopt obelisk --here` to preview, then `--confirm`, before `corpus.yaml` exists. That moves `recipe_version` to `3.0.0`, keeps the wings, re-renders the wing-model files, and leaves everything uncommitted. Then delete `wings:` by hand and write `corpus.yaml`. This needs the `data_roots` entry.
+   - **(b) Hand edit.** In `.mneme/mempalace.yaml`, set `recipe_version: 3.0.0`, delete the `wings:` block, and write `corpus.yaml`, all in one sitting. Bringup re-renders everything afterwards anyway.
+
+**Bringup or regenerate.** There is no obelisk palace on this host. `~/.mempalace/palaces` holds `chat`, `out_of_the_abyss` and `phandalin`. `mp status` reports `store: not provisioned` and `faces: FAIL stale_render` (no `config.json` palace entry and no `.mcp.json`). The standing decision is "migration is a fresh rebuild (`mp regenerate --confirm`), never in-place conversion". Here both commands build from empty:
+- `mp bringup` loads the existing authority (`_plan_config`). It renders all faces, first-mines through the corpus, and takes a backup. That is the step that fixed the faces for the other two campaigns.
+- `mp regenerate --confirm` validates the corpus, clears the store (here, nothing), first-mines and records an empty former-wings record. It does **not** render faces. You would still need `mneme mp render obelisk`, then `mneme mp backup obelisk`.
+
+Which one: ______
+
+### 0.3 Steps
+
+These assume `data_roots` has `~/obelisk`; otherwise add `--dir ~/obelisk/obelisk` to each command.
+
+1. Pull, then deal with the untracked files (0.1).
+2. Move the recipe and drop `wings:` by path (a) or (b) (0.2), and write `.mneme/corpus.yaml` from section 7. Skip `mneme integrate`, because `owner.yaml` already exists. `mneme corpus init obelisk` writes a blank skeleton if you want one, and refuses if the file already exists.
+3. Run `mneme corpus check obelisk` until it reports valid. Spot-check a kind with `mneme corpus toc obelisk --kind <kind> --json`.
+4. Run `mneme mp bringup obelisk --verbose` (or regenerate, per 0.2) and **let it run to the end**. The run looks hung on large files, but it is still working. Two lines are normal and need no action:
+   - "cannot read sources" before the first mine;
+   - `add/upsert with vectors= bypasses the configured embedder` (mempalace#59).
+5. **Check the CampaignGenerator face by hand.** Today `config/config.yaml` lines 45–50 read `canon_wing: narrative` and `index_wings: [notes, summaries, obelisk]`. After bringup that block must hold `canon_wings:` and `index_wings:` matching the declared kinds' trust. The rest of the file is preserved. `mp status` does not check this block yet (mneme#69). If it is stale, run `mneme mp render obelisk`.
+6. Run `mneme mp status obelisk`. Expect `recipe` conformant, `corpus` conformant, `index` ok, `embedder` 1024-dim, `faces` ok and `owner` owned.
+7. If regenerate was used, run `mneme mp backup obelisk`. Bringup takes its own backup.
+8. Optionally spot-check with `mneme mp search obelisk "<an NPC name>" --wing npcs`.
+9. Commit in the campaigns repo, on a branch, through a PR: `.mneme/mempalace.yaml`, `.mneme/corpus.yaml`, `config/config.yaml` and `.gitignore`, plus the root `mempalace.yaml` and the other derived files, depending on 0.4.
+
+### 0.4 Repo hygiene (checked on this checkout)
+
+- **The `.mneme/` files are already tracked** (`git ls-files` lists `.mneme/mempalace.yaml` and `.mneme/owner.yaml`). Obelisk's `.gitignore` has **no** bare `mempalace.yaml` rule, on purpose: lines 1–5 explain that such a rule "would silently swallow the .mneme authority". So the `!.mneme/mempalace.yaml` exception that Phandalin needed is not needed here.
+- `.mneme/corpus.toc.json` is not ignored yet. The corpus render appends its own ignore line, so `.gitignore` shows modified after bringup. Commit that change.
+- **The root `mempalace.yaml` is tracked and already mneme-rendered** (`palace: obelisk`, with a source-sha256 stamp). Bringup rewrites it as the corpus root yaml, so git shows it modified. Out-of-the-abyss untracked its own root file, and **pulling that commit deleted the file on disk**, which sent `render` and `faces` to `stale_render` until `mneme mp render` ran. Every host that pulls such a commit needs the same render. Obelisk's `.gitignore` has no rule that would keep an untracked root file out of `git status`. Decide whether to commit the rendered file or untrack it and add a root-anchored `/mempalace.yaml` ignore rule: ______
+- The other mneme-rendered files (`.mempalaceignore` and `docs/chapters/`, `notes/` and `summaries/mempalace.yaml`) are wing-model renders. Check after bringup whether the corpus render rewrote, removed or left each one, and commit to match.
+- **Palace name.** `campaign: obelisk` matches the folder's capitalization on GitHub, and `store.alias: obelisk` gives `~/.mempalace/palaces/obelisk`. No legacy palace exists to carry over. Confirm the name: ______
+
+### 0.5 How declarations resolve (dry resolve, 2026-10-25)
+
+These probes ran the resolver (recipe 3.0.0) against this checkout in Python, with nothing written to the campaign. **They are not a proposed corpus.** Every probe returned 0 findings; git mode was `work-tree`.
+
+| Probe declaration | Files resolved | Notes |
+|---|---|---|
+| `files:` `docs/{world_state,campaign_state,planning,party}.md` | 4 `.md` | No symlinks; plain files, unlike out-of-the-abyss. |
+| `dirs: [docs/npcs]` | 775 (739 `.md`, 34 `.json`, 2 `.html`) | Includes the 733 `summary_native/` pipeline files. |
+| `files:` the 42 top-level `docs/npcs/*.md` | 42 `.md` | The Phandalin / out-of-the-abyss precedent: list the files instead of the dir. |
+| `dirs: [docs/summaries]` | 13 `.md` | `.zvec-grep/` is gitignored and skipped. |
+| `dirs: [notes]` | 150 (52 `.json`, 50 `.md`, 33 `.txt`, 13 `.py`, 2 `.html`) | By subdir: `grounding_delta` 106, `npc_delta` 22, `session_prep` 10, top level 5, `handouts` 5, `strategy` 2. **68 are untracked** (0.1). |
+| `dirs: [notes/session_prep]` | 10 `.md` | |
+| `dirs: [notes/handouts]` | 5 `.md` | |
+| `dirs: [docs/chapters]` | 3 `.md` | `docs/chapters/mempalace.yaml` is not counted. |
+| `dirs: [docs/background]` | 8 (7 `.md`, 1 `.txt`) | Includes the 620 KB `obelisk.md` module text. |
+| `dirs: [characters]` | 6 `.md` | `characters/old/` holds 1 file and needs its own decision. |
+
+What carries over:
+- **Gitignored means not in the corpus** (#65). Gitignored files under a declared dir are skipped silently. A gitignored path named in `files:` is an error.
+- **There is no exclude list inside a declared dir.** To keep `docs/npcs/summary_native/` out, list the wanted files under `files:`, as both earlier campaigns did with their top-level dossiers. Here that would be the 42 top-level `docs/npcs/*.md`: ______
+- **A file reachable from two kinds needs `mined_as: true` on exactly one of them.** Both earlier campaigns had `docs/party.md` in `party` and `grounding`, mined as grounding. Here it is the same question (section 4): ______
+- **Trust decides which wings are canon.** Kinds with `trust: authoritative` become `canon_wings`, which CampaignGenerator's `grounded_search` verifies against. Kinds with `trust: reference` become `index_wings`. Defaults: `npcs`, `summaries`, `party` and `grounding` are authoritative; `prep` is reference. A campaign kind must state its trust.
+- **Campaign kinds, as precedent.**
+  - Phandalin: `lore` (authoritative), and `background`, `module` and `prep` (reference).
+  - Out-of-the-abyss: `lore` (authoritative) and `module` (reference). Book-length module texts went in a reference kind in both.
+  - Here the candidates are `docs/background/` (the module text and inventories), `characters/` and `voice/` (PC data, section 2 "party"), `notes/strategy/` and the tracking files under `docs/` (section 6): ______
+- **Both earlier campaigns left `docs/chapters` out.** Here `docs/chapters/` (3 `.md`) is today's only `trust: authoritative` wing (`narrative`), so leaving it out removes CampaignGenerator's canon wing until the new kinds replace it. In or out: ______
+- **Out-of-the-abyss's `prep` was a list of `notes/` subdirs**, not all of `notes/`. It left out every pipeline dir (`npc_delta`, `summary_native`, `ensemble*`, `reviews`, `authority`, …). The obelisk equivalents are `notes/grounding_delta`, `notes/npc_delta`, `docs/summary_native`, `docs/npcs/summary_native`, `docs/archive`, `docs/reviews` and `docs/authority`: ______
+- **Summaries.** Both earlier campaigns declared only `docs/summaries` and left the pipeline `summaries/*/session-summary.md` out. Obelisk's current `summaries` wing points at the **pipeline** `summaries/` (1078 files); `docs/summaries/` (13) has no wing today. Which one: ______
+- **The PDF.** `docs/zenvon-forepot-level-3.pdf` is the only PDF. If it is declared, check after the mine whether mempalace skipped it; `mp status` `gaps` lists every skip.
+- **`arcs` is Phandalin-only.** It feeds CampaignGenerator's `arc_triggers`. Obelisk has `docs/oblesik_tracking.md`, but no `docs/tracking/`.
+
+---
 
 Counts are files (`find <dir> -type f`) unless stated. Counts that include tool-state dirs (`.zvec-grep/`, `.tgrep/`) are noted.
 
