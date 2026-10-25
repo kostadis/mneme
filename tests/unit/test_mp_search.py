@@ -60,9 +60,9 @@ def test_argv_has_global_palace_before_search_and_flags(world):
     assert res.exit_code == 0, res.output
     store = backup._store_path(entity, "stormhaven")
     assert cmds == [[
-        "mempalace", "--palace", str(store), "search", "who is calmer",
+        "mempalace", "--palace", str(store), "search",
         "--wing", "canon", "--room", "r1", "--results", "3",
-        "--since", "2024-01-01", "--before", "2025-01-01",
+        "--since", "2024-01-01", "--before", "2025-01-01", "--", "who is calmer",
     ]]
     assert seen["stream"] is True
     assert seen["env"]["MEMPALACE_EMBEDDING_PROVIDER"] == "ollama"
@@ -71,14 +71,64 @@ def test_argv_has_global_palace_before_search_and_flags(world):
 def test_absent_flags_omitted(world):
     _e, cmds, _rc, _s = world
     assert _search("stormhaven", "q").exit_code == 0
-    assert cmds[0][3:] == ["search", "q"]
+    assert cmds[0][3:] == ["search", "--", "q"]
     assert cmds[0][1] == "--palace"
 
 
-def test_nonzero_exit_propagated(world):
+def test_dash_query_follows_double_dash(world):
+    _e, cmds, _rc, _s = world
+    assert _search("stormhaven", "--", "-2 to hit").exit_code == 0
+    assert cmds[0][-2:] == ["--", "-2 to hit"]
+
+
+def test_nonzero_exit_maps_to_runtime(world):
     _e, _cmds, rc, _s = world
-    rc["code"] = 3
-    assert _search("stormhaven", "q").exit_code == 3
+    rc["code"] = 2
+    res = _search("stormhaven", "q")
+    assert res.exit_code == cli.EXIT_RUNTIME
+    assert "FAIL search: mempalace exited 2" in res.output
+
+
+def test_unlaunchable_binary_reports_reason(world, monkeypatch):
+    _e, _cmds, _rc, _s = world
+
+    def broken(cls, e, runner=None, *, stream=False):
+        def boom(cmd):
+            raise OSError("no such file")
+
+        return MempalaceRunner("mempalace", boom, e.env)
+
+    monkeypatch.setattr(MempalaceRunner, "for_entity", classmethod(broken))
+    res = _search("stormhaven", "q")
+    assert res.exit_code == cli.EXIT_RUNTIME
+    assert "FAIL search: cannot run mempalace: no such file" in res.output
+
+
+def test_zero_results_rejected(world):
+    assert _search("stormhaven", "q", "--results", "0").exit_code != 0
+
+
+def test_embedder_mismatch_refused(world, monkeypatch):
+    _e, cmds, _rc, _s = world
+    from mneme.mempalace import embedder_guard
+
+    def bad(entity, store, prober=None):
+        return embedder_guard.GuardResult(embedder_guard.GuardState.MISMATCH, "dim 1024 != 384")
+
+    monkeypatch.setattr(embedder_guard, "check", bad)
+    res = _search("stormhaven", "q")
+    assert res.exit_code == cli.EXIT_RUNTIME and "dim 1024 != 384" in res.output
+    assert cmds == []
+
+
+def test_missing_store_refused(world, monkeypatch):
+    entity, cmds, _rc, _s = world
+    import shutil
+
+    shutil.rmtree(backup._store_path(entity, "stormhaven"), ignore_errors=True)
+    res = _search("stormhaven", "q")
+    assert res.exit_code == cli.EXIT_RUNTIME and "mneme mp bringup" in res.output
+    assert cmds == []
 
 
 def test_missing_embedder_refused_before_running(world, monkeypatch):

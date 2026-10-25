@@ -51,6 +51,24 @@ def _store_path(entity: ConfigEntity, campaign: str, campaign_dir: str | None = 
     return _authority.require_store(cfg).path
 
 
+def queryable_store(
+    entity: ConfigEntity, campaign: str, campaign_dir: str | None = None, prober=None
+) -> Path:
+    """The campaign's store path, verified readable for a query (GH #73): not broken, not
+    missing, and the embedder agrees with the palace's built dimension (same fail-closed
+    policy as refresh/restore — UNKNOWN refuses too). Raises; never writes."""
+    store = _store_path(entity, campaign, campaign_dir)
+    state = store_state(store)
+    if state.kind is StoreKind.BROKEN:
+        raise MempalaceError(state.reason)
+    if state.unprovisioned:
+        raise MempalaceError(
+            f"store missing at {store} — nothing to search (run `mneme mp bringup`)"
+        )
+    _guard.require_writable(entity, store, prober)  # EmbedderMismatchError is a MempalaceError
+    return store
+
+
 def latest_backup(entity: ConfigEntity, campaign: str) -> Path | None:
     base = backups_root(entity) / campaign
     if not base.is_dir():
