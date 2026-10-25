@@ -235,38 +235,111 @@ Directories holding material outside the five standard kinds (path and count onl
 - `notes/handouts/`: 11; `notes/strategy/`: 97; `notes/session_prep/`: 106
 - Other root entries: `RENUMBERING.md`, `MEMPALACE.md`, `logs/`, `tests/` (0 files), `.review-runtime/`
 
-## 7. Decision checklist
+## 7. GM decisions (2026-10-25)
 
-| kind | dirs / files | trust override | mined_as |
+Every choice below is an explicit GM answer, given in four question rounds on 2026-10-25. `mneme corpus check obelisk` reports the resulting `.mneme/corpus.yaml` valid with 0 findings: 105 distinct paths (`docs/party.md` is in two kinds).
+
+| Kind | Trust | Files | Decision |
 |---|---|---|---|
-| npcs | ______ | ______ | ______ |
-| summaries | ______ | ______ | ______ |
-| party | ______ | ______ | ______ |
-| grounding | ______ | ______ | ______ |
-| prep | ______ | ______ | ______ |
-| campaign kinds (name, paths, trust) | ______ | ______ | n/a |
+| `npcs` | authoritative | 42 | Only the top-level `docs/npcs/*.md`, listed under `files:`. Out: `docs/npcs/summary_native/` (733). |
+| `summaries` | authoritative | 13 | `dirs: [docs/summaries]` only. Out: the pipeline `summaries/` (1078), which today's `summaries` wing mines. |
+| `party` | authoritative | 14 | `dirs: [characters, voice]` (`characters/old/` and the 3 `voice/*.proposed.md` included) plus `docs/party.md`, which is mined as grounding. |
+| `grounding` | authoritative | 4 | `docs/{world_state,campaign_state,party,planning}.md`; `mined_as: true`. |
+| `prep` | reference | 18 | `dirs: [notes/session_prep, notes/handouts, notes/strategy]`. Out: `notes/grounding_delta`, `notes/npc_delta` and the top-level `notes/*.md`. |
+| `chapters` (campaign kind) | reference | 3 `.md` | `dirs: [docs/chapters]`. Unlike Phandalin and out-of-the-abyss, the chapters stay in, but at `reference`, so today's `narrative` canon wing goes away. The TOC also lists `docs/chapters/mempalace.yaml` as `minable: false`. |
+| `module` (campaign kind) | reference | 11 | `dirs: [docs/background]` plus `docs/{oblesik_tracking,mechanics,entity_inventory}.md`. |
 
-Blank skeleton:
+Also decided:
+- **Untracked files (0.1):** commit them all: `notes/grounding_delta/ch013/` (46), `notes/npc_delta/ch013/tailscale_runtime.json`, `.review-runtime/`, and the new `notes/session_prep/20261025_chapter_13.md` that appeared after the pull. Only the last one is in the corpus.
+- **`data_roots`:** `~/obelisk` added to `data_roots.campaigns`.
+- **Recipe path (0.2):** (b) hand edit: `recipe_version: 3.0.0`, `wings:` deleted, `corpus.yaml` written in one sitting.
+- **Build:** `mneme mp bringup obelisk`.
+- **Left out:** `docs/zenvon-forepot-level-3.pdf`, `docs/{aliases.json,authority.yaml,corrections.yaml,entity_registry.yaml,recent_events.md}`, `docs/archive`, `docs/reviews`, `docs/summary_native`, `docs/authority`, `config/`, `examples/`.
+- **Root `mempalace.yaml`:** stays tracked; the bringup rewrite is committed.
+- **Palace name:** `obelisk` (`store.alias: obelisk`). Standard kinds keep their default trust.
+- Canon wings: `npcs`, `summaries`, `party`, `grounding`. Index wings: `prep`, `chapters`, `module`.
+
+The `corpus.yaml` as written to `obelisk/.mneme/corpus.yaml`:
 
 ```yaml
 campaign: obelisk
-
 kinds:
   npcs:
-    # dirs: []
-    # files: []
+    files:
+    - docs/npcs/agatha.md
+    - docs/npcs/ander.md
+    - docs/npcs/brakka.md
+    - docs/npcs/brughor-axe-biter.md
+    - docs/npcs/daran-edermath.md
+    - docs/npcs/dosa-rook.md
+    - docs/npcs/droop.md
+    - docs/npcs/elmina-barthen.md
+    - docs/npcs/elsa.md
+    - docs/npcs/freda.md
+    - docs/npcs/gog.md
+    - docs/npcs/gorl.md
+    - docs/npcs/greska.md
+    - docs/npcs/gundren-rockseeker.md
+    - docs/npcs/halia-thornton.md
+    - docs/npcs/hamun-kost.md
+    - docs/npcs/harbin-wester.md
+    - docs/npcs/hul.md
+    - docs/npcs/iarno-glasstaff-albrek.md
+    - docs/npcs/king-grol.md
+    - docs/npcs/klarg.md
+    - docs/npcs/lanar.md
+    - docs/npcs/lhupo.md
+    - docs/npcs/linene-graywind.md
+    - docs/npcs/mirna-dendrar.md
+    - docs/npcs/nars-dendrar.md
+    - docs/npcs/narth.md
+    - docs/npcs/nezznar-the-spider.md
+    - docs/npcs/nilsa-dendrar.md
+    - docs/npcs/nosk.md
+    - docs/npcs/orryn-voss.md
+    - docs/npcs/redbrand-ruffian.md
+    - docs/npcs/rondar.md
+    - docs/npcs/sildar-hallwinter.md
+    - docs/npcs/sister-garaele.md
+    - docs/npcs/ssarnak.md
+    - docs/npcs/thistle.md
+    - docs/npcs/toblen-stonehill.md
+    - docs/npcs/tuck-stonehill.md
+    - docs/npcs/warden-holl.md
+    - docs/npcs/wick.md
+    - docs/npcs/yeemik.md
   summaries:
-    # dirs: []
-    # files: []
+    dirs:
+    - docs/summaries
   party:
-    # dirs: []
-    # files: []
+    dirs:
+    - characters
+    - voice
+    files:
+    - docs/party.md
   grounding:
-    # dirs: []
-    # files: []
+    files:
+    - docs/world_state.md
+    - docs/campaign_state.md
+    - docs/party.md
+    - docs/planning.md
+    mined_as: true
   prep:
-    # dirs: []
-    # files: []
-
+    dirs:
+    - notes/session_prep
+    - notes/handouts
+    - notes/strategy
 campaign_kinds:
+  chapters:
+    dirs:
+    - docs/chapters
+    trust: reference
+  module:
+    dirs:
+    - docs/background
+    files:
+    - docs/oblesik_tracking.md
+    - docs/mechanics.md
+    - docs/entity_inventory.md
+    trust: reference
 ```
