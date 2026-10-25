@@ -27,7 +27,8 @@ def test_bringup_end_to_end(tmp_path, monkeypatch):
 
     # four faces written (FR-002a)
     assert "palace: stormhaven" in (camp / "mempalace.yaml").read_text()  # cli_pointer (root wing)
-    cg = yaml.safe_load((camp / "config.yaml").read_text())["mempalace"]  # cg_search face
+    cg_file = camp / "config" / "config.yaml"  # cg_search face (#67)
+    cg = yaml.safe_load(cg_file.read_text())["mempalace"]
     assert cg["canon_wing"]
     cj = json.loads((tmp_path / "home" / ".mempalace" / "config.json").read_text())  # global alias
     assert "stormhaven" in cj["palaces"]

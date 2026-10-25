@@ -214,7 +214,7 @@ skip-worktree. The case still matters for out-of-the-abyss and future cones.
   pointer, `render.py:67-79`, still needed for walk-up resolution) and the rooms. The old
   per-wing renders are removed on the first corpus render, and status reports leftovers as
   drift.
-- The CampaignGenerator search face (`config.yaml` `mempalace:`) becomes
+- The CampaignGenerator search face (`config/config.yaml` `mempalace:`) becomes
   `canon_wings: [<authoritative kinds>]`, `index_wings: [<other kinds>]`. Today it is a single
   `canon_wing`. CG reads one canon wing today, so **this is a CG change**. GM decision
   (2026-10-23): no transitional `canon_wing` is written. CG reading `canon_wings`, and

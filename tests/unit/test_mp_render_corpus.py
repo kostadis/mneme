@@ -44,7 +44,8 @@ def test_leftover_stamped_wing_renders_are_deleted_and_only_those(tmp_path, monk
 
 def test_config_yaml_has_canon_wings_and_no_canon_wing(tmp_path, monkeypatch):
     w, cfg, rec = _setup(tmp_path, monkeypatch)
-    (w.camp / "config.yaml").write_text("keep: me\nmempalace:\n  canon_wing: old\n")
+    (w.camp / "config").mkdir()
+    (w.camp / "config" / "config.yaml").write_text("keep: me\nmempalace:\n  canon_wing: old\n")
     (w.camp / ".mneme" / "corpus.yaml").write_text(
         "campaign: corp\nkinds:\n  npcs:\n    dirs: [docs/npcs]\n"
         "  prep:\n    dirs: [docs/reviews]\n"
@@ -53,7 +54,8 @@ def test_config_yaml_has_canon_wings_and_no_canon_wing(tmp_path, monkeypatch):
         "  extras:\n    files: [docs/world_state.md]\n    trust: reference\n"
     )
     render.render_config_yaml(cfg, w.camp, rec)
-    doc = yaml.safe_load((w.camp / "config.yaml").read_text())
+    doc = yaml.safe_load((w.camp / "config" / "config.yaml").read_text())
+    assert not (w.camp / "config.yaml").exists()  # #67: never a root config.yaml
     assert doc["keep"] == "me"
     assert doc["mempalace"] == {
         "canon_wings": ["npcs", "lore"],  # recipe order, then campaign kinds
@@ -83,7 +85,7 @@ def test_faces_cover_the_corpus_artifacts(tmp_path, monkeypatch):
     w, cfg, rec = _setup(tmp_path, monkeypatch)
     cj = tmp_path / "config.json"
     written = render.render_faces(cfg, rec, w.camp, cj)
-    assert w.camp / "mempalace.yaml" in written and w.camp / "config.yaml" in written
+    assert w.camp / "mempalace.yaml" in written and w.camp / "config" / "config.yaml" in written
     assert render.faces_coherent(cfg, w.camp, cj) == []
     (w.camp / "mempalace.yaml").write_text("palace: other\n")
     assert any("cli_pointer" in b for b in render.faces_coherent(cfg, w.camp, cj))

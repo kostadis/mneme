@@ -149,7 +149,7 @@ def test_publish_preview_reports_shadowed_kind(w, monkeypatch):
 
 def test_faces_and_render_check_use_the_corpus_render(w):
     written = bringup.render_existing_faces(w.entity, "corp")
-    cfg_yaml = next(p for p in written if p.name == "config.yaml")
+    cfg_yaml = next(p for p in written if p == w.camp / "config" / "config.yaml")
     mp = yaml.safe_load(cfg_yaml.read_text())["mempalace"]
     assert "canon_wings" in mp and "canon_wing" not in mp
 

@@ -179,13 +179,35 @@ def test_cli_pointer_root_wing_carries_palace(tmp_path):
 
 def test_config_yaml_face_merges_not_clobbers(tmp_path):
     c = tmp_path / "saga"
-    c.mkdir()
-    (c / "config.yaml").write_text(yaml.safe_dump({"campaign_name": "Saga", "other": 1}))
+    (c / "config").mkdir(parents=True)
+    (c / "config" / "config.yaml").write_text(yaml.safe_dump({"campaign_name": "Saga", "other": 1}))
     render.render_config_yaml(_cfg(tmp_path), c)
-    doc = yaml.safe_load((c / "config.yaml").read_text())
+    doc = yaml.safe_load((c / "config" / "config.yaml").read_text())
     assert doc["campaign_name"] == "Saga" and doc["other"] == 1  # preserved
     assert doc["mempalace"]["canon_wing"] == "narrative"
     assert "saga" in doc["mempalace"]["index_wings"]
+
+
+def test_config_yaml_face_wing_model_goes_to_config_dir_only(tmp_path):
+    c = tmp_path / "saga"
+    c.mkdir()  # no config/ yet: it is created
+    path = render.render_config_yaml(_cfg(tmp_path), c)
+    assert path == c / "config" / "config.yaml"
+    doc = yaml.safe_load(path.read_text())
+    assert "canon_wing" in doc["mempalace"] and "index_wings" in doc["mempalace"]
+    assert "canon_wings" not in doc["mempalace"]
+    assert not (c / "config.yaml").exists()  # CG rejects a stray root config.yaml (#67)
+
+
+def test_config_yaml_face_preserves_documents_key(tmp_path):
+    c = tmp_path / "saga"
+    (c / "config").mkdir(parents=True)
+    cfg_file = c / "config" / "config.yaml"
+    cfg_file.write_text("documents:\n  - {label: party, path: docs/party.md}\n")
+    render.render_config_yaml(_cfg(tmp_path), c)
+    doc = yaml.safe_load((c / "config" / "config.yaml").read_text())
+    assert doc["documents"] == [{"label": "party", "path": "docs/party.md"}]
+    assert doc["mempalace"]["canon_wing"]
 
 
 def test_global_alias_face_merges_not_clobbers(tmp_path):

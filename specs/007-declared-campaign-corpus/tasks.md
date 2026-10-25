@@ -131,7 +131,7 @@ Every user story needs these.
   - Write the root `mempalace.yaml`, stamped, with `palace: <alias>` plus the union of rooms from the recipe kinds.
   - Write the TOC via `mneme/corpus/toc.py`.
   - Delete leftover per-wing `mempalace.yaml` and `.mempalaceignore` renders, but only files carrying mneme's stamp.
-  - Write `config.yaml` `mempalace: {canon_wings, index_wings}`. No `canon_wing` key: the CG change ships first (R8, plan Dependency 6).
+  - Write `config/config.yaml` `mempalace: {canon_wings, index_wings}`. No `canon_wing` key: the CG change ships first (R8, plan Dependency 6).
   - Make `coherent()` and `render_faces()` cover the corpus artifacts.
   - The wing-model path is unchanged.
   - Tests in `tests/unit/test_mp_render_corpus.py`.

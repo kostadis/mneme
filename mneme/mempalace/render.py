@@ -261,11 +261,11 @@ def coherent(cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: Path) -
 
 # ---------------------------------------------------------------------------
 # 003 — the store-naming faces rendered from the authority's store pointer.
-# These three are MERGE-into-existing-file (config.yaml / config.json / .mcp.json),
+# These three are MERGE-into-existing-file (config/config.yaml / config.json / .mcp.json),
 # so they are value-coherence-checked, not stamped (they share files with other data).
 # ---------------------------------------------------------------------------
 
-CONFIG_YAML = "config.yaml"
+CONFIG_YAML = "config/config.yaml"  # CampaignGenerator reads ONLY this path (#67)
 MCP_JSON = ".mcp.json"
 
 
@@ -279,9 +279,10 @@ def _canon_and_index_wings(cfg: CampaignMempalaceConfig) -> tuple[str, list[str]
 def render_config_yaml(
     cfg: CampaignMempalaceConfig, campaign_dir: Path, recipe: Recipe | None = None
 ) -> Path:
-    """Merge the `mempalace:` section into the campaign's config.yaml (CG search face).
+    """Merge the `mempalace:` section into the campaign's config/config.yaml (CG search face).
     A corpus campaign gets `canon_wings` + `index_wings` and NO `canon_wing` (007 R8)."""
     path = campaign_dir / CONFIG_YAML
+    path.parent.mkdir(parents=True, exist_ok=True)
     doc = {}
     if path.is_file():
         doc = yaml.safe_load(path.read_text()) or {}

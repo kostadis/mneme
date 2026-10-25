@@ -27,7 +27,7 @@ missing-pointer wrong-store bug must be impossible — FR-013/016).
 | Face | Target file | Content |
 |---|---|---|
 | **cli_pointer** | `<campaign>/mempalace.yaml` | `palace: <alias>`, `wing:`/`rooms:` — so a CLI run *inside the campaign* walks up to this and resolves to the campaign's store (FR-016) |
-| **cg_search** | `<campaign>/config.yaml` → `mempalace:` | `index_wings: [...]`, `canon_wing: <...>` derived from the wings (what CG search reads) |
+| **cg_search** | `<campaign>/config/config.yaml` → `mempalace:` | `index_wings: [...]`, `canon_wing: <...>` derived from the wings (what CG search reads) |
 | **global_alias** | `~/.mempalace/config.json` → `palaces:` | this campaign's `alias: path` entry — **read-modify-merge-write**; never overwrite other campaigns' entries |
 | **mcp** | `<campaign>/.mcp.json` | a `mempalace` stdio server with the campaign's palace injected — see `mcp-registration.md` |
 
