@@ -71,6 +71,7 @@ mneme mp bringup CAMPAIGN         # NEW campaign → configure + provision + fir
 mneme mp backup CAMPAIGN          # snapshot the bindings (store.sqlite3); restore preserves them
 mneme mp restore CAMPAIGN         # bring bindings back WITHOUT re-embedding (turbovecdb auto-prunes)
 mneme mp regenerate CAMPAIGN --confirm   # the ONLY re-embed-from-scratch path (e.g. model change)
+mneme mp search CAMPAIGN QUERY    # search the campaign's palace with the declared embedder (--wing/--room/--results/--since/--before)
 mneme mp status [CAMPAIGN]        # per-campaign state incl. store/backup/faces dims (+ why)
 mneme mp refresh --all            # (re)mine every campaign from its own wings, correct order
 mneme mp prune CAMPAIGN           # PREVIEW removing drawers whose source is missing/gitignored (refresh never prunes)
