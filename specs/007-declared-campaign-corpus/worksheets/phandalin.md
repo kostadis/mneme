@@ -13,7 +13,9 @@ Decisions:
 - **Campaign name:** `campaign: Phandalin`, with the capitalization of the folder in `kostadis/campaigns` on GitHub. mempalace lowercases palace names, so the palace is `~/.mempalace/palaces/phandalin`.
 - **`hillsfar` is not Phandalin's.** The `mempalace.yaml` at the repo root (`palace: hillsfar`) is the Hillsfar campaign's, committed at the monorepo root in `4c9e7dcc3` (2026-07-19, "chore(hillsfar): wire up mempalace search…"). It appears in every campaign checkout.
 - **Allow list:** files and folders may exist without being integrated. Discovery lists `gm-assistant/` and `scripts/` under `~/phandalin` as `unintegrated` campaigns; that is by design and needs no action. Never integrate them.
-- **Gitignored means not part of mneme** (mneme#64, PR #65): "if it's not worth putting in git, it's not worth remembering." Gitignored files found inside a declared folder are not in the corpus. A path named in `corpus.yaml` that git ignores is still an error. **Until PR #65 is merged**, a folder declaration that contains ignored files is invalid; see section 5.
+- **Gitignored means not part of mneme** (mneme#64, PR #65): "if it's not worth putting in git, it's not worth remembering." Gitignored files found inside a declared folder are not in the corpus. A path named in `corpus.yaml` that git ignores is still an error. PR #65 merged 2026-10-24 (`0be7a6b`); before it, a folder declaration that contained ignored files was invalid (section 5).
+
+**Done 2026-10-25:** integrated and brought up from a 331-file corpus; `mneme mp status`: corpus conformant. Committed on campaigns branch `phandalin/declared-corpus-20261025`. Lessons are carried into `out-of-the-abyss.md` section 0.
 
 Conversion steps. Phandalin has no `.mneme/` and no palace on this host, so it is brought up from its corpus. `mp regenerate` needs an existing `.mneme/mempalace.yaml` and refuses here.
 1. `mneme integrate Phandalin` (bringup does not write `.mneme/owner.yaml`).
