@@ -9,7 +9,7 @@ with no paths when the file is absent.
 ```yaml
 campaign: toee
 
-kinds:                       # standard kinds only (recipe v3 `kinds:`)
+kinds:                       # standard kinds only (recipe `kinds:`: v3 five, v4 adds `arcs`)
   npcs:
     dirs: [docs/npcs]
   summaries:

@@ -130,7 +130,7 @@ def test_render_coherence_detects_tampering(tmp_path):
 
 # ── dual authority (007 T016, R8, FR-001a) ───────────────────────────────────
 
-_NO_WINGS = 'campaign: c\nrecipe_version: "3.0.0"\nstore:\n  alias: c\n'
+_NO_WINGS = 'campaign: c\nrecipe_version: "4.0.0"\nstore:\n  alias: c\n'
 
 
 def _corpus(campaign_dir):

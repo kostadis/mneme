@@ -510,7 +510,8 @@ one appears in status as owed work with the files it reads outside the TOC.
 
 - The standard kinds are defined by mneme in the recipe and versioned with it; adding a
   standard kind is a recipe change that campaigns adopt through the existing publish /
-  adopt flow.
+  adopt flow. Adoption moves a campaign's same-named campaign kind to `kinds:` (GH #71:
+  `arcs`, recipe v4).
 - Shared consumers ask only for standard kinds; a campaign kind is used by consumers
   specific to that campaign (its own skills, its notes) but still flows through the
   palace and the TOC like any other kind.

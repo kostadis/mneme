@@ -6,8 +6,19 @@ from mneme.mempalace import recipe
 from mneme.mempalace.models import TRUST_LEVELS
 
 
-def test_current_is_v3():
-    assert recipe.current().version == "3.0.0"
+def test_current_is_v4():
+    assert recipe.current().version == "4.0.0"
+
+
+def test_v4_is_v3_plus_arcs():
+    v3, v4 = recipe.load("3.0.0"), recipe.load("4.0.0")
+    assert v4.version == "4.0.0" and v3.version == "3.0.0"
+    assert v4.kinds[:-1] == v3.kinds
+    arcs = v4.kinds[-1]
+    assert (arcs.name, arcs.default_trust, arcs.rooms_hint) == (
+        "arcs", "reference", ("arcs", "general"))
+    assert v4.mechanical == v3.mechanical and v4.scaffold == v3.scaffold
+    assert "arcs" not in {k.name for k in v3.kinds}
 
 
 def test_v3_loads_five_kinds_with_ratified_trusts():

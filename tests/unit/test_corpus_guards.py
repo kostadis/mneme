@@ -34,7 +34,7 @@ def world(tmp_path, monkeypatch):
     (camp / "docs" / "a.md").write_text("a\n")
     (camp / "mempalace.yaml").write_text("wing: corp\nrooms: []\n")  # root => whole tree
     (camp / ".mneme" / "mempalace.yaml").write_text(
-        'campaign: corp\nrecipe_version: "3.0.0"\nstore:\n  alias: corp\n'
+        'campaign: corp\nrecipe_version: "4.0.0"\nstore:\n  alias: corp\n'
     )
     (camp / ".mneme" / "corpus.yaml").write_text(
         "campaign: corp\nkinds:\n  npcs:\n    dirs: [docs]\n"

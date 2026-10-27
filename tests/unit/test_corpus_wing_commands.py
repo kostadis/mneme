@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -18,7 +18,6 @@ from mneme.mempalace.models import (
     FAIL_STATES,
     ConformanceReport,
     ConformanceRow,
-    KindDef,
     MigrationPlan,
     MigrationStep,
     State,
@@ -106,7 +105,7 @@ def test_migrate_refuses_even_a_dry_run(w, tmp_path):
 
 def test_adopt_only_moves_recipe_version(w):
     auth = w.camp / ".mneme" / "mempalace.yaml"
-    auth.write_text(auth.read_text().replace('"3.0.0"', '"2.0.0"'))
+    auth.write_text(auth.read_text().replace('"4.0.0"', '"2.0.0"'))
     written, _ = publish.adopt_in_place(w.entity, "corp")
     assert auth in written
     doc = yaml.safe_load(auth.read_text())
@@ -115,36 +114,109 @@ def test_adopt_only_moves_recipe_version(w):
     authority.load(w.camp, mempalace_root=w.store.parent.parent)  # still a valid authority
 
 
-def _recipe_with_kind(monkeypatch, name):
-    rec = recipe_mod.current()
-    grown = replace(rec, kinds=(*rec.kinds, KindDef(name, "reference")))
-    monkeypatch.setattr(publish._recipe, "current", lambda: grown)
-    return grown
-
-
-def _declare_campaign_kind(w, name):
+def _on_v3(w, *campaign_kinds):
+    """Put the corp campaign on recipe v3 with these campaign kinds declared (name -> trust)."""
+    auth = w.camp / ".mneme" / "mempalace.yaml"
+    auth.write_text(auth.read_text().replace('"4.0.0"', '"3.0.0"'))
     p = w.camp / ".mneme" / "corpus.yaml"
-    p.write_text(p.read_text() + f"campaign_kinds:\n  {name}:\n    dirs: [docs/{name}]\n")
+    text = p.read_text() + "campaign_kinds:\n"
+    for name, trust in campaign_kinds:
+        text += f"  {name}:\n    dirs: [docs/{name}]\n" + (f"    trust: {trust}\n" if trust else "")
+        (w.camp / "docs" / name).mkdir(parents=True, exist_ok=True)
+        (w.camp / "docs" / name / "x.md").write_text("# x\n")
+    p.write_text(text)
 
 
-def test_adopting_a_recipe_that_shadows_a_campaign_kind_writes_nothing(w, monkeypatch):
-    _declare_campaign_kind(w, "lore")
-    _recipe_with_kind(monkeypatch, "lore")
+def _corpus(w):
+    return yaml.safe_load((w.camp / ".mneme" / "corpus.yaml").read_text())
+
+
+def test_v3_campaign_with_campaign_kind_arcs_stays_valid_while_v4_is_installed(w):
+    from mneme.corpus import api as corpus_api
+    from mneme.corpus import config as corpus_config
+
+    _on_v3(w, ("arcs", "authoritative"))
+    assert corpus_api.campaign_recipe(w.camp).version == "3.0.0"
+    cfg = corpus_config.load(w.camp, corpus_api.campaign_recipe(w.camp))
+    assert not cfg.kinds["arcs"].standard
+    with pytest.raises(corpus_config.CorpusConfigError, match="shadowed-kind"):
+        corpus_config.load(w.camp, recipe_mod.current())  # v4 parse is where it shadows
+
+
+def test_adopt_moves_a_campaign_kind_the_recipe_made_standard(w):
+    from mneme.corpus import config as corpus_config
+
+    _on_v3(w, ("arcs", "authoritative"))
+    written, _ = publish.adopt_in_place(w.entity, "corp")
+    assert w.camp / ".mneme" / "corpus.yaml" in written
+    doc = _corpus(w)
+    assert doc["kinds"]["arcs"] == {"dirs": ["docs/arcs"], "trust": "authoritative"}
+    assert "campaign_kinds" not in doc
+    assert list(doc["kinds"])[-1] == "arcs"  # appended after the existing kinds
+    cfg = corpus_config.load(w.camp, recipe_mod.current())
+    assert cfg.kinds["arcs"].standard and cfg.kinds["arcs"].trust == "authoritative"
+    auth = yaml.safe_load((w.camp / ".mneme" / "mempalace.yaml").read_text())
+    assert auth["recipe_version"] == "4.0.0"
+    rec = recipe_mod.current()
+    assert render.coherent(authority.load(w.camp, mempalace_root=w.store.parent.parent), rec,
+                           w.camp) == []
+
+
+def test_adopt_keeps_an_explicit_trust_that_equals_the_default(w):
+    _on_v3(w, ("arcs", "reference"))
+    publish.adopt_in_place(w.entity, "corp")
+    assert _corpus(w)["kinds"]["arcs"]["trust"] == "reference"
+
+
+def test_adopt_moves_only_the_kind_that_became_standard(w):
+    _on_v3(w, ("arcs", "authoritative"), ("lore", "reference"))
+    publish.adopt_in_place(w.entity, "corp")
+    doc = _corpus(w)
+    assert "arcs" in doc["kinds"] and "lore" not in doc["kinds"]
+    assert doc["campaign_kinds"] == {"lore": {"dirs": ["docs/lore"], "trust": "reference"}}
+
+
+def test_branch_adopt_and_publish_stage_the_moved_corpus_yaml(w):
+    _on_v3(w, ("arcs", "authoritative"))
+    publish._apply_to_workcopy(SimpleNamespace(path=w.root), "corp", recipe_mod.current())
+    assert _corpus(w)["kinds"]["arcs"]["trust"] == "authoritative"
+    assert "campaign_kinds" not in _corpus(w)
+
+
+def test_adopt_refuses_when_the_moved_kind_is_already_under_kinds(w):
+    _on_v3(w, ("arcs", "authoritative"))
+    p = w.camp / ".mneme" / "corpus.yaml"
+    both = "kinds:\n  arcs:\n    dirs: [docs/other]\n  npcs:"
+    p.write_text(p.read_text().replace("kinds:\n  npcs:", both, 1))
     before = tree_snapshot(w.camp)
     with pytest.raises(CorpusRefusal, match="shadowed-kind"):
         publish.adopt_in_place(w.entity, "corp")
     with pytest.raises(CorpusRefusal, match="shadowed-kind"):
         publish.adopt(w.entity, "corp", git_runner=_git_must_not_run)
+    with pytest.raises(CorpusRefusal, match="shadowed-kind"):
+        publish._apply_to_workcopy(SimpleNamespace(path=w.root), "corp",
+                                   recipe_mod.current())
     res = CLI.invoke(mpcli.app, ["adopt", "corp", "--here", "--confirm"])
     assert res.exit_code != 0 and "shadowed-kind" in res.output
     assert tree_snapshot(w.camp) == before
-
-
-def test_publish_preview_reports_shadowed_kind(w, monkeypatch):
-    _declare_campaign_kind(w, "lore")
-    _recipe_with_kind(monkeypatch, "lore")
     (plan,) = publish.preview(w.entity)
     assert "shadowed-kind" in plan.line()
+
+
+def test_adopt_here_reports_the_corpus_yaml_it_wrote(w):
+    _on_v3(w, ("arcs", "authoritative"))
+    res = CLI.invoke(mpcli.app, ["adopt", "corp", "--here", "--confirm"])
+    assert res.exit_code == 0, res.output
+    assert "wrote .mneme/corpus.yaml" in res.output
+
+
+def test_publish_preview_reports_the_move(w):
+    _on_v3(w, ("arcs", "authoritative"))
+    before = tree_snapshot(w.camp)
+    (plan,) = publish.preview(w.entity)
+    assert "arcs moves from campaign_kinds to kinds" in plan.line()
+    assert not plan.target.conflicts
+    assert tree_snapshot(w.camp) == before
 
 
 def test_faces_and_render_check_use_the_corpus_render(w):

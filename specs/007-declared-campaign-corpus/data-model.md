@@ -7,11 +7,11 @@ Authority vs derived, as in 002/005/006. One authority per fact. Everything mark
 
 ### KindDef (recipe, mneme-owned, versioned)
 
-The standard kinds, from `mneme/recipes/mempalace.recipe.v3.yaml` → `kinds:`.
+The standard kinds, from the recipe's `kinds:` (`mneme/recipes/mempalace.recipe.v4.yaml`; v3 has the first five, v4 adds `arcs`).
 
 | Field | Type | Notes |
 |---|---|---|
-| `name` | str | Lower-case slug: `npcs`, `summaries`, `party`, `grounding`, `prep`. It becomes the wing name. |
+| `name` | str | Lower-case slug: `npcs`, `summaries`, `party`, `grounding`, `prep`, `arcs` (v4). It becomes the wing name. |
 | `default_trust` | `TRUST_LEVELS` | `authoritative` \| `accelerator` \| `reference` (`models.py`) |
 | `rooms_hint` | tuple[str] | Room scaffold for the derived root `mempalace.yaml` |
 
@@ -125,8 +125,13 @@ OK only when there are none (FR-017). `not_materialized` is informational, never
 
 1. `campaign` matches the mempalace authority's.
 2. A name under `kinds:` must be a standard kind; a name under `campaign_kinds:` must
-   **not** be one. If a recipe upgrade adds a standard kind with the same name as an existing
-   campaign kind, the result is `invalid: shadowed-kind`, reported and never merged.
+   **not** be one. A corpus is parsed against the recipe version its authority adopted, so a
+   campaign still on the older recipe keeps its campaign kind. When a campaign adopts a recipe
+   that makes a campaign kind's name standard (v4 `arcs`), `mneme mp adopt` / `publish` MOVE
+   that declaration from `campaign_kinds:` to `kinds:` unchanged (explicit trust kept). If the
+   name is also already under `kinds:`, or the result does not validate, adopt refuses with
+   `shadowed-kind` and writes nothing. A corpus naming a standard kind under `campaign_kinds:`
+   is still `invalid: shadowed-kind` when parsed.
 3. Paths are relative and normalized, and must not escape the campaign root (`..`).
 4. Named paths must not be gitignored: a `files` entry, a declared `dirs` entry, or the
    resolved target of any symlink. A file merely found by walking a declared dir whose own
