@@ -96,13 +96,11 @@ consumers:
   issue: kostadis/CampaignGenerator#593
 - name: cg.arc_triggers
   repo: CampaignGenerator
-  entry: pipelines/grounding/arc_triggers.py:30, 93, 106
-  kinds: []
-  mode: partial
-  via: Mempalace search, then globs a hardcoded TRACKING_DIR; hardcoded MP_BIN at :31.
-  reads:
-  - docs/tracking/*.md
-  other: docs/tracking
+  entry: pipelines/grounding/arc_triggers.py:57-76, 84-115, 317-333, 352
+  kinds:
+  - arcs
+  mode: toc
+  via: 'Score docs come from `mneme corpus toc <campaign> --kind arcs --json` (refuses if mneme cannot answer); events are searched in the canon_wings of the mempalace: section; MP_BIN and MNEME_BIN are resolved from the venv.'
   issue: kostadis/CampaignGenerator#593
 - name: cg.dossier_proposer
   repo: CampaignGenerator

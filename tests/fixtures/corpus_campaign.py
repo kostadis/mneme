@@ -92,7 +92,7 @@ def corpus_world(tmp_path, monkeypatch, *, authority: bool = True) -> World:
     (camp / ".mneme" / "corpus.yaml").write_text(CORPUS_YAML)
     if authority:
         (camp / ".mneme" / "mempalace.yaml").write_text(
-            'campaign: corp\nrecipe_version: "3.0.0"\nstore:\n  alias: corp\n'
+            'campaign: corp\nrecipe_version: "4.0.0"\nstore:\n  alias: corp\n'
         )
     subprocess.run(["git", "init", "-q"], cwd=camp, check=True)  # conftest strips GIT_* vars
     mp = tmp_path / "mp"

@@ -72,7 +72,7 @@ def test_bringup_renders_with_the_recipe_the_authority_carries(tmp_path, monkeyp
     monkeypatch.setattr(render, "render_faces", spy)
     report = _bring(w, tmp_path)
     assert report.ready
-    assert seen == [recipe_mod.load("3.0.0").version]
+    assert seen == [recipe_mod.load("4.0.0").version]
 
 
 def test_a_failed_first_bringup_still_leaves_the_empty_record_and_a_rerun_keeps_it(

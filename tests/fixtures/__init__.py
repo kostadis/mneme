@@ -69,7 +69,7 @@ def make_simple_campaign(tree: Path, name: str) -> Path:
 
 FULL_AUTHORITY = """\
 campaign: full
-recipe_version: "3.0.0"
+recipe_version: "4.0.0"
 wings:
   - name: narrative
     source: docs/chapters

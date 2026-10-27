@@ -131,7 +131,7 @@ def test_a_campaign_on_a_recipe_without_kinds_is_invalid_for_every_reader(w):
     """007 B1: readers resolve with the AUTHORITY's recipe, like mining/status do; a recipe
     that defines no kinds cannot validate a corpus, so `corpus check` must not pass."""
     auth = w.camp / ".mneme" / "mempalace.yaml"
-    auth.write_text(auth.read_text().replace('"3.0.0"', '"2.0.0"'))
+    auth.write_text(auth.read_text().replace('"4.0.0"', '"2.0.0"'))
     r = CLI.invoke(app, ["corpus", "check", "corp"])
     assert r.exit_code != 0 and "defines no kinds" in r.output
     r = cli_toc("--kind", "npcs", "--json")

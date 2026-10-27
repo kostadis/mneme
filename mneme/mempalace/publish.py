@@ -13,7 +13,7 @@ from pathlib import Path
 
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
-from mneme.corpus.config import has_corpus
+from mneme.corpus.config import corpus_path, has_corpus
 
 from . import authority as _authority
 from . import discover as _discover
@@ -21,7 +21,13 @@ from . import recipe as _recipe
 from . import render as _render
 from . import target as _target
 from . import workcopy as _workcopy
-from .corpus_guard import refusal, shadowed_kinds
+from .corpus_guard import (
+    MOVE_CODES,
+    CorpusRefusal,
+    MoveRefused,
+    migrate_shadowed,
+    move_shadowed_text,
+)
 from .discover import campaigns_roots
 from .models import TargetConfig
 
@@ -44,9 +50,9 @@ class CampaignPlan:
         return f"{self.campaign:24} {'; '.join(bits) or 'no change'}  [{preserved}]"
 
 
-def preview(entity: ConfigEntity) -> list[CampaignPlan]:
-    """Per-campaign upgrade plan against the current recipe. Writes nothing."""
-    rec = _recipe.current()
+def preview(entity: ConfigEntity, rec=None) -> list[CampaignPlan]:
+    """Per-campaign upgrade plan against ``rec`` (default: the current recipe). Writes nothing."""
+    rec = rec or _recipe.current()
     plans: list[CampaignPlan] = []
     for ref in _discover.discover(entity):
         if not ref.has_authority:
@@ -56,14 +62,51 @@ def preview(entity: ConfigEntity) -> list[CampaignPlan]:
         except _authority.AuthorityError:
             continue
         target = _target.resolve(cfg, rec)
-        if has_corpus(ref.path) and (clash := shadowed_kinds(ref.path, rec)):
-            target = replace(target, conflicts=(*target.conflicts, *_shadow_notes(clash)))
+        if has_corpus(ref.path):
+            try:
+                if mig := move_shadowed_text(ref.path, rec):
+                    note = f"corpus.yaml: {', '.join(mig[1])} moves from campaign_kinds to kinds"
+                    target = replace(target, changed=(*target.changed, note))
+            except MoveRefused as e:
+                target = replace(target, conflicts=(*target.conflicts, str(e)))
         plans.append(CampaignPlan(ref.name, target))
     return plans
 
 
-def _shadow_notes(clash: list[str]) -> tuple[str, ...]:
-    return tuple(f"shadowed-kind: '{n}'" for n in clash)
+def planned_move(entity: ConfigEntity, campaign: str, rec=None) -> tuple[list[str], str | None]:
+    """``(kinds that adopting would move to `kinds:`, why it would refuse or None)``.
+    Writes nothing."""
+    rec = rec or _recipe.current()
+    ref = _discover.resolve(entity, campaign)
+    if not has_corpus(ref.path):
+        return [], None
+    try:
+        mig = move_shadowed_text(ref.path, rec)
+    except MoveRefused as e:
+        return [], str(e)
+    return (mig[1] if mig else []), None
+
+
+def _managed_paths(cfg, rec, camp_dir: Path) -> list[Path]:
+    """Every file an adopt may create, change or remove for this campaign."""
+    paths: set[Path] = {p for p in (camp_dir / ".mneme").rglob("*") if p.is_file()}
+    if has_corpus(camp_dir):
+        paths |= {camp_dir / "mempalace.yaml", camp_dir / ".gitignore",
+                  camp_dir / ".mneme" / "corpus.yaml"}
+        paths |= {camp_dir / r for r in _render.leftover_wing_renders(camp_dir)}
+    else:
+        paths |= {camp_dir / a.target for a in _render.render(cfg, rec)}
+    paths.add(_authority.authority_path(camp_dir))
+    return sorted(paths)
+
+
+def _restore(saved: dict[Path, bytes | None]) -> None:
+    for path, data in saved.items():
+        if data is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
 
 
 def _upgrade(cfg, rec, camp_dir: Path):
@@ -75,16 +118,24 @@ def _upgrade(cfg, rec, camp_dir: Path):
     return upgraded
 
 
+def _migrated_corpus(
+    command: str, campaign: str, camp_dir: Path, rec
+) -> tuple[str, list[str]] | None:
+    """The corpus.yaml rewrite adopting ``rec`` implies (kinds ``rec`` made standard move out of
+    `campaign_kinds:`), or None. Refuses, writing nothing, when the move cannot be made."""
+    if not has_corpus(camp_dir):
+        return None
+    return migrate_shadowed(command, campaign, camp_dir, rec)
+
+
 def _apply_to_workcopy(wc: _workcopy.WorkingCopy, campaign: str, rec) -> None:
-    """Write the upgraded authority + re-rendered derived files for one campaign."""
+    """Write the (migrated) corpus.yaml, the upgraded authority and the re-rendered derived
+    files for one campaign. corpus.yaml goes first: the render hashes it."""
     camp_dir = wc.path / campaign
     cfg = _authority.load(camp_dir)
-    if has_corpus(camp_dir) and (clash := shadowed_kinds(camp_dir, rec)):
-        raise refusal(
-            "adopt/publish", campaign,
-            f"shadowed-kind: recipe {rec.version} makes {', '.join(clash)} a standard kind, "
-            "which this campaign defines itself; nothing was written",
-        )
+    migrated = _migrated_corpus("adopt/publish", campaign, camp_dir, rec)  # before any write
+    if migrated:
+        corpus_path(camp_dir).write_text(migrated[0])
     upgraded = _upgrade(cfg, rec, camp_dir)
     _authority.write(upgraded, camp_dir)
     _render.write_all(upgraded, rec, camp_dir)
@@ -131,14 +182,18 @@ def publish(
     """Stage the upgrade for all campaigns on a proposal branch; push it. Returns
     (branch, plans). Never touches the active checkout (FR-018)."""
     rec = _recipe.load(recipe_version) if recipe_version else _recipe.current()
-    plans = preview(entity)
+    plans = preview(entity, rec)  # the same recipe that is applied below
     wc = _clone_workcopy(entity, state_dir, git_runner)
     branch = f"mneme/recipe-{rec.version}"
     wc.checkout_branch(branch)
     for plan in plans:
-        if any(c.startswith("shadowed-kind") for c in plan.target.conflicts):
+        if any(c.split(":")[0] in MOVE_CODES for c in plan.target.conflicts):
             continue  # reported in the plan line; never written
-        _apply_to_workcopy(wc, plan.campaign, rec)
+        try:
+            _apply_to_workcopy(wc, plan.campaign, rec)
+        except Exception:
+            wc.abandon(branch)  # nothing committed or pushed; leave no half-staged branch
+            raise
     if wc.commit_all(f"mneme: propose recipe {rec.version} for all campaigns"):
         wc.push(branch)
     return branch, plans
@@ -154,16 +209,17 @@ def adopt(
     """Manual per-campaign gate: stage the upgrade for ONE campaign on its own branch."""
     rec = _recipe.current()
     ref = _discover.resolve(entity, campaign)  # 005 — adopt targets the campaign's own tree
-    if has_corpus(ref.path) and (clash := shadowed_kinds(ref.path, rec)):
-        raise refusal(  # 007 T042: before cloning anything
-            "adopt", campaign,
-            f"shadowed-kind: recipe {rec.version} makes {', '.join(clash)} a standard kind, "
-            "which this campaign defines itself; nothing was written",
-        )
+    _migrated_corpus("adopt", campaign, ref.path, rec)  # early fail, before cloning anything
     wc = _clone_workcopy(entity, state_dir, git_runner, root=ref.tree)
     branch = f"mneme/adopt-{campaign}-{rec.version}"
     wc.checkout_branch(branch)
-    _apply_to_workcopy(wc, campaign, rec)
+    try:
+        # The clone is what is committed, and it can differ from the live checkout (the corpus
+        # may have changed on origin), so the check is repeated there.
+        _apply_to_workcopy(wc, campaign, rec)
+    except Exception:
+        wc.abandon(branch)  # nothing committed or pushed; leave no half-staged branch
+        raise
     if wc.commit_all(f"mneme: adopt recipe {rec.version} for {campaign}"):
         wc.push(branch)
     return branch
@@ -182,13 +238,18 @@ def adopt_in_place(entity: ConfigEntity, campaign: str) -> tuple[list[Path], Tar
         )
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     diff = _target.resolve(cfg, rec)
-    if has_corpus(ref.path) and (clash := shadowed_kinds(ref.path, rec)):
-        raise refusal(
-            "adopt", campaign,
-            f"shadowed-kind: recipe {rec.version} makes {', '.join(clash)} a standard kind, "
-            "which this campaign defines itself; nothing was written",
-        )
+    migrated = _migrated_corpus("adopt", campaign, ref.path, rec)  # before any write
     upgraded = _upgrade(cfg, rec, ref.path)
-    written = [_authority.write(upgraded, ref.path)]
-    written += _render.write_all(upgraded, rec, ref.path)
+    saved = {p: (p.read_bytes() if p.exists() else None)
+             for p in _managed_paths(cfg, rec, ref.path)}
+    try:
+        written: list[Path] = []
+        if migrated:
+            corpus_path(ref.path).write_text(migrated[0])
+            written.append(corpus_path(ref.path))
+        written.append(_authority.write(upgraded, ref.path))
+        written += _render.write_all(upgraded, rec, ref.path)
+    except BaseException:
+        _restore(saved)  # all or nothing: never leave corpus.yaml moved with a stale render
+        raise
     return written, diff

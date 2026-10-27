@@ -42,7 +42,7 @@ def fresh(c):
 def test_build_matches_contract_shape(camp):
     doc = fresh(camp)
     assert doc["schema"] == 1 and doc["valid"] is True and doc["findings"] == []
-    assert doc["campaign"] == "c" and doc["recipe_version"] == "3.0.0"
+    assert doc["campaign"] == "c" and doc["recipe_version"] == "4.0.0"
     assert len(doc["corpus_sha256"]) == 64 and doc["generated_by"].startswith("mneme ")
     g = doc["kinds"]["grounding"]
     assert g["standard"] is True and g["trust"] == "authoritative"

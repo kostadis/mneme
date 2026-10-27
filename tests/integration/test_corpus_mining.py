@@ -124,7 +124,7 @@ def test_bringup_from_corpus_yaml_alone_mines_the_resolved_corpus(tmp_path, monk
     assert w.source_rels() == set(DECLARED)  # SC-003
     auth = (w.camp / ".mneme" / "mempalace.yaml").read_text()
     assert "wings" not in auth and "alias: corp" in auth
-    assert "3.0.0" in auth
+    assert "4.0.0" in auth
     cfg = json.loads((w.camp / ".mcp.json").read_text())
     assert "mempalace" in cfg["mcpServers"]
     assert not any(

@@ -67,6 +67,14 @@ class WorkingCopy:
     def checkout_branch(self, branch: str, base: str = "HEAD") -> None:
         self._git("checkout", "-B", branch, base)
 
+    def abandon(self, branch: str) -> None:
+        """Throw away an uncommitted, unpushed staging branch: discard its changes and delete
+        it, returning to the branch it was cut from."""
+        self._git("reset", "--hard", "HEAD", check=False)
+        self._git("clean", "-fdq", check=False)
+        self._git("checkout", "-", check=False)
+        self._git("branch", "-D", branch, check=False)
+
     def commit_all(self, message: str) -> bool:
         """Stage everything and commit. Returns False if there was nothing to commit."""
         self._git("add", "-A")
