@@ -117,11 +117,13 @@ def adopt(entity: ConfigEntity, campaign: str, confirm: bool = False) -> dict:
     uncommitted). Two-step by construction: the assistant previews, the human approves.
     """
     from mneme.mempalace import publish as _publish
+    from mneme.mempalace.corpus_guard import CorpusRefusal
     from mneme.mempalace.workcopy import WorkingCopyError
 
     ref = _discover.resolve(entity, campaign)
     if not ref.has_authority:
         return {"campaign": campaign, "error": "no authority — bootstrap first"}
+    moved, why = _publish.planned_move(entity, campaign)
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
     diff = _target.resolve(cfg, _recipe.current())
     preview = {
@@ -130,22 +132,40 @@ def adopt(entity: ConfigEntity, campaign: str, confirm: bool = False) -> dict:
         "diff": {"added": list(diff.added), "changed": list(diff.changed),
                  "preserved": list(diff.preserved), "conflicts": list(diff.conflicts)},
     }
+    if moved:
+        preview["corpus_yaml"] = {
+            "rewrites": ".mneme/corpus.yaml (a campaign file)",
+            "moves_to_kinds": moved,
+            "note": "declaration moved verbatim from campaign_kinds to kinds; review the diff",
+        }
+    if why:
+        preview["corpus_yaml"] = {"would_refuse": why, "note": "nothing would be written"}
     if not confirm:
         preview["action"] = "preview"
         preview["note"] = (
             "call adopt(campaign, confirm=true) to write these into your "
             "active checkout (uncommitted)"
+            + (" — INCLUDING a rewrite of .mneme/corpus.yaml" if moved else "")
+            + (" — this adopt would be REFUSED" if why else "")
         )
         return preview
     try:
         written, _ = _publish.adopt_in_place(entity, campaign)
-    except WorkingCopyError as e:
+    except (WorkingCopyError, CorpusRefusal) as e:
         return {"campaign": campaign, "error": str(e)}
     preview["action"] = "applied"
     preview["written"] = [str(p.relative_to(ref.path)) for p in written]
     preview["note"] = (
-        "adopted into your active checkout (mneme-managed files only) — review and commit"
+        "adopted into your active checkout "
+        + ("(mneme-managed files and the moved corpus.yaml declaration)" if moved
+           else "(mneme-managed files only)")
+        + " — review and commit"
     )
+    if moved:
+        preview["follow_up"] = (
+            "the TOC snapshot was re-rendered with the move; no `mneme mp refresh` is needed "
+            "for it (mined files and their trust are unchanged)"
+        )
     return preview
 
 

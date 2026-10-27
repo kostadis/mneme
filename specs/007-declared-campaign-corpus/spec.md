@@ -235,7 +235,8 @@ file added to a declared folder a moment ago — with a content fingerprint for 
 A campaign whose authority still uses the wing-plus-blocklist model (every campaign
 today) is shown as owing a corpus declaration. mneme can show the GM what the current
 model actually mines, as input to the GM's decision, but never writes a corpus on the
-GM's behalf.
+GM's behalf. (The one rewrite mneme does make, moving a campaign kind the adopted recipe made
+standard, is a reviewed adopt step, not a corpus written for the GM; mneme#71.)
 
 **Why this priority**: Every existing campaign is in the old model. Converting them
 silently would be mneme deciding corpus membership — the precision decision this feature

@@ -300,6 +300,13 @@ def publish(
     typer.echo(f"published proposal branch: {branch} (adopt per campaign to take it)")
 
 
+_MOVE_NOTE = (
+    ".mneme/corpus.yaml: moved {kinds} from campaign_kinds to kinds (declaration unchanged). "
+    "The TOC snapshot is re-rendered with it; no `mneme mp refresh` is needed for the move "
+    "(the mined files and their trust are unchanged)."
+)
+
+
 @app.command()
 def adopt(
     campaign: str = typer.Argument(..., help="Campaign to adopt the current recipe for"),
@@ -322,9 +329,21 @@ def adopt(
         if not ref_diff.has_authority:
             typer.echo(f"{campaign}: no authority — bootstrap first", err=True)
             raise typer.Exit(EXIT_RUNTIME)
+        moved, why = _publish.planned_move(entity, campaign)
         if not confirm:
-            typer.echo(f"PREVIEW {campaign}: would write the upgraded authority + renders into")
-            typer.echo("  the active checkout (mneme files only). Re-run with --confirm to apply.")
+            if why:
+                typer.echo(f"FAIL adopt: would refuse {campaign}: {why}; nothing would be written",
+                           err=True)
+                raise typer.Exit(EXIT_RUNTIME)
+            if moved:
+                typer.echo(f"PREVIEW {campaign}: would write the upgraded authority + renders and "
+                           "REWRITE .mneme/corpus.yaml (a campaign file) in the active checkout:")
+                typer.echo(f"  move {', '.join(moved)} from campaign_kinds to kinds, "
+                           "declaration kept verbatim (review the diff).")
+            else:
+                typer.echo(f"PREVIEW {campaign}: would write the upgraded authority + renders into")
+                typer.echo("  the active checkout (mneme files only).")
+            typer.echo("  Re-run with --confirm to apply.")
             raise typer.Exit(EXIT_OK)
         try:
             written, _ = _publish.adopt_in_place(entity, campaign)
@@ -334,13 +353,18 @@ def adopt(
         for w in written:
             typer.echo(f"wrote {w.relative_to(ref_diff.path)}")
         typer.echo(f"adopted '{campaign}' into the active checkout — review and commit")
+        if moved:
+            typer.echo(_MOVE_NOTE.format(kinds=", ".join(moved)))
         raise typer.Exit(EXIT_OK)
     try:
+        moved, _ = _publish.planned_move(entity, campaign)
         branch = _publish.adopt(entity, campaign)
     except (WorkingCopyError, CorpusRefusal) as e:
         typer.echo(f"FAIL adopt: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     typer.echo(f"staged adoption for '{campaign}' on branch: {branch} (merge/pull to take it)")
+    if moved:
+        typer.echo(_MOVE_NOTE.format(kinds=", ".join(moved)))
 
 
 # ── migrate / mcp (US5) ───────────────────────────────────────────────────────

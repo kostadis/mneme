@@ -1,8 +1,11 @@
 # Contract: `.mneme/corpus.yaml` (authority, tracked)
 
 The one place a campaign declares its corpus (FR-001, FR-001a). It is hand-edited by the
-GM. mneme reads it and never writes it, except that `mneme corpus init` creates a skeleton
-with no paths when the file is absent.
+GM. mneme reads it and writes it in exactly two cases (GM decision 2026-10-27, mneme#71):
+`mneme corpus init` creates a skeleton with no paths when the file is absent, and
+`mneme mp adopt` / `publish` move a campaign kind that the adopted recipe makes standard from
+`campaign_kinds:` to `kinds:` (the declaration is moved verbatim, shown in the adopt preview,
+and the GM reviews the adopt). Nothing else is auto-corrected.
 
 ## Shape
 

@@ -3,7 +3,10 @@
 The one tracked place a campaign says which files are its curated content, by kind
 (FR-001, `contracts/corpus-yaml.md`). Like `mempalace/authority.py`, loading reports ALL
 problems at once as findings, raising `CorpusConfigError` before any side effect. mneme
-reads this file and never writes it; nothing is auto-corrected.
+reads this file. It writes it in exactly two cases (GM decision 2026-10-27, mneme#71):
+`mneme corpus init` (a skeleton) and `mp adopt`/`publish` moving a campaign kind that the
+adopted recipe makes standard into `kinds:` (body verbatim, shown in the preview). Nothing
+else is auto-corrected.
 
 This module is the structural half of the validation (data-model rules 1-3, 6 and
 unknown keys). Everything that needs the disk or git (symlinks, gitignore, empty corpus)
@@ -215,19 +218,32 @@ def _authority_campaign(campaign_dir: Path) -> str | None:
     return None
 
 
-def load(campaign_dir: Path, recipe: Recipe) -> CorpusConfig:
-    """Parse + validate the campaign's corpus declaration against ``recipe``'s standard
-    kinds. Raises CorpusConfigError (every finding at once) on any violation."""
+def _require_kinds(recipe: Recipe) -> None:
     if not recipe.kinds:  # a corpus needs the recipe's standard kinds to validate against
         raise CorpusConfigError([Finding(
             "recipe-no-kinds",
             f"recipe v{recipe.version.split('.')[0]} defines no kinds; adopt v3 or later "
             "(`mneme mp adopt`)")])
+
+
+def load(campaign_dir: Path, recipe: Recipe) -> CorpusConfig:
+    """Parse + validate the campaign's corpus declaration against ``recipe``'s standard
+    kinds. Raises CorpusConfigError (every finding at once) on any violation."""
+    _require_kinds(recipe)
     path = corpus_path(campaign_dir)
     try:
         data = path.read_bytes()
     except OSError as e:
         raise CorpusConfigError([Finding("unreadable", f"cannot read {path}: {e}")]) from e
+    return parse(data, recipe, campaign_dir)
+
+
+def parse(data: bytes, recipe: Recipe, campaign_dir: Path) -> CorpusConfig:
+    """The validation half of ``load``, on bytes already in hand (so the adopt-time rewrite
+    of `corpus.yaml` is checked by the very code that will later read it). ``campaign_dir``
+    supplies the authority's `campaign:` for rule 1."""
+    _require_kinds(recipe)
+    path = corpus_path(campaign_dir)
     try:
         raw = yaml.safe_load(data) or {}
     except yaml.YAMLError as e:
