@@ -350,62 +350,191 @@ Directories holding material outside the standard kinds (path, file count; `find
 - Tracking and registry files directly under `docs/` (bytes): `tracking.txt` 6,134 (120 lines), `corrections.yaml` 3,546, `entity_registry.yaml` 114,527, `entity_inventory.md` 91,651, `aliases.json` 27,578, `authority.yaml` 87,642, `mechanics.md` 86 (in `extra_exclusions`), `toee-summary.md` 407,718 (in `extra_exclusions`)
 - Root files: `MEMPALACE.md`, `mempalace.yaml`, `ui_state.yaml`, four `*.pdf`
 
-## 7. GM decision checklist
+## 7. GM decisions (2026-10-28)
 
-Leave blank; GM fills in. Section 0 blanks first.
+Every choice below is an explicit GM answer, given in four question rounds on 2026-10-28. `mneme corpus check toee` reports the resulting `.mneme/corpus.yaml` valid: npcs 102, summaries 42, party 26, grounding 13, prep 49, arcs 11.
 
-Section 0:
-- [ ] `data_roots`: add `~/toee`? ______
-- [ ] Recipe/authority path: (a) adopt then edit / (b) hand edit: ______ (obelisk: (b))
-- [ ] `dispositions:` entry (`scaffold.nomatch`): delete / keep: ______
-- [ ] Build: `mp bringup` / `mp regenerate --confirm` plus render and backup: ______ (obelisk: bringup; no palace exists here either)
-- [ ] Grounding paths: the 4 symlinks / plus `canon_events_timeline` / `docs/grounding/current` / generation dir: ______ (out-of-the-abyss: the stable symlinks)
-- [ ] `docs/reference` (symlinked dir, 8 files): in / out, which kind: ______ (out-of-the-abyss: `grounding`)
-- [ ] `docs/npcs`: list the 102 top-level `.md` under `files:` or the dir: ______ (all three earlier: `files:`)
-- [ ] `docs/chapters` (31): in / out, kind, trust: ______
-- [ ] `docs/summaries` (42) vs pipeline `summaries/`: ______ (all three: `docs/summaries` only)
-- [ ] Root `mempalace.yaml`: commit rewrite / untrack: ______
-- [ ] Palace name: ______
-- [ ] Wing-model yaml renders after bringup: commit to match: ______
+| Kind | Trust | Files | Decision |
+|---|---|---|---|
+| `npcs` | authoritative | 102 | Only the top-level `docs/npcs/*.md`, listed under `files:`. Out: `docs/npcs/summary_native/` (1592), `docs/npcs/authored/` (7). |
+| `summaries` | authoritative | 42 | `dirs: [docs/summaries]` only. Out: the pipeline `summaries/`. |
+| `party` | authoritative | 26 | `dirs: [docs/party, voice]` plus `docs/party.md` (mined as grounding). Includes `docs/party/6/`, `docs/party/9/` (PDFs resolve `minable: false`) and the scripts `rename-files.sh` and `sheet_to_md.py`. |
+| `grounding` | authoritative | 13 | The five `docs/*.md` symlinks (`world_state`, `campaign_state`, `party`, `planning`, `canon_events_timeline`) plus `dirs: [docs/reference]`; `mined_as: true` (out-of-the-abyss layout). |
+| `prep` | reference | 49 | `dirs: [notes/session_prep, notes/sessions, notes/handouts, notes/statblocks]` plus top-level `notes/area-212-fire-temple-reference.md`, `notes/area-213-water-temple-reference.md`, `notes/furnishing-the-household.md`, `notes/chapter_map.md` and the 10 strategy/network notes; `mined_as: true`. Out: `notes/batch_*`, `notes/grounding_refresh`, `notes/reviews`, the process notes (`renumber_2026-10-25.md`, `scrub_register_policy.md`, `summary_folder_overlap.md`) and the VTT glossaries. |
+| `arcs` | reference | 11 | `docs/tracking.txt` plus the 10 strategy/network notes (`falrinth`, `hedrack`, `lucius` strategy; `lucius`, `nulb`, `upper_temple` network; `nulb_allies`, `hommlet_threats`, `phase3_endgame`, `tzgy_scarab_urgent`). Those 10 are in both kinds and are **mined as prep** (GM choice), so the `arcs` wing holds only `tracking.txt`. `corpus toc --kind arcs` still lists all 11. |
 
-Kinds:
-- [ ] `npcs`: dirs ______ files ______ trust override ______ mined_as ______
-- [ ] `summaries`: dirs ______ files ______ trust override ______ mined_as ______
-- [ ] `party`: dirs ______ files ______ trust override ______ mined_as ______
-- [ ] `grounding`: dirs ______ files ______ trust override ______ mined_as ______
-- [ ] `prep`: dirs ______ files ______ trust override ______ mined_as ______
-- [ ] `arcs`: dirs ______ files ______ trust override ______ mined_as ______
-- [ ] campaign kinds (name / dirs / files / trust): ______
+Also decided:
+- **toee's in-flight work** (summary-native rebuild and grounding publication) was committed first, as campaigns PR #529. Session audio (`summaries/*/*.mp3`, `summaries/*/*.chunks/`) was gitignored and kept on disk, and the run logs and review pages were committed.
+- **`data_roots`:** `~/toee` added to `data_roots.campaigns`.
+- **Recipe path (0.2):** (b) hand edit: `recipe_version: 4.0.0`, with `wings:`, `extra_exclusions:` and `dispositions:` deleted. The authority is now only `campaign`, `recipe_version` and `store.alias`.
+- **Build:** `mneme mp bringup toee`. It built from empty (backup `20261028-034218`), and `mp status` reports all rows ok.
+- **No campaign kinds.** Left out: `docs/chapters`, `docs/background` (module), `docs/distill_extractions` (the old `chronicle` wing).
+- **Trust:** recipe defaults. Canon wings are `npcs`, `summaries`, `party`, `grounding`. Index wings are `prep`, `arcs`.
+- **Renders:** the root `mempalace.yaml` stays tracked, with bringup's rewrite committed. The wing-model renders bringup deleted are committed as deletions. The leftover `notes/.mempalaceignore` and `notes/sessions/.mempalaceignore` were deleted too.
+- **Palace name:** `toee`.
+- The campaign commit is campaigns PR #530.
 
-Blank skeleton:
+The `corpus.yaml` as written to `toee/.mneme/corpus.yaml`:
 
 ```yaml
 campaign: toee
-
 kinds:
   npcs:
-    # dirs: []
-    # files: []
+    files:
+    - docs/npcs/air-temple-wraith.md
+    - docs/npcs/airgid.md
+    - docs/npcs/albreth.md
+    - docs/npcs/aldous-glimmerfield.md
+    - docs/npcs/althea.md
+    - docs/npcs/aunt-emma.md
+    - docs/npcs/barkinar.md
+    - docs/npcs/belsornig.md
+    - docs/npcs/black-jay.md
+    - docs/npcs/brakka-vusk.md
+    - docs/npcs/brask.md
+    - docs/npcs/brother-eldin.md
+    - docs/npcs/burne.md
+    - docs/npcs/captain-dren-halveth.md
+    - docs/npcs/captain-gnonsbim.md
+    - docs/npcs/captain-marad-vesrek.md
+    - docs/npcs/captain-tolub.md
+    - docs/npcs/commander-joradin.md
+    - docs/npcs/dala.md
+    - docs/npcs/davine.md
+    - docs/npcs/derrick.md
+    - docs/npcs/dick-rentsch.md
+    - docs/npcs/eelrich-vane.md
+    - docs/npcs/elazar.md
+    - docs/npcs/elder-kenter.md
+    - docs/npcs/elmo.md
+    - docs/npcs/elvanna-thorne.md
+    - docs/npcs/eryk-velkori.md
+    - docs/npcs/falrinth.md
+    - docs/npcs/faria.md
+    - docs/npcs/florian.md
+    - docs/npcs/furnok-of-ferd.md
+    - docs/npcs/garrick.md
+    - docs/npcs/glennddarc.md
+    - docs/npcs/glennon-clee.md
+    - docs/npcs/gonnathrad-kevanarial.md
+    - docs/npcs/gremag.md
+    - docs/npcs/grindin-well-read.md
+    - docs/npcs/grud-squinteye.md
+    - docs/npcs/gurdy.md
+    - docs/npcs/hartsch.md
+    - docs/npcs/hedrack.md
+    - docs/npcs/hestort-flintshine.md
+    - docs/npcs/horgus.md
+    - docs/npcs/ingulf.md
+    - docs/npcs/iniri.md
+    - docs/npcs/jaroo-ashstaff.md
+    - docs/npcs/jarran.md
+    - docs/npcs/jerry.md
+    - docs/npcs/jijohn.md
+    - docs/npcs/jorin-pike-kale.md
+    - docs/npcs/kalen.md
+    - docs/npcs/keenleene.md
+    - docs/npcs/kelno.md
+    - docs/npcs/ketta.md
+    - docs/npcs/lareth-the-beautiful.md
+    - docs/npcs/lenora-glimmerfield.md
+    - docs/npcs/lieutenant-krell.md
+    - docs/npcs/lodriss.md
+    - docs/npcs/lubash.md
+    - docs/npcs/lucius-graeme.md
+    - docs/npcs/maeris-dorn.md
+    - docs/npcs/magda.md
+    - docs/npcs/mahoon.md
+    - docs/npcs/marek.md
+    - docs/npcs/mari-clee.md
+    - docs/npcs/mistress-selentis.md
+    - docs/npcs/ostler-gundigoot.md
+    - docs/npcs/otis.md
+    - docs/npcs/pasmarie-clee.md
+    - docs/npcs/pearl.md
+    - docs/npcs/prefect-alrrem.md
+    - docs/npcs/prince-thrommel.md
+    - docs/npcs/quinna-poul.md
+    - docs/npcs/rannos-davl.md
+    - docs/npcs/rithelm-drake.md
+    - docs/npcs/robert-deakin.md
+    - docs/npcs/romag.md
+    - docs/npcs/rufus.md
+    - docs/npcs/sarge.md
+    - docs/npcs/senshock.md
+    - docs/npcs/serena-velkori.md
+    - docs/npcs/sister-alina.md
+    - docs/npcs/skole.md
+    - docs/npcs/snej.md
+    - docs/npcs/spugnoir-balkof.md
+    - docs/npcs/talla-velkori.md
+    - docs/npcs/terjon.md
+    - docs/npcs/thalsor-of-the-stone.md
+    - docs/npcs/tharok.md
+    - docs/npcs/thorne.md
+    - docs/npcs/tilly-bizpebble-whistle.md
+    - docs/npcs/urot.md
+    - docs/npcs/varek-solain.md
+    - docs/npcs/verigo.md
+    - docs/npcs/vethra-velkori.md
+    - docs/npcs/voss.md
+    - docs/npcs/vurakhal.md
+    - docs/npcs/warda.md
+    - docs/npcs/wat.md
+    - docs/npcs/y-dey.md
+    - docs/npcs/zelt-the-bat.md
   summaries:
-    # dirs: []
-    # files: []
+    dirs:
+    - docs/summaries
   party:
-    # dirs: []
-    # files: []
+    dirs:
+    - docs/party
+    - voice
+    files:
+    - docs/party.md
   grounding:
-    # dirs: []
-    # files: []
-    # mined_as: true
+    dirs:
+    - docs/reference
+    files:
+    - docs/world_state.md
+    - docs/campaign_state.md
+    - docs/party.md
+    - docs/planning.md
+    - docs/canon_events_timeline.md
+    mined_as: true
   prep:
-    # dirs: []
-    # files: []
+    dirs:
+    - notes/session_prep
+    - notes/sessions
+    - notes/handouts
+    - notes/statblocks
+    files:
+    - notes/area-212-fire-temple-reference.md
+    - notes/area-213-water-temple-reference.md
+    - notes/furnishing-the-household.md
+    - notes/chapter_map.md
+    - notes/falrinth_strategy.md
+    - notes/hedrack_strategy.md
+    - notes/lucius_strategy.md
+    - notes/lucius_network.md
+    - notes/nulb_network.md
+    - notes/nulb_allies.md
+    - notes/upper_temple_network.md
+    - notes/hommlet_threats.md
+    - notes/phase3_endgame.md
+    - notes/tzgy_scarab_urgent.md
+    mined_as: true
   arcs:
-    # dirs: []
-    # files: []
-
-campaign_kinds:
-  # <name>:
-  #   dirs: []
-  #   files: []
-  #   trust: ______
+    files:
+    - docs/tracking.txt
+    - notes/falrinth_strategy.md
+    - notes/hedrack_strategy.md
+    - notes/lucius_strategy.md
+    - notes/lucius_network.md
+    - notes/nulb_network.md
+    - notes/nulb_allies.md
+    - notes/upper_temple_network.md
+    - notes/hommlet_threats.md
+    - notes/phase3_endgame.md
+    - notes/tzgy_scarab_urgent.md
 ```
