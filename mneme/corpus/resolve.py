@@ -114,22 +114,40 @@ class _Git:
             i += 1
         return out
 
-    def ignored(self, rels: list[str]) -> set[str]:
-        """Paths git ignores. ``--no-index``: a TRACKED file that matches an ignore rule
-        still counts, since mempalace's matcher skips it too."""
+    def ignored(self, rels: list[str]) -> tuple[set[str], dict[str, str]]:
+        """``(paths git ignores, {path: why} for paths it would not answer)``. ``--no-index``:
+        a TRACKED file that matches an ignore rule still counts, since mempalace's matcher
+        skips it too. One refused pathspec aborts git's whole batch (#82), so a failed batch
+        is re-asked path by path and only the refused paths go unanswered. Raises
+        ``GitIgnoreError`` when git cannot be run at all."""
         if self.state != GIT_WORK_TREE or not rels:
-            return set()
+            return set(), {}
+        out = self._check_ignore(rels)
+        if out.returncode in (0, 1):  # 1 = none ignored
+            return {p for p in out.stdout.split("\0") if p}, {}
+        ignored: set[str] = set()
+        refused: dict[str, str] = {}
+        for rel in rels:
+            one = self._check_ignore([rel])
+            if one.returncode == 0:
+                ignored.add(rel)
+            elif one.returncode != 1:
+                refused[rel] = one.stderr.strip() or f"git check-ignore exited {one.returncode}"
+        return ignored, refused
+
+    def _check_ignore(self, rels: list[str]) -> subprocess.CompletedProcess:
         try:
-            out = subprocess.run(
+            return subprocess.run(
                 ["git", "check-ignore", "--no-index", "-z", "--stdin"],
                 cwd=self.cwd, env=_git_env(), input="\0".join(rels) + "\0",
                 capture_output=True, text=True,
             )
-        except OSError:
-            return set()
-        if out.returncode not in (0, 1):  # 1 = none ignored
-            return set()
-        return {p for p in out.stdout.split("\0") if p}
+        except OSError as e:
+            raise GitIgnoreError(str(e)) from e
+
+
+class GitIgnoreError(Exception):
+    """``git check-ignore`` could not be run; gitignore filtering did not happen."""
 
 
 def _git_env() -> dict[str, str]:
@@ -200,9 +218,21 @@ class _Walker:
         self.real_root = os.path.realpath(campaign_dir)
         self.git = git
         self.findings = findings
+        self._beneath: dict[str, bool] = {}
 
     def _inside(self, real: str) -> bool:
         return real == self.real_root or real.startswith(self.real_root + os.sep)
+
+    def beneath_link(self, rel: str) -> bool:
+        """Whether a parent directory of ``rel`` is a symlink. git refuses such a pathspec;
+        the walker already carries the file's real path as its ``target``."""
+        parent = os.path.dirname(rel)
+        if not parent:
+            return False
+        if parent not in self._beneath:
+            real = os.path.realpath(self.root / parent)
+            self._beneath[parent] = real != os.path.join(self.real_root, parent)
+        return self._beneath[parent]
 
     def _rel_real(self, real: str) -> str:
         return os.path.relpath(real, self.real_root).replace(os.sep, "/")
@@ -359,11 +389,23 @@ def resolve(cfg: CorpusConfig, campaign_dir: Path, recipe: Recipe) -> ResolvedCo
     # worth putting in git, it's not worth remembering", GM, mneme#64).
     named = {p for decl in cfg.kinds.values() for p in decl.dirs + decl.files}
     named_files = {p for decl in cfg.kinds.values() for p in decl.files}
+    # A path beneath a symlinked directory is not asked about (git refuses it, #82): an entry
+    # there is judged by its target, and a path whose link leaves the campaign is already a
+    # `symlink-outside` finding.
     probe = set(named)
     for ents, _nm, _miss in per_kind.values():
         probe.update(e.path for e in ents)
         probe.update(e.target for e in ents if e.target)
-    ignored = git.ignored(sorted(probe))
+    probe = {p for p in probe if not walker.beneath_link(p)}
+    try:
+        ignored, refused = git.ignored(sorted(probe))
+    except GitIgnoreError as e:  # fail closed: unfiltered is not the same as unignored
+        ignored, refused = set(), {}
+        findings.append(Finding("gitignore-unchecked", f"git check-ignore could not run, so "
+                                f"gitignored files were not filtered: {e}"))
+    for p, why in sorted(refused.items()):
+        findings.append(Finding("gitignore-unchecked",
+                                f"git would not say whether this path is ignored: {why}", path=p))
     dropped = ignored - named_files
     for name, (ents, nm, miss) in per_kind.items():
         kept = [e for e in ents if e.path not in dropped]
