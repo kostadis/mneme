@@ -61,8 +61,9 @@ def preview(entity: ConfigEntity, rec=None) -> list[CampaignPlan]:
             cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
         except _authority.AuthorityError:
             continue
-        target = _target.resolve(cfg, rec)
-        if has_corpus(ref.path):
+        corpus = has_corpus(ref.path)
+        target = _target.resolve(cfg, rec, corpus=corpus)
+        if corpus:
             try:
                 if mig := move_shadowed_text(ref.path, rec):
                     note = f"corpus.yaml: {', '.join(mig[1])} moves from campaign_kinds to kinds"
@@ -237,7 +238,7 @@ def adopt_in_place(entity: ConfigEntity, campaign: str) -> tuple[list[Path], Tar
             f"{campaign} has no .mneme/mempalace.yaml — bootstrap it first"
         )
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
-    diff = _target.resolve(cfg, rec)
+    diff = _target.resolve(cfg, rec, corpus=has_corpus(ref.path))
     migrated = _migrated_corpus("adopt", campaign, ref.path, rec)  # before any write
     upgraded = _upgrade(cfg, rec, ref.path)
     saved = {p: (p.read_bytes() if p.exists() else None)

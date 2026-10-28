@@ -14,6 +14,7 @@ from pathlib import Path
 from hypostasis import config as _config
 from hypostasis.models import ConfigEntity
 from mneme.corpus import api as _corpus_api
+from mneme.corpus.config import has_corpus
 from mneme.mempalace import authority as _authority
 from mneme.mempalace import conform as _conform
 from mneme.mempalace import discover as _discover
@@ -32,7 +33,7 @@ def target_config(entity: ConfigEntity, campaign: str) -> dict:
     if not ref.has_authority:
         return {"campaign": campaign, "error": "no authority — bootstrap first"}
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
-    t = _target.resolve(cfg, _recipe.current())
+    t = _target.resolve(cfg, _recipe.current(), corpus=has_corpus(ref.path))
     return {
         "campaign": t.campaign,
         "recipe_version": t.recipe_version,
@@ -125,7 +126,7 @@ def adopt(entity: ConfigEntity, campaign: str, confirm: bool = False) -> dict:
         return {"campaign": campaign, "error": "no authority — bootstrap first"}
     moved, why = _publish.planned_move(entity, campaign)
     cfg = _authority.load(ref.path, mempalace_root=_config.mempalace_root(entity))
-    diff = _target.resolve(cfg, _recipe.current())
+    diff = _target.resolve(cfg, _recipe.current(), corpus=has_corpus(ref.path))
     preview = {
         "campaign": campaign,
         "recipe_version": diff.recipe_version,
