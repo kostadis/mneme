@@ -229,3 +229,13 @@ def test_branch_adopt_refused_in_the_clone_is_abandoned(w, monkeypatch):
     with pytest.raises(CorpusRefusal):
         publish.adopt(w.entity, "corp")
     assert calls[-1][0] == "abandon" and "commit" not in calls
+
+
+def test_preview_of_a_corpus_campaign_reports_no_baseline_exclusions(w):
+    """#79: a corpus campaign renders no ignore file — the preview must not claim
+    baseline exclusions, from the same recipe or an older one."""
+    (plan,) = publish.preview(w.entity)
+    assert plan.target.added == () and "baseline" not in plan.line()
+    _v3(w, "campaign: corp\nkinds:\n  npcs:\n    dirs: [docs/npcs]\n")
+    (plan,) = publish.preview(w.entity)
+    assert plan.target.added == () and "baseline" not in plan.line()
