@@ -432,3 +432,67 @@ def test_tracked_under_and_many_entries_are_fast(camp):
     assert time.perf_counter() - t < 1.0
     assert g.tracked_under("d1")[0] == "d1"
     assert g.tracked_under("d") == []
+
+
+def _toee_shape(camp):
+    """A declared symlinked dir next to a declared dir holding a gitignored file (#82)."""
+    write(camp, ".gitignore", "__pycache__/\n")
+    write(camp, "grounding/reference/r.md", "r")
+    write(camp, "docs/party/a.md", "a")
+    write(camp, "docs/party/__pycache__/x.pyc", "junk")
+    os.symlink("../grounding/reference", camp / "docs" / "reference")
+    return "campaign: c\nkinds:\n  party:\n    dirs: [docs/party]\n  grounding:\n" \
+           "    dirs: [docs/reference]\n"
+
+
+def test_symlinked_dir_does_not_disable_gitignore(camp):
+    """#82: git aborts a check-ignore batch holding a path beneath a symlinked dir; that
+    must not switch gitignore filtering off for the whole corpus."""
+    res = run(camp, _toee_shape(camp))
+    assert [f.path for f in res.kinds["party"].files] == ["docs/party/a.md"]
+    assert [f.path for f in res.kinds["grounding"].files] == ["docs/reference/r.md"]
+    assert res.valid, res.findings
+
+
+def test_ignored_target_behind_a_symlinked_dir_is_a_finding(camp):
+    """Rule 4: the gitignored target of a link that stays in the corpus is named."""
+    write(camp, ".gitignore", "*.tmp\n")
+    write(camp, "real/a.md", "a")
+    write(camp, "real/b.tmp", "b")
+    os.symlink("real", camp / "linked")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [linked]\n")
+    assert {f.path for f in res.findings if f.code == "gitignored"} == {"real/b.tmp"}
+
+
+def test_link_leaving_the_campaign_does_not_disable_gitignore(camp, tmp_path):
+    """#82: a declared file beneath an outside link must not void the other kinds' check."""
+    write(camp, ".gitignore", "*.tmp\n")
+    write(camp, "docs/a.md", "a")
+    write(camp, "docs/b.tmp", "b")
+    write(tmp_path / "outside", "x.md", "x")
+    os.symlink(tmp_path / "outside", camp / "ext")
+    res = run(camp, "campaign: c\nkinds:\n  npcs:\n    dirs: [docs]\n  party:\n"
+                    "    files: [ext/x.md]\n")
+    assert [f.path for f in res.kinds["npcs"].files] == ["docs/a.md"]
+    assert "gitignore-unchecked" not in codes(res)
+
+
+def test_refused_path_is_unchecked_and_the_rest_still_filtered(camp, monkeypatch):
+    """#82: a path git refuses is a finding naming it; every other path is still answered."""
+    body = _toee_shape(camp)
+    monkeypatch.setattr(resolve._Walker, "beneath_link", lambda self, rel: False)  # old probe
+    res = run(camp, body)
+    unchecked = {f.path for f in res.findings if f.code == "gitignore-unchecked"}
+    assert unchecked == {"docs/reference/r.md"} and not res.valid
+    assert [f.path for f in res.kinds["party"].files] == ["docs/party/a.md"]
+
+
+def test_git_that_cannot_run_fails_closed(camp, monkeypatch):
+    body = _toee_shape(camp)
+
+    def boom(self, rels):
+        raise resolve.GitIgnoreError("no git")
+
+    monkeypatch.setattr(resolve._Git, "_check_ignore", boom)
+    res = run(camp, body)
+    assert "gitignore-unchecked" in codes(res) and not res.valid

@@ -105,7 +105,8 @@ campaign-relative path. A source outside the campaign root counts as `out_of_sco
                        └─────────────┘
  corpus.yaml present:
    parse/validate fails ─────────────▶ INVALID   (dual-authority, unknown-kind, shadowed-kind,
-                                                  ambiguous-mining-kind, gitignored, symlink,
+                                                  ambiguous-mining-kind, gitignored, gitignore-unchecked,
+                                                  symlink,
                                                   empty-declaration, missing trust)
    declared path absent, untracked ──▶ MISSING   (config edit; mp prune drops its drawers)
    sources/record unreadable ────────▶ UNKNOWN   (never OK, FR-017)
@@ -139,7 +140,10 @@ OK only when there are none (FR-017). `not_materialized` is informational, never
    finding. If such a file is also named in some kind's `files`, it is named, so it is a
    finding. mneme asks `git check-ignore`, which also covers `.git/info/exclude`. mempalace
    does not read that file, but consumers using git do. GM, 2026-10-24 (mneme#64): "if it's
-   not worth putting in git, it's not worth remembering."
+   not worth putting in git, it's not worth remembering." A path beneath a symlinked
+   directory is judged by its resolved target, since git refuses such a pathspec. A path
+   git will not answer for, or a `git check-ignore` that cannot run, is a
+   `gitignore-unchecked` finding (fail closed, mneme#82). It is never read as "not ignored".
 5. A declared path, or a file inside a declared dir, may be a symlink only if it resolves to a
    regular file inside the campaign. mneme mines the resolved target, since mempalace opens files
    with `O_NOFOLLOW`. Anything else is `invalid: symlink-outside` / `symlink-not-file`.
