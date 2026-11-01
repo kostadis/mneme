@@ -12,14 +12,16 @@ from dataclasses import asdict
 from pathlib import Path
 
 from hypostasis import config as _config
-from hypostasis.models import ConfigEntity
+from hypostasis.models import ConfigEntity, declared_embedder
 from mneme.corpus import api as _corpus_api
 from mneme.corpus.config import has_corpus
 from mneme.mempalace import authority as _authority
+from mneme.mempalace import backup as _backup
 from mneme.mempalace import conform as _conform
 from mneme.mempalace import discover as _discover
 from mneme.mempalace import recipe as _recipe
 from mneme.mempalace import target as _target
+from mneme.mempalace.runner import MempalaceError, MempalaceRunner
 
 INSTRUCTIONS_DIR = Path(__file__).resolve().parent.parent / "recipes" / "instructions"
 
@@ -184,16 +186,57 @@ def campaign_usage_guide(entity: ConfigEntity, campaign: str) -> str:
     return guide.read_text()
 
 
+def search(
+    entity: ConfigEntity,
+    campaign: str,
+    query: str,
+    *,
+    wing: str | None = None,
+    room: str | None = None,
+    results: int | None = None,
+    since: str | None = None,
+    before: str | None = None,
+    campaign_dir: str | None = None,
+) -> dict:
+    """GH #85: `mneme mp search` over MCP. Same contract as the CLI (#73): refuse without a
+    declared embedder (mempalace would silently fall back to 384-dim minilm), resolve the
+    store through the authority and verify it is queryable (not missing/broken, embedder
+    dimension agrees), then run `mempalace --palace <store> search ... -- <query>`.
+    Read-only. Returns {"output": ...} or {"error": ...}; never raises for a refusal."""
+    if not query.strip():
+        return {"error": "empty query"}
+    if results is not None and results < 1:
+        return {"error": "results must be >= 1"}
+    if declared_embedder(entity) is None:
+        return {"error": "no embedder declared; set MEMPALACE_EMBEDDING_PROVIDER/_MODEL/"
+                         "_ENDPOINT in the env: block of hypostasis.yaml"}
+    try:
+        store = _backup.queryable_store(entity, campaign, campaign_dir)
+        out = MempalaceRunner.for_entity(entity).search(
+            query, store, wing=wing, room=room, results=results, since=since, before=before
+        )
+    except (_discover.DiscoveryError, _authority.AuthorityError, MempalaceError) as e:
+        problems = getattr(e, "problems", None)
+        return {"error": "; ".join(problems) if problems else str(e)}
+    if out.returncode != 0:
+        reason = (out.stderr or "").strip()[-500:] or f"mempalace exited {out.returncode}"
+        return {"error": reason}
+    return {"campaign": campaign, "store": str(store), "output": out.stdout}
+
+
 # ── FastMCP wiring (lazy import so the package loads without `mcp`) ────────────
 
 
 def build_server(entity: ConfigEntity):
     try:
         from mcp.server.fastmcp import FastMCP
-    except ImportError as e:  # pragma: no cover - exercised only when mcp absent
-        raise RuntimeError(
-            "the MCP server needs the optional 'mcp' dependency — install: pip install '.[mcp]'"
-        ) from e
+    except ImportError:
+        try:  # mcp 2.x renamed FastMCP to MCPServer; same tool/resource/run API (GH #85)
+            from mcp.server.mcpserver import MCPServer as FastMCP
+        except ImportError as e:  # pragma: no cover - exercised only when mcp absent
+            raise RuntimeError(
+                "the MCP server needs the optional 'mcp' dependency — install: pip install '.[mcp]'"
+            ) from e
 
     mcp = FastMCP("mneme")
 
@@ -224,6 +267,27 @@ def build_server(entity: ConfigEntity):
         confirm=True writes the upgraded mneme-managed files into the active checkout,
         uncommitted, for human review. Call once to preview, again with confirm=true."""
         return adopt(entity, campaign, confirm)
+
+    @mcp.tool(name="search")
+    def search_tool(
+        campaign: str,
+        query: str,
+        wing: str | None = None,
+        room: str | None = None,
+        results: int | None = None,
+        since: str | None = None,
+        before: str | None = None,
+        campaign_dir: str | None = None,
+    ) -> dict:
+        """Semantic search over a campaign's palace, exactly as `mneme mp search` does it:
+        the declared embedder, the authority's store, fail-closed on a missing/broken store
+        or an embedder-dimension mismatch. Pass campaign_dir (the workspace path) when the
+        name lookup fails on this host. Keywords work better than sentences. Read-only;
+        returns {"output": ...} or {"error": ...}."""
+        return search(
+            entity, campaign, query, wing=wing, room=room, results=results,
+            since=since, before=before, campaign_dir=campaign_dir,
+        )
 
     @mcp.resource("mneme://instructions/manage-mempalace")
     def manage_mempalace() -> str:
