@@ -387,15 +387,22 @@ def render_faces(
     `.mcp.json` mneme entry is always rendered (FR-008), even with no store. In clone verdict
     SINGLE the same entries are also merged into the clone root's `.mcp.json` (US4); in every
     other verdict the root file is never opened for writing."""
+    root_mcp = (
+        layout.root / MCP_JSON
+        if layout is not None and layout.verdict == "SINGLE" and layout.root is not None
+        else None
+    )
+    # pre-validate every merge target so a bad file writes nothing at all
+    _mcpface.check_mergeable(campaign_dir / MCP_JSON)
+    if root_mcp is not None:
+        _mcpface.check_mergeable(root_mcp)
     written = write_all(cfg, recipe, campaign_dir, resolved)
     written.append(render_config_yaml(cfg, campaign_dir, recipe))
     if cfg.store is not None:
         written.append(render_global_alias(cfg, config_json))
     written.append(render_mcp(cfg, campaign_dir, binding))
-    if layout is not None and layout.verdict == "SINGLE" and layout.root is not None:
-        written.append(
-            _mcpface.merge_write(layout.root / MCP_JSON, mcp_entries(cfg, binding))
-        )
+    if root_mcp is not None:
+        written.append(_mcpface.merge_write(root_mcp, mcp_entries(cfg, binding)))
     return written
 
 

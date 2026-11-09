@@ -114,6 +114,17 @@ def bringup(
             return BringUpReport(campaign, tuple(steps))
         rec = vrec  # one recipe serves validation, render and first_mine
 
+    try:  # 008: bind + pre-validate BEFORE any write (and before a dry run returns)
+        binding = _mcpface.binding_for(entity, need_mempalace=cfg.store is not None)
+        layout = _mcpface.clone_layout(ref, entity)
+        _mcpface.check_mergeable(ref.path / ".mcp.json")
+        if layout.verdict == "SINGLE" and layout.root is not None:
+            _mcpface.check_mergeable(layout.root / ".mcp.json")
+    except (_mcpface.McpBindingError, _mcpface.McpFaceError) as e:
+        steps.append(BringUpStep("configure", "skipped", note=f"nothing written: {e}"))
+        steps.append(BringUpStep("first_mine", "failed", note=str(e)))
+        return BringUpReport(campaign, tuple(steps))
+
     if dry_run:
         steps.append(
             BringUpStep("configure", "skipped", note=f"would configure; store={cfg.store.alias}")
@@ -126,13 +137,6 @@ def bringup(
         _guard.require_writable(entity, cfg.store.path, prober)
     except MempalaceError as e:
         steps.append(BringUpStep("configure", "skipped", note="nothing written: guard refused"))
-        steps.append(BringUpStep("first_mine", "failed", note=str(e)))
-        return BringUpReport(campaign, tuple(steps))
-
-    try:  # 008: bind the owning mneme BEFORE any write — a missing program writes nothing
-        binding = _mcpface.binding_for(entity, need_mempalace=cfg.store is not None)
-    except _mcpface.McpBindingError as e:
-        steps.append(BringUpStep("configure", "skipped", note=f"nothing written: {e}"))
         steps.append(BringUpStep("first_mine", "failed", note=str(e)))
         return BringUpReport(campaign, tuple(steps))
 
@@ -149,7 +153,7 @@ def bringup(
         record_warning = _former.try_record_empty(cfg.store.path, cfg.campaign)
     # the render re-resolves AFTER its own deletes/rewrites, so the TOC snapshot is current
     _render.render_faces(
-        cfg, rec, ref.path, config_json, binding, layout=_mcpface.clone_layout(ref, entity)
+        cfg, rec, ref.path, config_json, binding, layout=layout
     )
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 

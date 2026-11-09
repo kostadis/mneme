@@ -101,12 +101,9 @@ def mempalace_entry(b: McpBinding, store_path) -> dict:
     }
 
 
-def merge_write(path: Path, entries: dict[str, dict]) -> Path:
-    """Merge `entries` into `path`'s `mcpServers`, preserving everything else; atomic write.
-
-    Existing keys keep their position when replaced; new keys are appended. An unparsable or
-    wrongly-shaped existing file raises McpFaceError without being modified."""
-    path = Path(path)
+def _load_mergeable(path: Path) -> tuple[dict, dict]:
+    """(data, mcpServers) of an existing file, or ({}, {}) when missing. Raises McpFaceError
+    for exactly the shapes merge_write refuses. `null` mcpServers counts as empty."""
     data: dict = {}
     if path.exists():
         try:
@@ -115,9 +112,30 @@ def merge_write(path: Path, entries: dict[str, dict]) -> Path:
             raise McpFaceError(path, f"not valid JSON ({e})") from e
         if not isinstance(data, dict):
             raise McpFaceError(path, "top level is not a JSON object")
-    existing = data.get("mcpServers", {})
+    existing = data.get("mcpServers")
+    if existing is None:
+        existing = {}
     if not isinstance(existing, dict):
         raise McpFaceError(path, "`mcpServers` is not a JSON object")
+    return data, existing
+
+
+def check_mergeable(path: Path) -> None:
+    """Raise McpFaceError iff `merge_write` would refuse `path`; no-op for a missing file."""
+    path = Path(path)
+    _load_mergeable(path.resolve() if path.is_symlink() else path)
+
+
+def merge_write(path: Path, entries: dict[str, dict]) -> Path:
+    """Merge `entries` into `path`'s `mcpServers`, preserving everything else; atomic write.
+
+    Existing keys keep their position when replaced; new keys are appended. An unparsable or
+    wrongly-shaped existing file raises McpFaceError without being modified. A symlinked
+    `path` is followed: the target is replaced and the link preserved."""
+    path = Path(path)
+    if path.is_symlink():
+        path = path.resolve()
+    data, existing = _load_mergeable(path)
     data["mcpServers"] = {**existing, **entries}
     if path.exists():
         mode = stat.S_IMODE(path.stat().st_mode)
@@ -158,7 +176,9 @@ def file_reasons(
         return [f"mcp: {where} unreadable"]
     if not isinstance(data, dict):
         return [f"mcp: {where} unreadable"]
-    servers = data.get("mcpServers", {})
+    servers = data.get("mcpServers")
+    if servers is None:
+        servers = {}
     if not isinstance(servers, dict):
         return [f"mcp: {where} unreadable"]
     bad: list[str] = []
@@ -212,7 +232,7 @@ def _root_mneme_keys(root_mcp: Path) -> tuple[str, ...]:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return ()
     servers = data.get("mcpServers") if isinstance(data, dict) else None
-    if not isinstance(servers, dict):
+    if not isinstance(servers, dict):  # includes null
         return ()
     return tuple(k for k in ("mneme", "mempalace") if k in servers)
 
@@ -224,8 +244,8 @@ def clone_layout(ref, entity) -> CloneLayout:
         # `--dir` sets ref.tree to the workspace's parent, which need not be a declared tree;
         # only a DECLARED campaigns tree is ever a clone root (never write into any parent).
         roots = entity.data_roots.get("campaigns") or ()
-        declared = {Path(r).expanduser().resolve() for r in roots}
-        if Path(tree).expanduser().resolve() not in declared:
+        declared_roots = {Path(r).expanduser().resolve() for r in roots}
+        if Path(tree).expanduser().resolve() not in declared_roots:
             tree = None
     if tree is None or Path(ref.path).resolve() == Path(tree).resolve():
         return CloneLayout(None, (), False, False, "NO_CLONE", "")
@@ -235,7 +255,7 @@ def clone_layout(ref, entity) -> CloneLayout:
     try:
         children = sorted(
             p.name for p in root.iterdir()
-            if not p.name.startswith(".") and not p.is_symlink() and p.is_dir()
+            if not p.name.startswith(".") and p.is_dir()
         )
     except OSError:
         children = []

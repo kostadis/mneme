@@ -399,12 +399,24 @@ def test_single_renders_both_entries_at_root_and_preserves_others(tmp_path):
     }
 
 
-def test_dot_dirs_and_symlinks_not_counted(tmp_path):
+def test_dot_dirs_not_counted_symlinked_dirs_counted(tmp_path):
     tree, camp = _clone_campaign(tmp_path)
     (tree / ".hidden").mkdir()
-    (tree / "link").symlink_to(tmp_path)
     lay = _layout(_clone_entity(tree))
     assert lay.campaigns == ("toee",) and lay.verdict == "SINGLE"
+    (tree / "link").symlink_to(tmp_path)  # a symlinked dir counts: pushes toward MULTI
+    lay = _layout(_clone_entity(tree))
+    assert lay.campaigns == ("link", "toee") and lay.verdict == "MULTI"
+
+
+def test_symlinked_second_campaign_is_multi_and_root_not_written(tmp_path):
+    tree, camp = _clone_campaign(tmp_path)
+    real = make_simple_campaign(tmp_path / "elsewhere", "campB")
+    (tree / "campB").symlink_to(real)
+    entity = _clone_entity(tree)
+    assert _layout(entity).verdict == "MULTI"
+    bringup.render_existing_faces(entity, "toee")
+    assert not (tree / ".mcp.json").exists()
 
 
 def _second_campaign(tree):
@@ -491,3 +503,71 @@ def test_two_mnemes_never_cross_write(tmp_path):
     with pytest.raises(discover.DiscoveryError):
         bringup.render_existing_faces(ent_a, "obelisk", campaign_dir=str(b_camp))
     assert _snapshot(b_tree) == before and not (b_tree / ".mcp.json").exists()
+
+
+# ── review fixes: pre-validation, symlinks, null mcpServers, dry run ──────────────────
+
+
+def test_check_mergeable_matches_merge_write(tmp_path):
+    from mneme.mempalace.mcpface import check_mergeable
+
+    check_mergeable(tmp_path / "missing.json")  # no-op
+    for body in ("{nope", "[]", '{"mcpServers": []}', '{"mcpServers": "x"}'):
+        p = tmp_path / "bad.json"
+        p.write_text(body)
+        with pytest.raises(McpFaceError):
+            check_mergeable(p)
+    for body in ("", "{}", '{"mcpServers": null}', '{"mcpServers": {}}'):
+        p = tmp_path / "ok.json"
+        p.write_text(body)
+        check_mergeable(p)
+
+
+def test_merge_write_null_mcpservers(tmp_path):
+    p = tmp_path / ".mcp.json"
+    p.write_text('{"mcpServers": null, "other": 1}')
+    merge_write(p, {"mneme": {"command": "m"}})
+    assert json.loads(p.read_text()) == {"mcpServers": {"mneme": {"command": "m"}}, "other": 1}
+
+
+def test_merge_write_preserves_symlink(tmp_path):
+    target_dir = tmp_path / "real"
+    target_dir.mkdir()
+    target = target_dir / "mcp.json"
+    target.write_text('{"mcpServers": {"keep": {}}}')
+    link = tmp_path / ".mcp.json"
+    link.symlink_to(target)
+    merge_write(link, {"mneme": {"command": "m"}})
+    assert link.is_symlink()
+    assert set(json.loads(target.read_text())["mcpServers"]) == {"keep", "mneme"}
+
+
+def test_bringup_invalid_campaign_mcp_writes_nothing(tmp_path, monkeypatch):
+    root, camp, entity, runner = _managed(tmp_path, monkeypatch)
+    (camp / ".mcp.json").write_text("{nope")
+    report = bringup.bringup(entity, "stormhaven", runner=runner, do_backup=False)
+    assert not report.ready
+    assert "nothing written" in " ".join(s.note or "" for s in report.steps)
+    assert not (camp / ".mneme" / "mempalace.yaml").exists()
+    assert (camp / ".mcp.json").read_text() == "{nope"
+
+
+def test_render_existing_faces_invalid_root_mcp_writes_nothing(tmp_path):
+    tree, camp = _clone_campaign(tmp_path)
+    entity = _clone_entity(tree)
+    (camp / ".mcp.json").write_text('{"mcpServers": {"a": {}}}')
+    (tree / ".mcp.json").write_text("{nope")
+    assert _layout(entity).verdict == "SINGLE"
+    before = _snapshot(camp, tree / ".mcp.json")
+    with pytest.raises(McpFaceError):
+        bringup.render_existing_faces(entity, "toee")
+    assert _snapshot(camp, tree / ".mcp.json") == before
+
+
+def test_bringup_dry_run_reports_binding_failure(tmp_path, monkeypatch):
+    root, camp, entity, runner = _managed(tmp_path, monkeypatch)
+    (tmp_path / ".fake-venv/bin/mempalace-mcp").unlink()
+    report = bringup.bringup(entity, "stormhaven", runner=runner, dry_run=True)
+    assert not report.ready
+    notes = " ".join(s.note or "" for s in report.steps)
+    assert "nothing written" in notes and "mempalace-mcp program missing" in notes

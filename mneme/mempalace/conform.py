@@ -189,10 +189,13 @@ def _faces_row(ref, cfg, entity, layout=None) -> ConformanceRow | None:
         binding, err = None, str(e)
     mism = _render.faces_coherent(cfg, ref.path, config_json, binding, err, layout)
     if mism:
-        return ConformanceRow(
-            ref.name, "faces", State.STALE_RENDER,
-            note="; ".join(mism) + f" — run `mneme mp faces {ref.name}`",
+        hint = (
+            f" — fix the mneme install / hypostasis config (venv, source path), then run "
+            f"`mneme mp faces {ref.name}`"
+            if binding is None
+            else f" — run `mneme mp faces {ref.name}`"
         )
+        return ConformanceRow(ref.name, "faces", State.STALE_RENDER, note="; ".join(mism) + hint)
     note = "right store everywhere" if cfg.store is not None else "mneme server bound"
     return ConformanceRow(ref.name, "faces", State.CONFORMANT, note=note)
 

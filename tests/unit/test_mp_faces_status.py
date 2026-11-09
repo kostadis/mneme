@@ -97,6 +97,8 @@ def test_venv_without_mneme_cannot_bind(tmp_path):
     broken = dataclasses.replace(entity)
     row = _faces(broken)
     assert row.state is State.STALE_RENDER and "cannot bind owning mneme" in row.note
+    assert "fix the mneme install" in row.note and "run `mneme mp faces" in row.note
+    assert "mneme program missing" in row.note.split(" — ")[0]
 
 
 # ── clone row (008 US4) ───────────────────────────────────────────────────────────

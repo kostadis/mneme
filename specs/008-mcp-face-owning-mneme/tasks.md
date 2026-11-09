@@ -106,8 +106,8 @@ every story builds on.
 
 - [X] T029 [P] Update `README.md` (`mp faces` / `mp mcp` lines and the faces description ~line 80–100) to say the mcp face registers `mneme` and `mempalace` pinned to the owning mneme, and document `campaign_shared_dirs` and the clone-root rule; add `campaign_shared_dirs` to the example hypostasis config if the repo ships one (`hypostasis.example.yaml`)
 - [X] T030 Run the quickstart §2 scenario table against the test suite and confirm each row maps to a passing test; list any gap and close it (Opus)
-- [ ] T031 Commit the branch in logical commits (spec docs; hypostasis key; mcpface + render; status; docs), messages ending with the Co-Authored-By line (Opus)
-- [ ] T032 Run `/code-review` **once** on the branch diff vs `origin/main`. For each finding: fix it (implementer, then re-gate) if it is cheap and in scope, else record it for T035. No second review pass (Opus)
+- [X] T031 Commit the branch in logical commits (spec docs; hypostasis key; mcpface + render; status; docs), messages ending with the Co-Authored-By line (Opus)
+- [X] T032 Run `/code-review` **once** on the branch diff vs `origin/main`. For each finding: fix it (implementer, then re-gate) if it is cheap and in scope, else record it for T035. No second review pass (Opus)
 - [ ] T033 Push `008-mcp-face-owning-mneme` and open the PR to `main` via `mcp__github__create_pull_request`, body summarising US1–US4, `Closes #87`, linking kostadis/campaigns#672, ending with the Claude Code attribution line (Opus)
 
 ---
@@ -147,3 +147,4 @@ every story builds on.
 - US3: 893 passed, 3 skipped; ruff 10. faces row moved to _faces_row (emitted with or without store, not for FOREIGN). Contract gained `has no mempalace server` + `cannot bind owning mneme` + store-less note. test_mp_status now renders faces first (store-less campaign without .mcp.json is a faces FAIL by design, FR-008).
 - US4: 907 passed, 3 skipped; ruff 10. Deviation (accepted): clone_layout only treats a DECLARED data_roots.campaigns tree as a clone root (--dir sets ref.tree to the parent). Read-only live status from the worktree: all 5 campaigns faces FAIL with specific reasons (toee no mneme; Phandalin/OotA mneme entry lacks --config; greenwold foreign mneme command; obelisk campaign .mcp.json has no mempalace); all 5 clone_root_owed (shared set undeclared). No files written.
 - Phase 7: T029 docs done by Opus directly (README § The mcp face, ~30 lines; too small to brief). T030: all quickstart §2 rows map to tests in test_mcpface.py / test_mp_faces_status.py (UNINTEGRATED row revised per R2).
+- Review (one pass): 10 findings. Fixed 1,2,3,4,6,7,8 + rename part of 10 (914 passed, 3 skipped; ruff 10). Kept 5 by GM ruling (any mneme/mempalace entry at a multi-campaign root = FAIL). Deferred 9 + double-ownership part of 10 → issue.
