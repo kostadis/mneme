@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from mneme.mempalace import authority, bringup, render
 from mneme.mempalace.runner import MempalaceRunner
-from tests.fixtures import STUB, entity_for, make_greenfield_campaign
+from tests.fixtures import STUB, entity_for, fake_binding, make_greenfield_campaign
 
 
 def _bring_up(tmp_path, monkeypatch):
@@ -22,7 +22,8 @@ def test_faces_agree_on_the_store(tmp_path, monkeypatch):
     camp = _bring_up(tmp_path, monkeypatch)
     cfg = authority.load(camp)
     config_json = tmp_path / "home" / ".mempalace" / "config.json"
-    assert render.faces_coherent(cfg, camp, config_json) == []  # CLI pointer + MCP agree
+    b = fake_binding(tmp_path)
+    assert render.faces_coherent(cfg, camp, config_json, b) == []  # CLI pointer + MCP agree
 
 
 DECLARED = {
@@ -40,7 +41,7 @@ def test_mcp_face_carries_declared_embedder_and_never_secrets(tmp_path, monkeypa
     camp = _bring_up(tmp_path, monkeypatch)
     cfg = authority.load(camp)
     env = {**DECLARED, "OPENAI_API_KEY": "sk-secret", "MEMPALACE_API_KEY": "s", "EXTRA": "1"}
-    render.render_mcp(cfg, camp, env)
+    render.render_mcp(cfg, camp, fake_binding(tmp_path, env))
     written = json.loads((camp / ".mcp.json").read_text())["mcpServers"]["mempalace"]["env"]
     assert {k: written[k] for k in DECLARED} == DECLARED
     assert set(written) == {"MEMPALACE_PALACE_PATH", *DECLARED}  # allow-list only
@@ -51,14 +52,16 @@ def test_mcp_face_staleness_follows_declared_env(tmp_path, monkeypatch):
     camp = _bring_up(tmp_path, monkeypatch)  # rendered with NO declared env (old file shape)
     cfg = authority.load(camp)
     config_json = tmp_path / "home" / ".mempalace" / "config.json"
-    assert render.faces_coherent(cfg, camp, config_json, {}) == []
-    stale = render.faces_coherent(cfg, camp, config_json, DECLARED)
+    assert render.faces_coherent(cfg, camp, config_json, fake_binding(tmp_path)) == []
+    stale = render.faces_coherent(cfg, camp, config_json, fake_binding(tmp_path, DECLARED))
     assert any("mcp" in m and "MEMPALACE_EMBEDDING_PROVIDER" in m for m in stale)
-    render.render_mcp(cfg, camp, DECLARED)  # re-render with the new keys -> conformant
-    assert render.faces_coherent(cfg, camp, config_json, DECLARED) == []
+    # re-render with the new keys -> conformant
+    render.render_mcp(cfg, camp, fake_binding(tmp_path, DECLARED))
+    assert render.faces_coherent(cfg, camp, config_json, fake_binding(tmp_path, DECLARED)) == []
     # declared embedder changed -> the old file is stale again
     changed = {**DECLARED, "MEMPALACE_EMBEDDING_MODEL": "other"}
-    assert any("MODEL" in m for m in render.faces_coherent(cfg, camp, config_json, changed))
+    chg = render.faces_coherent(cfg, camp, config_json, fake_binding(tmp_path, changed))
+    assert any("MODEL" in m for m in chg)
 
 
 def test_removed_palace_pointer_is_flagged(tmp_path, monkeypatch):
@@ -67,7 +70,7 @@ def test_removed_palace_pointer_is_flagged(tmp_path, monkeypatch):
     config_json = tmp_path / "home" / ".mempalace" / "config.json"
     # hand-break the cli_pointer face: rewrite the root mempalace.yaml without palace:
     (camp / "mempalace.yaml").write_text("wing: stormhaven\nrooms: []\n")
-    mism = render.faces_coherent(cfg, camp, config_json)
+    mism = render.faces_coherent(cfg, camp, config_json, fake_binding(tmp_path))
     assert any("cli_pointer" in m for m in mism)  # the wrong/missing-pointer bug is caught
 
 
@@ -105,7 +108,7 @@ def test_two_hosts_share_bytes_and_resolve_their_own_store(tmp_path, monkeypatch
     assert cfg_b.store.path == mp_b / "palaces" / "stormhaven"
 
     # FR-015 — "right store everywhere" still holds, now per host: B's faces name B's root.
-    assert render.faces_coherent(cfg_b, camp, mp_b / "config.json") == []
+    assert render.faces_coherent(cfg_b, camp, mp_b / "config.json", fake_binding(tmp_path)) == []
     mcp = (camp / ".mcp.json").read_text()
     assert str(mp_b / "palaces" / "stormhaven") in mcp
     assert str(mp_a / "palaces" / "stormhaven") not in mcp

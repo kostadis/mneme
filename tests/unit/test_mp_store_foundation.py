@@ -15,6 +15,7 @@ from mneme.mempalace.models import (
     StoreState,
     Wing,
 )
+from tests.fixtures import fake_binding
 
 
 def _cfg(tmp_path, campaign="saga"):
@@ -303,11 +304,16 @@ def test_mcp_face_points_at_store_no_hardcode(tmp_path):
     c = tmp_path / "saga"
     c.mkdir()
     (c / ".mcp.json").write_text(json.dumps({"mcpServers": {"campaign": {"type": "stdio"}}}))
-    render.render_mcp(_cfg(tmp_path), c)
+    render.render_mcp(_cfg(tmp_path), c, fake_binding(tmp_path))
     data = json.loads((c / ".mcp.json").read_text())
     assert data["mcpServers"]["campaign"]["type"] == "stdio"  # other server preserved
     env = data["mcpServers"]["mempalace"]["env"]
     assert env["MEMPALACE_PALACE_PATH"].endswith("/palaces/saga")  # from the store pointer
+    # 008: absolute programs from the owning venv, never a bare PATH-resolved name
+    assert data["mcpServers"]["mempalace"]["command"] == str(
+        tmp_path / ".fake-venv" / "bin" / "mempalace-mcp"
+    )
+    assert data["mcpServers"]["mneme"]["command"] == str(tmp_path / ".fake-venv" / "bin" / "mneme")
 
 
 # ── health / store inspection ────────────────────────────────────────────────

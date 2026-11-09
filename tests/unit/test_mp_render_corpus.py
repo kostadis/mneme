@@ -6,6 +6,7 @@ import yaml
 
 from mneme.corpus import toc
 from mneme.mempalace import authority, recipe, render
+from tests.fixtures import fake_binding
 from tests.fixtures.corpus_campaign import corpus_world, write
 
 
@@ -84,11 +85,12 @@ def test_coherent_detects_stale_root_stamp_and_leftovers(tmp_path, monkeypatch):
 def test_faces_cover_the_corpus_artifacts(tmp_path, monkeypatch):
     w, cfg, rec = _setup(tmp_path, monkeypatch)
     cj = tmp_path / "config.json"
-    written = render.render_faces(cfg, rec, w.camp, cj)
+    written = render.render_faces(cfg, rec, w.camp, cj, fake_binding(tmp_path))
     assert w.camp / "mempalace.yaml" in written and w.camp / "config" / "config.yaml" in written
-    assert render.faces_coherent(cfg, w.camp, cj) == []
+    assert render.faces_coherent(cfg, w.camp, cj, fake_binding(tmp_path)) == []
     (w.camp / "mempalace.yaml").write_text("palace: other\n")
-    assert any("cli_pointer" in b for b in render.faces_coherent(cfg, w.camp, cj))
+    stale = render.faces_coherent(cfg, w.camp, cj, fake_binding(tmp_path))
+    assert any("cli_pointer" in b for b in stale)
 
 
 def test_wing_model_render_is_unchanged(tmp_path):

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
 
@@ -21,6 +20,8 @@ from mneme.corpus import config as _cconfig
 from mneme.corpus import resolve as _cresolve
 from mneme.corpus import toc as _toc
 
+from . import mcpface as _mcpface
+from .mcpface import MCP_ENV_ALLOW, McpBinding, declared_mcp_env  # noqa: F401
 from .models import CampaignMempalaceConfig, Recipe, RenderedArtifact
 
 STAMP_PREFIX = "# mneme-rendered; source-sha256:"
@@ -362,76 +363,72 @@ def render_global_alias(cfg: CampaignMempalaceConfig, config_json: Path) -> Path
     return config_json
 
 
-# The ONLY hypostasis-declared env keys that may reach the MCP server entry (GH #26): backend +
-# embedder selection. An allow-list, never a pass-through — no *_API_KEY / secret may ever be
-# written into .mcp.json. (.mcp.json is a host-local untracked face, so endpoints are fine.)
-MCP_ENV_ALLOW = (
-    "MEMPALACE_BACKEND",
-    "MEMPALACE_EMBEDDING_PROVIDER",
-    "MEMPALACE_EMBEDDING_MODEL",
-    "MEMPALACE_EMBEDDING_ENDPOINT",
-    "MEMPALACE_EMBEDDING_DEVICE",
-)
+def mcp_entries(cfg: CampaignMempalaceConfig, binding: McpBinding) -> dict[str, dict]:
+    """The mneme-owned `.mcp.json` entries (feature 008): `mneme`, plus `mempalace` with a store.
+    Never hardcodes a path — the palace comes from the authority's store pointer (FR-017)."""
+    entries = {"mneme": _mcpface.mneme_entry(binding)}
+    if cfg.store is not None:
+        entries["mempalace"] = _mcpface.mempalace_entry(binding, cfg.store.path)
+    return entries
 
 
-def declared_mcp_env(env: Mapping[str, str] | None) -> dict[str, str]:
-    """The allow-listed, non-empty subset of the declared env for the MCP server entry."""
-    return {
-        k: str(env[k]).strip() for k in MCP_ENV_ALLOW if env and str(env.get(k, "")).strip()
-    }
-
-
-def render_mcp(
-    cfg: CampaignMempalaceConfig, campaign_dir: Path, env: Mapping[str, str] | None = None
-) -> Path:
-    """Merge a `mempalace` stdio server (palace injected) into the campaign's .mcp.json.
-
-    Never hardcodes a path — the palace comes from the authority's store pointer (FR-017).
-    `env` is the hypostasis-declared env (`entity.env`); only `MCP_ENV_ALLOW` keys are copied
-    so the MCP server runs the same backend/embedder as the CLI (GH #26)."""
-    import json
-
-    if cfg.store is None:
-        raise ValueError("render_mcp requires a store pointer")
-    path = campaign_dir / MCP_JSON
-    data: dict = {}
-    if path.is_file():
-        data = json.loads(path.read_text() or "{}")
-    servers = dict(data.get("mcpServers") or {})
-    servers["mempalace"] = {
-        "type": "stdio",
-        "command": "mempalace-mcp",
-        "env": {"MEMPALACE_PALACE_PATH": str(cfg.store.path), **declared_mcp_env(env)},
-    }
-    data["mcpServers"] = servers
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    return path
+def render_mcp(cfg: CampaignMempalaceConfig, campaign_dir: Path, binding: McpBinding) -> Path:
+    """Merge the owning-mneme entries into the campaign's .mcp.json (feature 008). With no
+    store an existing `mempalace` key is left untouched."""
+    return _mcpface.merge_write(campaign_dir / MCP_JSON, mcp_entries(cfg, binding))
 
 
 def render_faces(
     cfg: CampaignMempalaceConfig, recipe: Recipe, campaign_dir: Path, config_json: Path,
-    env: Mapping[str, str] | None = None, resolved=None,
+    binding: McpBinding, resolved=None, layout: _mcpface.CloneLayout | None = None,
 ) -> list[Path]:
     """Render ALL faces from the one authority (FR-002a): the stamped wing yamls +
-    .mempalaceignore (incl. the root `palace:` pointer), plus the three merge faces."""
+    .mempalaceignore (incl. the root `palace:` pointer), plus the three merge faces. The
+    `.mcp.json` mneme entry is always rendered (FR-008), even with no store. In clone verdict
+    SINGLE the same entries are also merged into the clone root's `.mcp.json` (US4); in every
+    other verdict the root file is never opened for writing."""
     written = write_all(cfg, recipe, campaign_dir, resolved)
     written.append(render_config_yaml(cfg, campaign_dir, recipe))
     if cfg.store is not None:
         written.append(render_global_alias(cfg, config_json))
-        written.append(render_mcp(cfg, campaign_dir, env))
+    written.append(render_mcp(cfg, campaign_dir, binding))
+    if layout is not None and layout.verdict == "SINGLE" and layout.root is not None:
+        written.append(
+            _mcpface.merge_write(layout.root / MCP_JSON, mcp_entries(cfg, binding))
+        )
     return written
 
 
 def faces_coherent(
     cfg: CampaignMempalaceConfig, campaign_dir: Path, config_json: Path,
-    env: Mapping[str, str] | None = None,
+    binding: McpBinding | None, binding_error: str | None = None,
+    layout: _mcpface.CloneLayout | None = None,
 ) -> list[str]:
-    """Value-coherence of the merge faces vs the authority's store pointer (FR-015/SC-008).
+    """Value-coherence of the faces vs the owning mneme and the authority's store pointer.
 
-    Returns a list of mismatches; empty ⇒ every store-naming face agrees with the authority."""
+    The `.mcp.json` is checked against `binding` (the owning mneme's absolute programs/config,
+    plus the store when the authority has one); with no binding the single reason is that it
+    cannot be bound (`binding_error`). The CLI pointer and global alias are checked only when
+    the authority has a store. Returns a list of mismatches; empty => every face agrees."""
     import json
 
     bad: list[str] = []
+    if binding is None:
+        bad.append(f"mcp: cannot bind owning mneme: {binding_error}")
+    else:
+        bad.extend(
+            _mcpface.file_reasons(
+                campaign_dir / MCP_JSON, ".mcp.json", binding,
+                cfg.store.path if cfg.store else None,
+            )
+        )
+        if layout is not None and layout.verdict == "SINGLE" and layout.root is not None:
+            bad.extend(
+                _mcpface.file_reasons(
+                    layout.root / MCP_JSON, "root .mcp.json", binding,
+                    cfg.store.path if cfg.store else None,
+                )
+            )
     if cfg.store is None:
         return bad
     want = str(cfg.store.path)
@@ -459,21 +456,4 @@ def faces_coherent(
             bad.append("global_alias: config.json palaces entry != store path")
     else:
         bad.append("global_alias: config.json missing")
-    # mcp face
-    mcp = campaign_dir / MCP_JSON
-    if mcp.is_file():
-        servers = json.loads(mcp.read_text() or "{}").get("mcpServers") or {}
-        mcp_env = (servers.get("mempalace") or {}).get("env") or {}
-        if mcp_env.get("MEMPALACE_PALACE_PATH") != want:
-            bad.append("mcp: .mcp.json mempalace palace != store path")
-        if env is not None:
-            # declared backend/embedder must be exactly what the file carries (a missing or
-            # no-longer-declared key means the MCP server runs a different embedder: stale)
-            want_env = declared_mcp_env(env)
-            have_env = {k: str(mcp_env[k]) for k in MCP_ENV_ALLOW if mcp_env.get(k)}
-            if have_env != want_env:
-                keys = sorted(k for k in MCP_ENV_ALLOW if want_env.get(k) != have_env.get(k))
-                bad.append(f"mcp: .mcp.json embedder/backend env out of date ({', '.join(keys)})")
-    else:
-        bad.append("mcp: .mcp.json missing")
     return bad
