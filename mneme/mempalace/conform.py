@@ -23,6 +23,7 @@ from mneme.corpus.config import has_corpus
 from . import authority as _authority
 from . import corpus_record as _crec
 from . import discover as _discover
+from . import mcpface as _mcpface
 from . import mine_record as _record
 from . import ownership as _ownership
 from . import recipe as _recipe
@@ -129,10 +130,7 @@ def _embedder_row(ref, cfg, entity, prober) -> ConformanceRow | None:
 def _store_backup_rows(ref, cfg, entity, runner, prober=None) -> list[ConformanceRow]:
     """003: per-campaign store + backup dimensions (Principle IX), only when the
     authority carries a store pointer and we have the entity (skipped for check_dir)."""
-    from hypostasis import config as _config
-
     from . import backup as _backup
-    from . import bringup as _bringup
     from . import health as _health
     from .models import StoreState
 
@@ -140,7 +138,7 @@ def _store_backup_rows(ref, cfg, entity, runner, prober=None) -> list[Conformanc
         return []
     rows: list[ConformanceRow] = []
     h = _health.health(cfg.store.path, runner=runner)
-    # (an unrunnable mempalace is UNVERIFIED; the embedder / backup / faces rows below need no
+    # (an unrunnable mempalace is UNVERIFIED; the embedder / backup rows below need no
     # mempalace, so they are still produced)
     if h.state is StoreState.HEALTHY:
         rows.append(ConformanceRow(ref.name, "store", State.BUILT, note="store healthy"))
@@ -166,18 +164,52 @@ def _store_backup_rows(ref, cfg, entity, runner, prober=None) -> list[Conformanc
             ref.name, "backup", State.CONFORMANT, note=f"backup: {b.name}" if b else "no backup"
         )
     )
-    # US5/SC-008: the store-naming faces (CLI pointer + MCP) must agree on the store.
+    return rows
+
+
+def _faces_row(ref, cfg, entity, layout=None) -> ConformanceRow | None:
+    """US5/SC-008 + 008: the faces (CLI pointer, global alias, `.mcp.json`) agree with the
+    authority's store and are bound to the OWNING mneme. Not reported for a FOREIGN campaign."""
+    from hypostasis import config as _config
+
+    from . import bringup as _bringup
+    from . import mcpface as _mcpface
+
+    if entity is None:
+        return None
+    if _ownership.classify(ref.path, entity.mneme_identity) is _ownership.OwnerState.FOREIGN:
+        return None
     # Resolved per host (006) — each host's faces name that host's root, which is sound
     # precisely because config.json and .mcp.json are not tracked in the campaign repo.
     config_json = _bringup.default_config_json(_config.mempalace_root(entity))
-    mism = _render.faces_coherent(cfg, ref.path, config_json, entity.env)
+    try:
+        binding = _mcpface.binding_for(entity, need_mempalace=cfg.store is not None)
+        err = None
+    except _mcpface.McpBindingError as e:
+        binding, err = None, str(e)
+    mism = _render.faces_coherent(cfg, ref.path, config_json, binding, err, layout)
     if mism:
-        rows.append(ConformanceRow(ref.name, "faces", State.STALE_RENDER, note="; ".join(mism)))
-    else:
-        rows.append(
-            ConformanceRow(ref.name, "faces", State.CONFORMANT, note="right store everywhere")
+        return ConformanceRow(
+            ref.name, "faces", State.STALE_RENDER,
+            note="; ".join(mism) + f" — run `mneme mp faces {ref.name}`",
         )
-    return rows
+    note = "right store everywhere" if cfg.store is not None else "mneme server bound"
+    return ConformanceRow(ref.name, "faces", State.CONFORMANT, note=note)
+
+
+_CLONE_STATES = {
+    "SINGLE": State.CONFORMANT,
+    "UNDECLARED": State.CLONE_ROOT_OWED,
+    "MULTI": State.CLONE_ROOT_OWED,
+    "CONFLICT": State.CLONE_ROOT_CONFLICT,
+}
+
+
+def _clone_row(ref, layout) -> ConformanceRow | None:
+    """008 US4: whether the clone root's `.mcp.json` carries this campaign's servers."""
+    if layout is None or layout.verdict not in _CLONE_STATES:
+        return None
+    return ConformanceRow(ref.name, "clone", _CLONE_STATES[layout.verdict], note=layout.reason)
 
 
 def _membership_row(ref: CampaignRef, entity=None) -> ConformanceRow:
@@ -491,6 +523,15 @@ def _campaign_rows(
     elif check_index:
         rows.append(_index_row(ref, cfg, runner))
     rows.extend(_store_backup_rows(ref, cfg, entity, runner, prober))
+    layout = None
+    if entity is not None and (
+        _ownership.classify(ref.path, entity.mneme_identity) is not _ownership.OwnerState.FOREIGN
+    ):
+        layout = _mcpface.clone_layout(ref, entity)
+    if (faces := _faces_row(ref, cfg, entity, layout)) is not None:
+        rows.append(faces)
+    if (clone := _clone_row(ref, layout)) is not None:
+        rows.append(clone)
     if entity is not None and (gaps := _gaps_row(ref, cfg)) is not None:
         rows.append(gaps)
     if _authority.has_legacy_store_path(ref.path):
@@ -674,7 +715,7 @@ def report(
 def format_row(row: ConformanceRow) -> str:
     if row.state in FAIL_STATES:
         flag = "FAIL"
-    elif row.state in (State.CORPUS_UNDECLARED, State.CONSUMERS_OWED):
+    elif row.state in (State.CORPUS_UNDECLARED, State.CONSUMERS_OWED, State.CLONE_ROOT_OWED):
         flag = "todo"  # owed work: neither green nor a failure
     elif not row.ok:
         flag = "??  "  # unverified: not ok, but not a (non-strict) failure

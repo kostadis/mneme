@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mneme.mempalace import conform
+from mneme.mempalace import bringup, conform
 from mneme.mempalace.models import State
 from mneme.mempalace.runner import MempalaceRunner
 from tests.fixtures import STUB, add_store_pointer, entity_for, make_campaigns
@@ -15,7 +15,9 @@ def _runner(monkeypatch, tmp_path):
 
 def test_status_over_mixed_fixtures_matches_disk(tmp_path, monkeypatch):
     root = make_campaigns(tmp_path / "campaigns")
-    report = conform.report(entity_for(root), runner=_runner(monkeypatch, tmp_path))
+    entity = entity_for(root)
+    bringup.render_existing_faces(entity, "full")  # 008: the mneme face is owed even with no store
+    report = conform.report(entity, runner=_runner(monkeypatch, tmp_path))
 
     by_campaign = {c: {r.dimension: r.state for r in report.for_campaign(c)} for c in
                    ("full", "ignore-only", "bare1", "bare2", "bare3")}
