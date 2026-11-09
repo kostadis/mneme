@@ -202,6 +202,31 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
                 f"env.{k}: value must be a scalar (string/number/bool), got {type(v).__name__}"
             )
 
+    # 008 — optional: non-campaign top-level folders in campaign sparse clones.
+    campaign_shared_dirs: tuple[str, ...] | None = None
+    raw_shared = raw.get("campaign_shared_dirs")
+    if raw_shared is not None:
+        if not isinstance(raw_shared, list):
+            problems.append(
+                "campaign_shared_dirs: must be a list of folder names, "
+                f"got {type(raw_shared).__name__}"
+            )
+        else:
+            names: list[str] = []
+            for i, v in enumerate(raw_shared):
+                if not isinstance(v, str):
+                    problems.append(
+                        f"campaign_shared_dirs[{i}]: must be a string, got {type(v).__name__}"
+                    )
+                elif not v.strip() or "/" in v or v in (".", ".."):
+                    problems.append(
+                        f"campaign_shared_dirs[{i}]: '{v}' must be a non-empty plain folder "
+                        "name (no '/', not '.' or '..')"
+                    )
+                else:
+                    names.append(v)
+            campaign_shared_dirs = tuple(names)
+
     return ConfigEntity(
         venv=venv,
         machines=machines,
@@ -213,6 +238,7 @@ def _parse(raw: dict, path: Path, problems: list[str]) -> ConfigEntity:
         installer=installer,
         mode=mode,
         mneme_identity=mneme_identity,
+        campaign_shared_dirs=campaign_shared_dirs,
         source_path=path,
     )
 

@@ -180,6 +180,10 @@ class State(StrEnum):
     # 007 US5 — non-compliant consumers of campaign files (FR-024): owed work, never a failure
     # (not in FAIL_STATES, not a --strict failure).
     CONSUMERS_OWED = "consumers_owed"
+    # 008 — clone-root hygiene: OWED = owed work, never a failure (not in FAIL_STATES);
+    # CONFLICT = FAIL.
+    CLONE_ROOT_OWED = "clone_root_owed"
+    CLONE_ROOT_CONFLICT = "clone_root_conflict"
 
 
 # States that count as a genuine FAIL (non-zero exit). A deliberate, recorded
@@ -199,6 +203,7 @@ FAIL_STATES = frozenset(
         State.CORPUS_INVALID,
         State.TOC_STALE,
         State.OUT_OF_SCOPE,
+        State.CLONE_ROOT_CONFLICT,
     }
 )
 

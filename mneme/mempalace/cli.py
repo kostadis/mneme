@@ -650,18 +650,24 @@ def faces(
     from . import bringup as _bringup
     from . import discover as _discover
     from .authority import AuthorityError
+    from .mcpface import McpBindingError, McpFaceError
 
     entity = _load_or_exit(config)
     try:
         written = _bringup.render_existing_faces(entity, campaign, campaign_dir=campaign_dir)
-    except (AuthorityError,) as e:
+    except AuthorityError as e:
         typer.echo(f"FAIL faces: {'; '.join(e.problems)}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
-    except (_discover.DiscoveryError, _cconfig.CorpusConfigError) as e:
+    except (
+        _discover.DiscoveryError, _cconfig.CorpusConfigError, McpBindingError, McpFaceError
+    ) as e:
         typer.echo(f"FAIL faces: {e}", err=True)
         raise typer.Exit(EXIT_RUNTIME) from None
     for w in written:
         typer.echo(f"rendered {w}")
+    layout = _bringup.faces_layout(entity, campaign, campaign_dir)
+    if layout.verdict in ("CONFLICT", "MULTI", "UNDECLARED"):
+        typer.echo(f"skipped {layout.root}/.mcp.json: {layout.reason}")
 
 
 # ── drop-legacy (H2, GH #24) ──────────────────────────────────────────────────

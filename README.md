@@ -77,7 +77,7 @@ mneme mp refresh --all            # (re)mine every campaign from its own wings, 
 mneme mp prune CAMPAIGN           # PREVIEW removing drawers whose source is missing/gitignored (refresh never prunes)
 mneme mp prune CAMPAIGN --confirm --expect N  # N = count the preview showed; backs up, deletes only that set, re-verifies (--no-backup to skip)
 mneme mp render CAMPAIGN --check  # is the derived config still coherent with the authority?
-mneme mp faces CAMPAIGN           # re-render the four faces (cli/cg_search/global_alias/mcp) from the authority
+mneme mp faces CAMPAIGN           # re-render the four faces (cli/cg_search/global_alias/mcp) from the authority; mcp = mneme + mempalace servers, also at a single-campaign clone root (008)
 mneme mp publish --recipe 2.0.0   # stage a recipe upgrade for all campaigns on a proposal branch
 mneme mp adopt CAMPAIGN           # campaign-side gate: stage the upgrade on a branch...
 mneme mp adopt CAMPAIGN --here --confirm   # ...or write it into your checkout (uncommitted, FR-030)
@@ -98,6 +98,38 @@ mneme mp mcp                      # MCP server: status/target/inventory/instruct
 The mneme-owned **recipe** is the enforceable counterpart of the campaigns repo's prose
 `MEMPALACE_HOWTO.md`; the same method is served on demand by `mneme mp mcp` (so an assistant
 loads it instead of you pasting docs). Design: `specs/002-manage-campaign-mempalaces/`.
+
+### The mcp face (feature 008)
+
+You never register `mneme mp mcp` by hand. `mp faces` (and bring-up) merge two servers into the
+campaign's host-local `.mcp.json`, both bound to the mneme that manages the campaign by
+**absolute path**, never through PATH:
+
+- `mneme`: `<venv>/bin/mneme mp mcp --config <that mneme's hypostasis.yaml>`
+- `mempalace`: `<venv>/bin/mempalace-mcp`, with the palace path and the allow-listed embedder env
+
+Every other server in the file is left alone. A host can run several mnemes; each campaign's
+entries name its own mneme, and a campaign owned by another mneme is refused.
+
+Campaigns are usually sparse clones of the shared campaigns repo (e.g. `~/toee` holding
+`gm-assistant/`, `scripts/` and the campaign `toee/`), and sessions open at the clone root. Declare
+the non-campaign folders once in hypostasis.yaml:
+
+```yaml
+campaign_shared_dirs: [gm-assistant, scripts]
+```
+
+Then, for each campaign under a declared `data_roots.campaigns` tree:
+
+| The clone holds | `mp faces` at the clone root | `mp status` `clone` row |
+|---|---|---|
+| exactly this campaign | writes both entries into `<root>/.mcp.json` too | ok |
+| several campaigns | writes nothing there | todo |
+| several campaigns, and the root already has `mneme`/`mempalace` | writes nothing there | **FAIL** (misconfigured clone, kostadis/campaigns#672) |
+| (shared set not declared) | writes nothing there | todo: declare it |
+
+`mp status`'s `faces` row names any missing, foreign or PATH-resolved entry in either file; the
+fix is `mneme mp faces <campaign>`. Design: `specs/008-mcp-face-owning-mneme/`.
 
 ### Declared corpus (feature 007)
 

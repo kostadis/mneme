@@ -46,6 +46,10 @@ data_roots:                      # external paths mneme references (not owned; d
   pdf_translators: ~/src/mytools/pdf-translators             # sibling mytools tool (validation)
   rpg_library_db: ~/src/mytools/rpg-lib/rpg_library.db       # rpg-lib's DB (location referenced; contents are data-plane)
 
+# Names of non-campaign top-level folders in campaign sparse clones (mneme 008). Every other
+# checked-out top-level folder of a clone root counts as a campaign.
+# campaign_shared_dirs: [gm-assistant, scripts]
+
 env:                             # required process env for mneme-run components (delivery via lifecycle, T028)
   MEMPALACE_BACKEND: turbovec    # mempalace resolves its backend from the environment (process-wide)
   MEMPALACE_EMBEDDING_PROVIDER: ollama     # MUST match the embedder every palace was built with; unset ⇒ mempalace

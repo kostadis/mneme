@@ -22,6 +22,7 @@ from . import bootstrap as _bootstrap
 from . import discover as _discover
 from . import embedder_guard as _guard
 from . import former_wings as _former
+from . import mcpface as _mcpface
 from . import provision as _provision
 from . import recipe as _recipe
 from . import render as _render
@@ -113,6 +114,17 @@ def bringup(
             return BringUpReport(campaign, tuple(steps))
         rec = vrec  # one recipe serves validation, render and first_mine
 
+    try:  # 008: bind + pre-validate BEFORE any write (and before a dry run returns)
+        binding = _mcpface.binding_for(entity, need_mempalace=cfg.store is not None)
+        layout = _mcpface.clone_layout(ref, entity)
+        _mcpface.check_mergeable(ref.path / ".mcp.json")
+        if layout.verdict == "SINGLE" and layout.root is not None:
+            _mcpface.check_mergeable(layout.root / ".mcp.json")
+    except (_mcpface.McpBindingError, _mcpface.McpFaceError) as e:
+        steps.append(BringUpStep("configure", "skipped", note=f"nothing written: {e}"))
+        steps.append(BringUpStep("first_mine", "failed", note=str(e)))
+        return BringUpReport(campaign, tuple(steps))
+
     if dry_run:
         steps.append(
             BringUpStep("configure", "skipped", note=f"would configure; store={cfg.store.alias}")
@@ -140,7 +152,9 @@ def bringup(
         # with old wings) is left alone, so prune stays fail-closed.
         record_warning = _former.try_record_empty(cfg.store.path, cfg.campaign)
     # the render re-resolves AFTER its own deletes/rewrites, so the TOC snapshot is current
-    _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
+    _render.render_faces(
+        cfg, rec, ref.path, config_json, binding, layout=layout
+    )
     steps.append(BringUpStep("render_faces", "ok", observed="cli/cg_search/global_alias/mcp"))
 
     try:
@@ -189,7 +203,17 @@ def render_existing_faces(
     if not _authority.has_authority(ref.path):
         raise _authority.AuthorityError([f"{campaign}: no authority — bootstrap/bringup first"])
     cfg = _authority.load(ref.path, mempalace_root=mp_root)
-    return _render.render_faces(cfg, rec, ref.path, config_json, entity.env)
+    binding = _mcpface.binding_for(entity, need_mempalace=cfg.store is not None)
+    return _render.render_faces(
+        cfg, rec, ref.path, config_json, binding, layout=_mcpface.clone_layout(ref, entity)
+    )
+
+
+def faces_layout(
+    entity: ConfigEntity, campaign: str, campaign_dir: str | None = None
+) -> _mcpface.CloneLayout:
+    """The clone layout `render_existing_faces` used for `campaign` (read-only)."""
+    return _mcpface.clone_layout(_discover.resolve(entity, campaign, campaign_dir), entity)
 
 
 def _backup_step(entity: ConfigEntity, campaign: str, campaign_dir: Path) -> BringUpStep:

@@ -19,18 +19,50 @@ from hypostasis.models import ConfigEntity, Machine, MnemeIdentity, Order
 STUB = Path(__file__).parent / "stub_mempalace.py"
 
 
+def _fake_owner(base: Path) -> tuple[Path, Path]:
+    """A hermetic owning-mneme stand-in under ``base`` (outside any campaign tree): a fake venv
+    with `bin/mneme` + `bin/mempalace-mcp`, and a hypostasis.yaml. Returns (venv, yaml)."""
+    venv = base / ".fake-venv"
+    for prog in ("mneme", "mempalace-mcp"):
+        exe = venv / "bin" / prog
+        exe.parent.mkdir(parents=True, exist_ok=True)
+        exe.touch(exist_ok=True)
+        exe.chmod(0o755)
+    cfg = base / "hypostasis.yaml"
+    if not cfg.exists():
+        cfg.write_text("# fake hypostasis config for tests\n")
+    return venv, cfg
+
+
+def fake_binding(base: Path, env: dict | None = None):
+    """An McpBinding onto the hermetic fake owner under ``base`` (see `_fake_owner`)."""
+    from mneme.mempalace.mcpface import McpBinding, declared_mcp_env
+
+    venv, cfg = _fake_owner(base)
+    return McpBinding(
+        mneme_program=venv / "bin" / "mneme",
+        mempalace_program=venv / "bin" / "mempalace-mcp",
+        config_path=cfg,
+        env=declared_mcp_env(env),
+    )
+
+
 def entity_for(campaigns_root: Path, *, mempalace: Path | None = None) -> ConfigEntity:
     """A minimal ConfigEntity pointing data_roots.campaigns at ``campaigns_root``.
 
     Built directly (no validation) — these tests exercise the mp manager, not the
-    hypostasis.yaml loader. venv is left unset so the runner falls back to PATH /
-    an injected runner. ``mempalace`` declares this "host's" palace root (006).
+    hypostasis.yaml loader. venv is a hermetic fake venv (with `mneme` and `mempalace-mcp`
+    programs) and source_path a fake hypostasis.yaml, both beside ``campaigns_root`` — the
+    owning-mneme binding for the .mcp.json face needs them. ``mempalace`` declares this "host's"
+    palace root (006).
     """
     roots: dict = {"campaigns": campaigns_root}
     if mempalace is not None:
         roots["mempalace"] = mempalace  # normalized to a 1-tuple by ConfigEntity
+    venv, cfg = _fake_owner(Path(campaigns_root).parent)
     return ConfigEntity(
-        venv=Path("."),
+        venv=venv,
+        source_path=cfg,
         machines={"dgx": Machine("http://dgx:8001/v1")},
         services={},
         components={},
@@ -45,12 +77,15 @@ def entity_for_trees(
     mempalace: Path | None = None,
 ) -> ConfigEntity:
     """A ConfigEntity declaring one-or-more campaign trees (005), optionally with a
-    minted mneme identity and this host's palace root (006)."""
+    minted mneme identity and this host's palace root (006). The fake owning venv/config live
+    in the first tree's parent (outside every tree)."""
     roots: dict = {"campaigns": [str(t) for t in campaign_trees]}
     if mempalace is not None:
         roots["mempalace"] = mempalace  # normalized to a 1-tuple by ConfigEntity
+    venv, cfg = _fake_owner(Path(campaign_trees[0]).parent)
     return ConfigEntity(
-        venv=Path("."),
+        venv=venv,
+        source_path=cfg,
         machines={"dgx": Machine("http://dgx:8001/v1")},
         services={},
         components={},
