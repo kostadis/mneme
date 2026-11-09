@@ -108,14 +108,14 @@ every story builds on.
 - [X] T030 Run the quickstart §2 scenario table against the test suite and confirm each row maps to a passing test; list any gap and close it (Opus)
 - [X] T031 Commit the branch in logical commits (spec docs; hypostasis key; mcpface + render; status; docs), messages ending with the Co-Authored-By line (Opus)
 - [X] T032 Run `/code-review` **once** on the branch diff vs `origin/main`. For each finding: fix it (implementer, then re-gate) if it is cheap and in scope, else record it for T035. No second review pass (Opus)
-- [ ] T033 Push `008-mcp-face-owning-mneme` and open the PR to `main` via `mcp__github__create_pull_request`, body summarising US1–US4, `Closes #87`, linking kostadis/campaigns#672, ending with the Claude Code attribution line (Opus)
+- [X] T033 Push `008-mcp-face-owning-mneme` and open the PR to `main` via `mcp__github__create_pull_request`, body summarising US1–US4, `Closes #87`, linking kostadis/campaigns#672, ending with the Claude Code attribution line (Opus)
 
 ---
 
 ## Phase 8: Leftovers → issues, then GM handoff
 
-- [ ] T034 File the known follow-ups as kostadis/mneme issues via `mcp__github__issue_write`: (a) discovery should use `campaign_shared_dirs` so `gm-assistant`/`scripts` stop being reported as campaigns (research R4); (b) the non-mneme campaign servers (`campaign`, `5etools`, `registry`, `provenance`) also resolve via PATH, so name the owning repo/component (Opus)
-- [ ] T035 File one issue per unfixed `/code-review` finding from T032 (or one grouped issue if they are small), and link every issue from T034–T035 in a PR comment (Opus)
+- [X] T034 File the known follow-ups as kostadis/mneme issues via `mcp__github__issue_write`: (a) discovery should use `campaign_shared_dirs` so `gm-assistant`/`scripts` stop being reported as campaigns (research R4); (b) the non-mneme campaign servers (`campaign`, `5etools`, `registry`, `provenance`) also resolve via PATH, so name the owning repo/component (Opus)
+- [X] T035 File one issue per unfixed `/code-review` finding from T032 (or one grouped issue if they are small), and link every issue from T034–T035 in a PR comment (Opus)
 - [ ] T036 GM handoff (not executed by any agent): after merge + install into `~/.venvs/main`, the GM adds `campaign_shared_dirs: [gm-assistant, scripts]` to `~/.config/hypostasis/hypostasis.yaml`, then runs quickstart §4 (`mp faces` for Phandalin, out-of-the-abyss, obelisk, toee, greenwold; `mp status`; open a session in `~/toee` and call `get_status`)
 
 ---
@@ -148,3 +148,4 @@ every story builds on.
 - US4: 907 passed, 3 skipped; ruff 10. Deviation (accepted): clone_layout only treats a DECLARED data_roots.campaigns tree as a clone root (--dir sets ref.tree to the parent). Read-only live status from the worktree: all 5 campaigns faces FAIL with specific reasons (toee no mneme; Phandalin/OotA mneme entry lacks --config; greenwold foreign mneme command; obelisk campaign .mcp.json has no mempalace); all 5 clone_root_owed (shared set undeclared). No files written.
 - Phase 7: T029 docs done by Opus directly (README § The mcp face, ~30 lines; too small to brief). T030: all quickstart §2 rows map to tests in test_mcpface.py / test_mp_faces_status.py (UNINTEGRATED row revised per R2).
 - Review (one pass): 10 findings. Fixed 1,2,3,4,6,7,8 + rename part of 10 (914 passed, 3 skipped; ruff 10). Kept 5 by GM ruling (any mneme/mempalace entry at a multi-campaign root = FAIL). Deferred 9 + double-ownership part of 10 → issue.
+- PR #88 opened. Leftover issues: #89 (discovery uses shared set), #90 (layout/ownership computed once), #91 (campaign-side MCP servers via PATH). T036 is the GM's.
