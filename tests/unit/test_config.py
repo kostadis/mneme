@@ -289,3 +289,26 @@ def test_dev_mode_still_rejects_editable_pin_string(tmp_path):
     raw["mode"] = "dev"
     raw["components"]["comp"]["pin"] = "-e ."
     assert_problem(tmp_path, raw, "range/editable")
+
+
+def test_campaign_shared_dirs_absent_is_none(tmp_path):
+    assert load_raw(tmp_path, valid_raw(tmp_path)).campaign_shared_dirs is None
+
+
+def test_campaign_shared_dirs_empty_is_declared_empty(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["campaign_shared_dirs"] = []
+    assert load_raw(tmp_path, raw).campaign_shared_dirs == ()
+
+
+def test_campaign_shared_dirs_names(tmp_path):
+    raw = valid_raw(tmp_path)
+    raw["campaign_shared_dirs"] = ["gm-assistant", "scripts"]
+    assert load_raw(tmp_path, raw).campaign_shared_dirs == ("gm-assistant", "scripts")
+
+
+@pytest.mark.parametrize("bad", ["scripts", {"a": 1}, ["a/b"], [".."], ["."], [""], [3]])
+def test_campaign_shared_dirs_invalid(tmp_path, bad):
+    raw = valid_raw(tmp_path)
+    raw["campaign_shared_dirs"] = bad
+    assert_problem(tmp_path, raw, "campaign_shared_dirs")

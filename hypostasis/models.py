@@ -103,6 +103,9 @@ class ConfigEntity:
     # install editable, pin optional/informational). Validated in config.validate.
     mode: str = "pinned"
     mneme_identity: MnemeIdentity | None = None  # 005 — minted lazily if absent
+    # 008 — names of non-campaign top-level folders in campaign sparse clones. None = undeclared;
+    # () = declared empty.
+    campaign_shared_dirs: tuple[str, ...] | None = None
     source_path: Path | None = None
 
     def __post_init__(self) -> None:
