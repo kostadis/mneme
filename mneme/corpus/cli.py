@@ -65,6 +65,11 @@ def check(
                              ("missing", k["missing"])):
             for item in items:
                 typer.echo(f"  {label}: {item}")
+    cfg = _cconfig.load(path, _api.campaign_recipe(path))
+    if cfg.brief:
+        typer.echo(f"brief: {len(cfg.brief)} file(s)")
+    else:
+        typer.echo("brief: not declared")
     typer.echo("corpus is valid")
     raise typer.Exit(EXIT_OK)
 
@@ -96,6 +101,32 @@ def toc(
             typer.echo(f"{name} ({k['trust']}): {len(k['files'])} file(s)")
             for f in k["files"]:
                 typer.echo(f"  {f['path']}")
+    raise typer.Exit(EXIT_OK)
+
+
+@app.command()
+def brief(
+    campaign: str = typer.Argument(..., help="Campaign name"),
+    as_json: bool = typer.Option(False, "--json", help="Print the brief JSON"),
+    campaign_dir: str = _dir_opt,
+    config: str = _config_opt,
+) -> None:
+    """The load-now files (`brief:` in corpus.yaml) plus the whole TOC as a map, resolved
+    NOW. Non-zero if the corpus is invalid, declares no brief, or a brief file is absent."""
+    path = _campaign_dir(config, campaign, campaign_dir)
+    answer = _api.brief(path, _api.campaign_recipe(path))
+    if "error" in answer:
+        raise _refuse(answer)
+    doc = answer["brief"]
+    if as_json:
+        typer.echo(json.dumps(doc, indent=2))
+    else:
+        typer.echo(f"brief ({len(doc['brief'])} file(s), {doc['brief_bytes']} bytes):")
+        for e in doc["brief"]:
+            typer.echo(f"  {e['path']}  [{', '.join(e['kinds'])}] {e['bytes']}")
+        typer.echo("toc:")
+        for name, k in doc["toc"].items():
+            typer.echo(f"  {name} ({k['trust']}): {len(k['files'])} file(s)")
     raise typer.Exit(EXIT_OK)
 
 

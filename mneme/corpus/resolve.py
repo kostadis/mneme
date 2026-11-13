@@ -438,6 +438,18 @@ def resolve(cfg: CorpusConfig, campaign_dir: Path, recipe: Recipe) -> ResolvedCo
             tuple(files[p] for p in sorted(files)), tuple(sorted(nm)), tuple(sorted(miss)),
         )
 
+    # Brief (mytools#87): every entry must be a file the corpus declares. A brief entry that
+    # is declared but not materialized / missing here is NOT a corpus finding (validity must
+    # not depend on a sparse checkout); `api.brief` refuses that case on its own.
+    reachable = {f.path for k in kinds.values() for f in k.files}
+    reachable |= {p for k in kinds.values() for p in (*k.not_materialized, *k.missing)}
+    for b in cfg.brief:
+        if b not in reachable:
+            findings.append(Finding(
+                "brief-undeclared",
+                "listed in `brief:` but not a file of any declared kind; declare it under a "
+                "kind (the brief is a subset of the corpus, never a second list)", path=b))
+
     # Rule 8: nothing resolved at all. A host where everything is merely not checked out is
     # not an empty corpus (R7), so not_materialized counts as "something declared".
     if not any(k.files or k.not_materialized for k in kinds.values()):
