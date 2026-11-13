@@ -113,8 +113,22 @@ def brief(
 ) -> None:
     """The load-now files (`brief:` in corpus.yaml) plus the whole TOC as a map, resolved
     NOW. Non-zero if the corpus is invalid, declares no brief, or a brief file is absent."""
-    typer.echo("error: not implemented yet (009 T009)", err=True)
-    raise typer.Exit(EXIT_RUNTIME)
+    path = _campaign_dir(config, campaign, campaign_dir)
+    answer = _api.brief(path, _api.campaign_recipe(path))
+    if "error" in answer:
+        raise _refuse(answer)
+    doc = answer["brief"]
+    if as_json:
+        typer.echo(json.dumps(doc, indent=2))
+    else:
+        typer.echo(f"brief ({len(doc['brief'])} file(s), {doc['brief_bytes']} bytes):")
+        for b in doc["brief"]:
+            typer.echo(f"  {b['path']}  [{', '.join(b['kinds'])}] {b['bytes']}")
+        typer.echo("kinds:")
+        for name, k in doc["kinds"].items():
+            typer.echo(f"  {name} ({k['trust']}): {k['files']} file(s), {k['bytes']} bytes, "
+                       f"{k['searchable_files']} searchable")
+    raise typer.Exit(EXIT_OK)
 
 
 @app.command()

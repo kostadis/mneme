@@ -87,9 +87,11 @@ def corpus_files(entity: ConfigEntity, campaign: str, kind: str) -> dict:
 def corpus_brief(entity: ConfigEntity, campaign: str) -> dict:
     """mytools#87: the GM's load-now files plus the whole TOC as a map (same code as
     `mneme corpus brief`). Consumers read the brief files and refuse on ``error``."""
-    _discover.resolve(entity, campaign)
-    return {"campaign": campaign, "error": "not-implemented",
-            "detail": "corpus_brief is not implemented yet (009 T009)"}
+    ref = _discover.resolve(entity, campaign)
+    answer = _corpus_api.brief(ref.path, _corpus_api.campaign_recipe(ref.path))
+    if "error" in answer:
+        return {"campaign": campaign, "error": answer["error"], "detail": answer["detail"]}
+    return answer["brief"]
 
 
 def inventory(entity: ConfigEntity, campaign: str) -> dict:
@@ -266,9 +268,9 @@ def build_server(entity: ConfigEntity):
 
     @mcp.tool(name="corpus_brief")
     def corpus_brief_tool(campaign: str) -> dict:
-        """The campaign's load-now files (`brief`, GM-declared) plus the whole corpus TOC as a
-        map (paths + bytes, no contents). Read the brief files; consult the TOC for anything
-        else on demand. On an `error` refuse and never glob."""
+        """The campaign's GM-declared load-now files (`brief`) plus a per-kind summary (counts and
+        bytes, no contents). Read ONLY `brief[].path`; reach everything else by searching the
+        palace. On an `error` refuse and show `detail` to the GM; never glob."""
         return corpus_brief(entity, campaign)
 
     @mcp.tool()

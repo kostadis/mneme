@@ -7,6 +7,7 @@ reads the TOC snapshot (GM decision 2026-10-23).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -17,9 +18,12 @@ from mneme.mempalace.models import Recipe
 from . import resolve as _resolve
 from . import toc as _toc
 from .config import CorpusConfig, CorpusConfigError, has_corpus, load
+from .resolve import ResolvedCorpus
 
 INVALID = "invalid"
 NOT_DECLARED = "not-declared"
+NO_BRIEF = "no-brief"
+BRIEF_UNAVAILABLE = "brief-unavailable"
 
 
 def campaign_recipe(campaign_dir: Path) -> Recipe:
@@ -69,3 +73,51 @@ def consult(campaign_dir: Path, recipe: Recipe, kind: str | None = None) -> dict
                     "detail": f"kind '{kind}' is not declared for this campaign"}
         doc = {**doc, "kinds": {kind: doc["kinds"][kind]}}
     return {"toc": doc}
+
+
+def brief(campaign_dir: Path, recipe: Recipe) -> dict:
+    """The brief answer (feature 009, `contracts/brief-json.md`): the GM's load-now files plus
+    the corpus as a per-kind map, from ONE fresh resolution (R3). Returns ``{"brief": <doc>}``
+    or ``{"error": "not-declared"|"invalid"|"no-brief"|"brief-unavailable", "detail",
+    "findings"}``. Never queries the palace and never carries file contents (FR-007/007a)."""
+    campaign_dir = Path(campaign_dir)
+    if not has_corpus(campaign_dir):
+        return {"error": NOT_DECLARED, "findings": [],
+                "detail": "campaign declares no corpus (.mneme/corpus.yaml is absent)"}
+    try:
+        cfg, resolved, _ = _resolve_now(campaign_dir, recipe)
+    except CorpusConfigError as e:
+        return {"error": INVALID, "detail": str(e), "findings": [f.as_dict() for f in e.findings]}
+    if not resolved.valid:
+        findings = [f.as_dict() for f in resolved.findings]
+        lines = "; ".join(f"{f['code']}: {f['detail']}" for f in findings)
+        return {"error": INVALID, "detail": f"corpus does not resolve: {lines}",
+                "findings": findings}
+    if not cfg.brief:
+        return {"error": NO_BRIEF, "findings": [],
+                "detail": "corpus.yaml declares no `brief:`; add one with "
+                          "`mneme corpus migrate-brief CAMPAIGN`"}
+    present = {f.path for k in resolved.kinds.values() for f in k.files}
+    absent = [p for p in cfg.brief if p not in present]
+    if absent:
+        return {"error": BRIEF_UNAVAILABLE, "findings": [],
+                "detail": "brief file(s) not available on this checkout: " + ", ".join(absent)}
+    entries = []
+    for path in cfg.brief:
+        owners = [k for k in resolved.kinds.values() if any(f.path == path for f in k.files)]
+        entries.append({"path": path, "kinds": [k.name for k in owners],
+                        "trust": owners[0].trust, "bytes": _size(campaign_dir, path)})
+    kinds = {}
+    for name, k in resolved.kinds.items():
+        searchable = sum(1 for f in k.files if f.minable and f.mined_as is not None)
+        kinds[name] = {"standard": k.standard, "trust": k.trust, "files": len(k.files),
+                       "bytes": sum(_size(campaign_dir, f.path) for f in k.files),
+                       "searchable": searchable > 0, "searchable_files": searchable}
+    return {"brief": {"schema": 1, "campaign": cfg.campaign, "corpus_sha256": cfg.corpus_sha256,
+                      "brief": entries, "brief_bytes": sum(e["bytes"] for e in entries),
+                      "kinds": kinds}}
+
+
+def _size(campaign_dir: Path, rel: str) -> int:
+    """Bytes of the declared path as it is now (a symlink reports its target's size, R6)."""
+    return os.stat(campaign_dir / rel).st_size
