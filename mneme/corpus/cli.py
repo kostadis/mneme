@@ -16,6 +16,7 @@ from mneme.mempalace import authority as _authority
 from mneme.mempalace import discover as _discover
 from mneme.mempalace import recipe as _recipe
 from mneme.mempalace.cli import EXIT_OK, EXIT_RUNTIME, _config_opt, _dir_opt, _load_or_exit
+from mneme.mempalace.ownership import OwnerState
 from mneme.mempalace.runner import (
     MempalaceError,
     MempalaceRunner,
@@ -24,9 +25,12 @@ from mneme.mempalace.runner import (
 )
 
 from . import api as _api
+from . import brief_migrate as _bm
 from . import config as _cconfig
 from . import consumers as _consumers
 from . import toc as _toc
+
+EXIT_INVALID = 2
 
 app = typer.Typer(no_args_is_help=True, help="Declared campaign corpus: check, resolve, inspect.")
 
@@ -56,7 +60,7 @@ def check(
 ) -> None:
     """Validate the configuration and print the resolution per kind. Exit 0 iff valid."""
     path = _campaign_dir(config, campaign, campaign_dir)
-    answer = _api.consult(path, _api.campaign_recipe(path))
+    answer, cfg, resolved = _api._consult(path, _api.campaign_recipe(path))
     if "error" in answer:
         raise _refuse(answer)
     for name, k in answer["toc"]["kinds"].items():
@@ -65,9 +69,10 @@ def check(
                              ("missing", k["missing"])):
             for item in items:
                 typer.echo(f"  {label}: {item}")
-    cfg = _cconfig.load(path, _api.campaign_recipe(path))
     if cfg.brief:
-        typer.echo(f"brief: {len(cfg.brief)} file(s)")
+        n, total, missing = _api.brief_summary(cfg, resolved, path)
+        note = f" ({missing} not on this checkout)" if missing else ""
+        typer.echo(f"brief: {n} file(s), {total} bytes{note}")
     else:
         typer.echo("brief: not declared")
     typer.echo("corpus is valid")
@@ -129,6 +134,72 @@ def brief(
             typer.echo(f"  {name} ({k['trust']}): {k['files']} file(s), {k['bytes']} bytes, "
                        f"{k['searchable_files']} searchable")
     raise typer.Exit(EXIT_OK)
+
+
+def _migrate_one(entity, ref, files, apply_: bool) -> bool:
+    """Print one campaign's migration outcome. True iff it was NOT refused."""
+    typer.echo(f"== {ref.name}")
+    try:
+        ref = _discover.resolve(entity, None, ref.path)
+        recipe = _api.campaign_recipe(ref.path)
+        plan = _bm.plan(ref.path, recipe, tuple(files))
+        if isinstance(plan, _bm.Refusal):
+            typer.echo(f"refused: {plan.code}: {plan.detail}")
+            for f in plan.findings:
+                typer.echo(f"  - {f.code}: {f.detail}" if hasattr(f, "code") else f"  - {f}")
+            return False
+        typer.echo("  append to .mneme/corpus.yaml:")
+        for line in plan.block.splitlines():
+            typer.echo(f"    {line}")
+        for b in plan.files:
+            typer.echo(f"  {b.path}  [{', '.join(b.kinds)}] {b.bytes}")
+        typer.echo(f"  total: {plan.total_bytes} bytes")
+        if apply_:
+            typer.echo(f"applied: {_bm.apply(plan)}")
+        else:
+            typer.echo("preview only; re-run with --apply to write")
+        return True
+    except _discover.DiscoveryError as e:
+        typer.echo(f"refused: discovery: {e}")
+    except _bm.MigrationConflict as e:
+        typer.echo(f"refused: conflict: {e}")
+    return False
+
+
+@app.command("migrate-brief")
+def migrate_brief(
+    campaign: str = typer.Argument(None, help="Campaign name (or use --all)"),
+    all_: bool = typer.Option(False, "--all", help="Every campaign this mneme owns"),
+    file: list[str] = typer.Option(None, "--file", "-f",
+                                   help="Brief file, repeat in reading order "
+                                        "(default docs/planning.md)"),
+    apply_: bool = typer.Option(False, "--apply", help="Write the previewed block"),
+    campaign_dir: str = _dir_opt,
+    config: str = _config_opt,
+) -> None:
+    """Propose (default) or append (--apply) a `brief:` block in corpus.yaml. Never rewrites
+    the rest of the file. Exit 0 iff no campaign was refused."""
+    if bool(campaign) == bool(all_):
+        typer.echo("error: give exactly one of CAMPAIGN or --all", err=True)
+        raise typer.Exit(EXIT_INVALID)
+    entity = _load_or_exit(config)
+    files = tuple(file) if file else _bm.DEFAULT_FILES
+    if all_:
+        try:
+            refs = [r for r in _discover.discover(entity)
+                    if r.owner_state is not OwnerState.FOREIGN]
+        except _discover.DiscoveryError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(EXIT_RUNTIME) from None
+    else:
+        try:
+            refs = [_discover.resolve(entity, campaign, campaign_dir)]
+        except _discover.DiscoveryError as e:
+            typer.echo(f"== {campaign}")
+            typer.echo(f"refused: discovery: {e}")
+            raise typer.Exit(EXIT_RUNTIME) from None
+    ok = [_migrate_one(entity, r, files, apply_) for r in refs]
+    raise typer.Exit(EXIT_OK if all(ok) else EXIT_RUNTIME)
 
 
 @app.command()
@@ -205,6 +276,8 @@ def _skeleton(campaign: str) -> str:
     ]
     for k in _recipe.current().kinds:
         lines += [f"#   {k.name}:", "#     dirs: []", "#     files: []"]
+    lines += ["", "# brief:          # optional: files a briefing consumer loads up front",
+              "#   - docs/planning.md"]
     lines += ["", "# Kinds specific to this campaign (not a standard kind name):",
               "# campaign_kinds:", ""]
     return "\n".join(lines)
@@ -228,8 +301,6 @@ def init(
     typer.echo(f"wrote {target} (edit it, then `mneme corpus check {campaign}`)")
     raise typer.Exit(EXIT_OK)
 
-
-EXIT_INVALID = 2
 
 
 @app.command()

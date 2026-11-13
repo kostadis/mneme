@@ -52,27 +52,45 @@ def fresh(campaign_dir: Path, recipe: Recipe) -> dict:
     return _resolve_now(campaign_dir, recipe)[2]
 
 
+def _consult(campaign_dir: Path, recipe: Recipe, kind: str | None = None):
+    """`consult` plus the single resolution it used: ``(answer, cfg, resolved)`` (cfg and
+    resolved are None when the corpus is not declared or does not load)."""
+    if not has_corpus(Path(campaign_dir)):
+        return ({"error": NOT_DECLARED, "findings": [],
+                 "detail": "campaign declares no corpus (.mneme/corpus.yaml is absent)"},
+                None, None)
+    try:
+        cfg, resolved, doc = _resolve_now(campaign_dir, recipe)
+    except CorpusConfigError as e:
+        return ({"error": INVALID, "detail": str(e),
+                 "findings": [f.as_dict() for f in e.findings]}, None, None)
+    if not doc["valid"]:
+        lines = "; ".join(f"{f['code']}: {f['detail']}" for f in doc["findings"])
+        return ({"error": INVALID, "detail": f"corpus does not resolve: {lines}",
+                 "findings": doc["findings"]}, cfg, resolved)
+    if kind is not None:
+        if _toc.files_for(doc, kind) is None:
+            return ({"error": NOT_DECLARED, "findings": [],
+                     "detail": f"kind '{kind}' is not declared for this campaign"}, cfg, resolved)
+        doc = {**doc, "kinds": {kind: doc["kinds"][kind]}}
+    return {"toc": doc}, cfg, resolved
+
+
 def consult(campaign_dir: Path, recipe: Recipe, kind: str | None = None) -> dict:
     """Resolve fresh and answer a consumer. Returns ``{"toc": <doc>}`` (restricted to ``kind``
     when given) or ``{"error": "invalid"|"not-declared", "detail": str, "findings": [...]}``.
     An undeclared kind is an error, never an empty list (FR-013)."""
-    if not has_corpus(Path(campaign_dir)):
-        return {"error": NOT_DECLARED, "findings": [],
-                "detail": "campaign declares no corpus (.mneme/corpus.yaml is absent)"}
-    try:
-        doc = fresh(campaign_dir, recipe)
-    except CorpusConfigError as e:
-        return {"error": INVALID, "detail": str(e), "findings": [f.as_dict() for f in e.findings]}
-    if not doc["valid"]:
-        lines = "; ".join(f"{f['code']}: {f['detail']}" for f in doc["findings"])
-        return {"error": INVALID, "detail": f"corpus does not resolve: {lines}",
-                "findings": doc["findings"]}
-    if kind is not None:
-        if _toc.files_for(doc, kind) is None:
-            return {"error": NOT_DECLARED, "findings": [],
-                    "detail": f"kind '{kind}' is not declared for this campaign"}
-        doc = {**doc, "kinds": {kind: doc["kinds"][kind]}}
-    return {"toc": doc}
+    return _consult(campaign_dir, recipe, kind)[0]
+
+
+def brief_summary(
+    cfg: CorpusConfig, resolved: ResolvedCorpus, campaign_dir: Path
+) -> tuple[int, int, int]:
+    """(declared count, total bytes of the brief files present on disk, number not present)."""
+    present = {f.path for k in resolved.kinds.values() for f in k.files}
+    here = [p for p in cfg.brief if p in present]
+    return (len(cfg.brief), sum(_size(Path(campaign_dir), p) for p in here),
+            len(cfg.brief) - len(here))
 
 
 def brief(campaign_dir: Path, recipe: Recipe) -> dict:

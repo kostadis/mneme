@@ -109,3 +109,14 @@ def test_declared_but_missing_is_not_a_finding(camp):
     (camp / "docs" / "planning.md").unlink()
     res = resolved(camp, "brief: [docs/planning.md]\n")
     assert brief_findings(res) == []
+
+
+def test_skeleton_documents_brief_but_declares_none(camp):
+    from mneme.corpus.cli import _skeleton
+
+    text = _skeleton("corp")
+    assert "# brief:" in text and "#   - docs/planning.md" in text
+    assert not any(ln.startswith("brief:") for ln in text.splitlines())
+    declared = text + "kinds:\n  npcs:\n    dirs: [docs/npcs]\n"
+    cfg = config.parse(declared.encode(), REC, camp)
+    assert cfg.brief == ()
