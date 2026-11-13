@@ -8,7 +8,7 @@
 # as not consumers). `reads:` drafted from each consumer's code (unreviewed model output),
 # then approved row by row by the GM on the same page, 2026-10-24 (all 52 kept as drafted).
 # Edit this file to change classification; status never infers it.
-# mode: palace | toc (compliant) · partial · independent (non-compliant, owed work).
+# mode: palace | toc | brief (compliant) · partial · independent (non-compliant, owed work).
 schema: 1
 consumers:
 - name: cg.prep (session prep)

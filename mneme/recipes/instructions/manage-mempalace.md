@@ -98,6 +98,16 @@ Anything that reads campaign files MUST get the list from mneme, on every use:
    `valid: false`, **refuse** and print what mneme said. Never fall back to globbing.
 3. Take the files from `kinds.<kind>.files[].path` and nothing else. A kind that is not
    declared is "not declared for this campaign", not an empty list.
+4. A **briefing consumer** (one that loads a campaign's context up front, such as
+   `campaign-prep`) calls `mneme corpus brief CAMPAIGN --json` or the `corpus_brief` tool,
+   reads the files in `brief[].path` and nothing else at load time, and keeps `kinds` as its
+   map. Everything else, grounding documents included, is reached by searching the palace;
+   a claim is confirmed by reading the cited source. A per-kind file list is still
+   `corpus toc --kind K` / `corpus_files`.
+5. On any `error` (`not-declared`, `invalid`, `no-brief`, `brief-unavailable`) the consumer
+   refuses and shows mneme's `detail` to the GM. A missing brief is never replaced by a whole
+   kind, a remembered list, or the map alone. The fix for `no-brief` is
+   `mneme corpus migrate-brief CAMPAIGN` (preview), then `--apply`.
 
 Never read `.mneme/corpus.toc.json` and never glob. That file is a host-local snapshot for
 inspection and for status's `toc-stale` check; it can be stale or hand-edited.
@@ -113,3 +123,6 @@ inspection and for status's `toc-stale` check; it can be stale or hand-edited.
 | `toc-stale` (snapshot differs from a fresh resolution) | `mneme mp render CAMPAIGN` |
 | `out-of-scope` (drawers point outside the campaign: a moved campaign or a foreign store) | `mneme mp regenerate CAMPAIGN --confirm` |
 | `invalid` (the configuration or a path is wrong) | edit `.mneme/corpus.yaml`, check with `mneme corpus check CAMPAIGN` |
+| `no-brief` (the campaign declares no brief) | `mneme corpus migrate-brief CAMPAIGN` (preview), then `--apply` |
+| `brief-unavailable` (a brief file is declared but not on this checkout) | check the file out, or change the brief |
+| `brief-undeclared` (a brief entry is not a declared corpus file) | declare it under a kind or remove it from `brief:`, check with `mneme corpus check CAMPAIGN` |
