@@ -357,17 +357,11 @@ consumers:
   issue: kostadis/CampaignGenerator#593
 - name: skill.campaign-prep
   repo: ~/.claude/skills
-  entry: campaign-prep/SKILL.md:23-26
+  entry: campaign-prep/SKILL.md:24-30
   kinds:
   - grounding
-  - party
-  mode: independent
-  via: Four hardcoded paths; mempalace only as a fallback (:47).
-  reads:
-  - docs/campaign_state.md
-  - docs/world_state.md
-  - docs/planning.md
-  - docs/party.md
+  mode: brief
+  via: '`_shared/corpus/corpus_files.py --brief` (`mneme corpus brief --json`); loads brief[] only, searches the rest of the map by wing.'
   issue: kostadis/mytools#87
 - name: skill.campaign-chapter-review
   repo: ~/.claude/skills
