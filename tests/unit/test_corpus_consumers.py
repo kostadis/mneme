@@ -31,7 +31,7 @@ def _write(tmp_path, entries, schema=1):
 def test_shipped_file_parses_with_52_entries_and_split():
     rows = cons.load()
     assert len(rows) == 52
-    assert Counter(c.mode for c in rows) == {"independent": 49, "palace": 2, "toc": 1}
+    assert Counter(c.mode for c in rows) == {"independent": 48, "palace": 2, "toc": 1, "brief": 1}
 
 
 def test_arc_triggers_row_reads_the_arcs_kind_through_the_toc():
@@ -39,6 +39,13 @@ def test_arc_triggers_row_reads_the_arcs_kind_through_the_toc():
     assert row.mode == "toc" and row.kinds == ("arcs",)
     assert cons.compliance(row) == "compliant" and row not in cons.noncompliant(cons.load())
     assert not row.reads and not row.other
+
+
+def test_campaign_prep_row_is_a_compliant_briefing_consumer():
+    (row,) = [c for c in cons.load() if c.name == "skill.campaign-prep"]
+    assert row.mode == "brief" and row.kinds == ("grounding",)
+    assert cons.compliance(row) == "compliant" and row not in cons.noncompliant(cons.load())
+    assert not row.reads
 
 
 def test_valid_optional_fields_round_trip(tmp_path):
