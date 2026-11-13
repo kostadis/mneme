@@ -87,11 +87,9 @@ def corpus_files(entity: ConfigEntity, campaign: str, kind: str) -> dict:
 def corpus_brief(entity: ConfigEntity, campaign: str) -> dict:
     """mytools#87: the GM's load-now files plus the whole TOC as a map (same code as
     `mneme corpus brief`). Consumers read the brief files and refuse on ``error``."""
-    ref = _discover.resolve(entity, campaign)
-    answer = _corpus_api.brief(ref.path, _corpus_api.campaign_recipe(ref.path))
-    if "error" in answer:
-        return {"campaign": campaign, "error": answer["error"], "detail": answer["detail"]}
-    return answer["brief"]
+    _discover.resolve(entity, campaign)
+    return {"campaign": campaign, "error": "not-implemented",
+            "detail": "corpus_brief is not implemented yet (009 T009)"}
 
 
 def inventory(entity: ConfigEntity, campaign: str) -> dict:
