@@ -29,7 +29,7 @@ CORPUS_RELPATH = Path(".mneme") / "corpus.yaml"
 # Stated by every wing-model mining path that meets a corpus campaign (T017, FR-019).
 CORPUS_REFUSAL = "corpus campaign — mining is driven by .mneme/corpus.yaml"
 
-_TOP_KEYS = frozenset({"campaign", "kinds", "campaign_kinds"})
+_TOP_KEYS = frozenset({"campaign", "kinds", "campaign_kinds", "brief"})
 _KIND_KEYS = frozenset({"dirs", "files", "trust", "mined_as"})
 
 
@@ -80,6 +80,10 @@ class CorpusConfig:
     kinds: dict[str, KindDecl]  # standard + campaign kinds, in declaration order
     corpus_sha256: str  # sha256 of the exact file bytes (the TOC stamp, R5)
     source_path: Path
+    # The GM's load-now set (mytools#87): declared files a briefing skill (campaign-prep)
+    # reads up front, in declared order. Empty when `brief:` is absent. Each entry must be a
+    # file of some declared kind; `resolve.py` checks that against the disk.
+    brief: tuple[str, ...] = ()
 
 
 def corpus_path(campaign_dir: Path) -> Path:
@@ -310,6 +314,30 @@ def parse(data: bytes, recipe: Recipe, campaign_dir: Path) -> CorpusConfig:
             kinds[name] = d
 
     out += _lexical_overlaps(kinds)  # rule 6, the part visible without the disk
+    brief = _brief(raw.get("brief"), out)
     if out:
         raise CorpusConfigError(out)
-    return CorpusConfig(campaign, kinds, hashlib.sha256(data).hexdigest(), path)
+    return CorpusConfig(campaign, kinds, hashlib.sha256(data).hexdigest(), path, brief)
+
+
+def _brief(raw, out: list[Finding]) -> tuple[str, ...]:
+    """`brief:` — a list of exact file paths (no dirs, no globs), order kept, duplicates an
+    error (a repeated entry is a typo, not a weight). Membership is checked by `resolve.py`."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
+        out.append(Finding("malformed", "`brief:` must be a list of file paths"))
+        return ()
+    if not raw:
+        out.append(Finding("empty-declaration", "`brief:` is empty; omit it or name files"))
+        return ()
+    seen: list[str] = []
+    for item in raw:
+        n, why = _norm(item)
+        if n is None:
+            out.append(Finding("path-escape", f"brief: {why}", path=item))
+        elif n in seen:
+            out.append(Finding("malformed", "brief: listed twice", path=item))
+        else:
+            seen.append(n)
+    return tuple(seen)

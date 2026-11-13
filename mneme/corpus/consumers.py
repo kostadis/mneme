@@ -15,13 +15,14 @@ from mneme.mempalace import recipe as _recipe
 
 DEFAULT = Path(__file__).resolve().parent.parent / "recipes" / "consumers.yaml"
 SCHEMA = 1
-MODES = ("palace", "toc", "partial", "independent")
+MODES = ("palace", "toc", "brief", "partial", "independent")
 _REQUIRED = ("name", "repo", "entry", "kinds", "mode")
 _OPTIONAL = ("via", "reads", "kinds_toc", "other", "note", "issue")
 _KNOWN = frozenset(_REQUIRED + _OPTIONAL)
 _COMPLIANCE = {
     "palace": "compliant",
     "toc": "compliant",
+    "brief": "compliant",
     "partial": "partial",
     "independent": "non-compliant",
 }

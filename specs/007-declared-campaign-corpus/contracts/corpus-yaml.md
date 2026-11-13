@@ -1,5 +1,7 @@
 # Contract: `.mneme/corpus.yaml` (authority, tracked)
 
+> **Delta: 009.** The optional top-level `brief:` key, `mneme corpus brief` and `mneme corpus migrate-brief` are specified in `specs/009-corpus-brief/contracts/`.
+
 The one place a campaign declares its corpus (FR-001, FR-001a). It is hand-edited by the
 GM. mneme reads it and writes it in exactly two cases (GM decision 2026-10-27, mneme#71):
 `mneme corpus init` creates a skeleton with no paths when the file is absent, and

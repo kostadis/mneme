@@ -362,6 +362,37 @@ class _Walker:
                 self.file_entry(kind, child, ents)
 
 
+STANDING_PRESENT = "present"
+STANDING_ABSENT = "absent"
+STANDING_UNDECLARED = "undeclared"
+
+
+def brief_standing(
+    cfg: CorpusConfig, resolved: ResolvedCorpus, campaign_dir: Path, path: str
+) -> tuple[str, tuple[str, ...]]:
+    """The one rule for where a brief path stands (feature 009): ``(standing, kinds)``.
+
+    ``present``: a resolved file of ``kinds``. ``absent``: declared but not on this checkout,
+    either a `files:` entry that is missing/not materialized, or a path strictly under a
+    declared `dirs:` entry that does not exist on disk (deleted / not generated yet).
+    ``undeclared``: everything else, including a declared dir itself (a folder is never a
+    brief entry) and an existing file under a declared dir that did not resolve (ignored)."""
+    present = tuple(n for n, k in resolved.kinds.items() if any(f.path == path for f in k.files))
+    if present:
+        return STANDING_PRESENT, present
+    absent: list[str] = []
+    gone = not os.path.lexists(Path(campaign_dir) / path)
+    for name, decl in cfg.kinds.items():
+        k = resolved.kinds.get(name)
+        if k is not None and path in decl.files and path in (*k.missing, *k.not_materialized):
+            absent.append(name)
+        elif gone and any(path.startswith(d + "/") for d in decl.dirs):
+            absent.append(name)
+    if absent:
+        return STANDING_ABSENT, tuple(absent)
+    return STANDING_UNDECLARED, ()
+
+
 def resolve(cfg: CorpusConfig, campaign_dir: Path, recipe: Recipe) -> ResolvedCorpus:
     """Resolve every declared kind on this checkout. Never raises on a bad declaration:
     problems are ``findings``. ``recipe`` is accepted for symmetry with `config.load` (the
@@ -437,6 +468,17 @@ def resolve(cfg: CorpusConfig, campaign_dir: Path, recipe: Recipe) -> ResolvedCo
             name, decl.standard, decl.trust,
             tuple(files[p] for p in sorted(files)), tuple(sorted(nm)), tuple(sorted(miss)),
         )
+
+    # Brief (mytools#87): every entry must be a file the corpus declares. An entry that is
+    # declared but absent on this checkout is NOT a corpus finding (validity must not depend
+    # on a sparse checkout, or on a generated file not existing yet); `api.brief` refuses it.
+    partial = ResolvedCorpus(cfg.campaign, kinds)
+    for b in cfg.brief:
+        if brief_standing(cfg, partial, campaign_dir, b)[0] == STANDING_UNDECLARED:
+            findings.append(Finding(
+                "brief-undeclared",
+                "listed in `brief:` but not a file of any declared kind; declare it under a "
+                "kind (the brief is a subset of the corpus, never a second list)", path=b))
 
     # Rule 8: nothing resolved at all. A host where everything is merely not checked out is
     # not an empty corpus (R7), so not_materialized counts as "something declared".

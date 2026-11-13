@@ -116,3 +116,15 @@ def test_cli_exit_2_when_invalid(tmp_path, monkeypatch):
 def test_empty_kinds_is_valid(tmp_path):
     (c,) = cons.load(_write(tmp_path, [_entry(kinds=[])]))
     assert c.kinds == ()
+
+
+def test_brief_mode_parses_and_is_compliant(tmp_path):
+    (row,) = cons.load(_write(tmp_path, [_entry(mode="brief")]))
+    assert row.mode == "brief"
+    assert cons.compliance(row) == "compliant"
+    assert row not in cons.noncompliant([row])
+
+
+def test_unknown_mode_still_errors(tmp_path):
+    with pytest.raises(cons.ConsumersError, match="is not one of"):
+        cons.load(_write(tmp_path, [_entry(mode="briefing")]))

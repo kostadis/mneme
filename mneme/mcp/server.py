@@ -84,6 +84,16 @@ def corpus_files(entity: ConfigEntity, campaign: str, kind: str) -> dict:
     return {"campaign": campaign, "kind": kind, "files": answer["toc"]["kinds"][kind]["files"]}
 
 
+def corpus_brief(entity: ConfigEntity, campaign: str) -> dict:
+    """mytools#87: the GM's load-now files plus the whole TOC as a map (same code as
+    `mneme corpus brief`). Consumers read the brief files and refuse on ``error``."""
+    ref = _discover.resolve(entity, campaign)
+    answer = _corpus_api.brief(ref.path, _corpus_api.campaign_recipe(ref.path))
+    if "error" in answer:
+        return {"campaign": campaign, "error": answer["error"], "detail": answer["detail"]}
+    return answer["brief"]
+
+
 def inventory(entity: ConfigEntity, campaign: str) -> dict:
     """Current document/wing structure, so an assistant can reason about a migration."""
     ref = _discover.resolve(entity, campaign)
@@ -255,6 +265,13 @@ def build_server(entity: ConfigEntity):
         """The files of one declared corpus kind, resolved fresh on every call. Read ONLY these
         files; on an `error` (invalid / not-declared) refuse and never glob."""
         return corpus_files(entity, campaign, kind)
+
+    @mcp.tool(name="corpus_brief")
+    def corpus_brief_tool(campaign: str) -> dict:
+        """The campaign's GM-declared load-now files (`brief`) plus a per-kind summary (counts and
+        bytes, no contents). Read ONLY `brief[].path`; reach everything else by searching the
+        palace. On an `error` refuse and show `detail` to the GM; never glob."""
+        return corpus_brief(entity, campaign)
 
     @mcp.tool()
     def get_campaign_inventory(campaign: str) -> dict:

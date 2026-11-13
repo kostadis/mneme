@@ -1,5 +1,7 @@
 # Contract: CLI surface (delta)
 
+> **Delta: 009.** The optional top-level `brief:` key, `mneme corpus brief` and `mneme corpus migrate-brief` are specified in `specs/009-corpus-brief/contracts/`.
+
 All commands take the existing `--config/-c` and `--dir/-d`.
 
 ## New group: `mneme corpus`
