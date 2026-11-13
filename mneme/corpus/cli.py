@@ -186,8 +186,11 @@ def migrate_brief(
     files = tuple(file) if file else _bm.DEFAULT_FILES
     if all_:
         try:
+            # campaign_shared_dirs (gm-assistant, scripts, ...) are folders in a campaign clone,
+            # not campaigns (008); a foreign campaign is not ours to edit.
+            shared = set(entity.campaign_shared_dirs or ())
             refs = [r for r in _discover.discover(entity)
-                    if r.owner_state is not OwnerState.FOREIGN]
+                    if r.owner_state is not OwnerState.FOREIGN and r.path.name not in shared]
         except _discover.DiscoveryError as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(EXIT_RUNTIME) from None

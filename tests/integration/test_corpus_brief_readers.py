@@ -270,3 +270,14 @@ def test_migrate_shadowed_keeps_brief_block(w):
     assert new.count("brief:") == before.count("brief:") == 1
     cfg = cconfig.parse(new.encode(), rec, w.camp)
     assert cfg.brief == ("docs/planning.md",)
+
+
+def test_migrate_all_skips_campaign_shared_dirs(w, monkeypatch):
+    # gm-assistant / scripts sit beside campaigns in a clone; they are not campaigns (008).
+    import dataclasses
+    (w.root / "scripts").mkdir()
+    ent = dataclasses.replace(w.entity, campaign_shared_dirs=("scripts",))
+    monkeypatch.setattr("mneme.corpus.cli._load_or_exit", lambda _c: ent)
+    r = CLI.invoke(app, ["corpus", "migrate-brief", "--all"])
+    assert "== scripts" not in r.stdout
+    assert "== corp" in r.stdout
