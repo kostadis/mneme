@@ -46,10 +46,6 @@ class MigrationConflict(Exception):
     """corpus.yaml changed between the preview and the apply."""
 
 
-def _kinds_of(res, path: str) -> tuple[str, ...]:
-    return tuple(n for n, k in res.kinds.items() if any(f.path == path for f in k.files))
-
-
 def plan(campaign_dir: Path, recipe, files=DEFAULT_FILES) -> Plan | Refusal:
     campaign_dir = Path(campaign_dir)
     if not config.has_corpus(campaign_dir):
@@ -86,11 +82,14 @@ def plan(campaign_dir: Path, recipe, files=DEFAULT_FILES) -> Plan | Refusal:
 
     unavailable: list[str] = []
     undeclared: list[str] = []
+    kinds_of: dict[str, tuple[str, ...]] = {}
     for n in norm:
-        if _kinds_of(res, n):
-            continue
-        reach = {p for k in res.kinds.values() for p in (*k.not_materialized, *k.missing)}
-        (unavailable if n in reach else undeclared).append(n)
+        standing, kinds = resolve.brief_standing(cfg, res, campaign_dir, n)
+        kinds_of[n] = kinds
+        if standing == resolve.STANDING_ABSENT:
+            unavailable.append(n)
+        elif standing == resolve.STANDING_UNDECLARED:
+            undeclared.append(n)
     if unavailable:
         return Refusal("brief-unavailable",
                        "declared but not on disk here: " + ", ".join(unavailable))
@@ -110,7 +109,7 @@ def plan(campaign_dir: Path, recipe, files=DEFAULT_FILES) -> Plan | Refusal:
         return Refusal("invalid", "the edited corpus.yaml would not validate",
                        tuple(res2.findings))
 
-    bf = tuple(BriefFile(n, _kinds_of(res, n), os.stat(campaign_dir / n).st_size) for n in norm)
+    bf = tuple(BriefFile(n, kinds_of[n], os.stat(campaign_dir / n).st_size) for n in norm)
     return Plan(campaign_dir, original, block, new_bytes, bf, sum(b.bytes for b in bf))
 
 

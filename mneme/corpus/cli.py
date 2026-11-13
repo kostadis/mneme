@@ -163,12 +163,14 @@ def _migrate_one(entity, ref, files, apply_: bool) -> bool:
         typer.echo(f"refused: discovery: {e}")
     except _bm.MigrationConflict as e:
         typer.echo(f"refused: conflict: {e}")
+    except OSError as e:
+        typer.echo(f"refused: io: {e}")
     return False
 
 
 @app.command("migrate-brief")
 def migrate_brief(
-    campaign: str = typer.Argument(None, help="Campaign name (or use --all)"),
+    campaign: str = typer.Argument(None, help="Campaign name (or use --dir / --all)"),
     all_: bool = typer.Option(False, "--all", help="Every campaign this mneme owns"),
     file: list[str] = typer.Option(None, "--file", "-f",
                                    help="Brief file, repeat in reading order "
@@ -179,8 +181,9 @@ def migrate_brief(
 ) -> None:
     """Propose (default) or append (--apply) a `brief:` block in corpus.yaml. Never rewrites
     the rest of the file. Exit 0 iff no campaign was refused."""
-    if bool(campaign) == bool(all_):
-        typer.echo("error: give exactly one of CAMPAIGN or --all", err=True)
+    if all_ and (campaign or campaign_dir) or not (all_ or campaign or campaign_dir):
+        typer.echo("error: give one of CAMPAIGN, --dir or --all (--all excludes the others)",
+                   err=True)
         raise typer.Exit(EXIT_INVALID)
     entity = _load_or_exit(config)
     files = tuple(file) if file else _bm.DEFAULT_FILES
@@ -198,7 +201,7 @@ def migrate_brief(
         try:
             refs = [_discover.resolve(entity, campaign, campaign_dir)]
         except _discover.DiscoveryError as e:
-            typer.echo(f"== {campaign}")
+            typer.echo(f"== {campaign or campaign_dir}")
             typer.echo(f"refused: discovery: {e}")
             raise typer.Exit(EXIT_RUNTIME) from None
     ok = [_migrate_one(entity, r, files, apply_) for r in refs]

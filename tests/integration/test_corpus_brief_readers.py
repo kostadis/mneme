@@ -281,3 +281,60 @@ def test_migrate_all_skips_campaign_shared_dirs(w, monkeypatch):
     r = CLI.invoke(app, ["corpus", "migrate-brief", "--all"])
     assert "== scripts" not in r.stdout
     assert "== corp" in r.stdout
+
+
+# ── review fixes: one standing rule, io failures, --dir ─────────────────────────
+
+
+def test_brief_file_deleted_under_declared_dir_is_unavailable_not_invalid(w):
+    from mneme.corpus import api
+    p = w.camp / ".mneme" / "corpus.yaml"
+    p.write_text(p.read_text().replace("docs/planning.md\n", "docs/summaries/001.md\n"))
+    (w.camp / "docs/summaries/001.md").unlink()
+    r = CLI.invoke(app, ["corpus", "check", "corp"])
+    assert r.exit_code == 0, r.output
+    assert "(1 not on this checkout)" in r.stdout
+    assert CLI.invoke(app, ["corpus", "toc", "corp"]).exit_code == 0
+    got = api.brief(w.camp, recipe_mod.current())
+    assert got["error"] == "brief-unavailable" and "docs/summaries/001.md" in got["detail"]
+    p.write_text(p.read_text().replace("brief:\n  - docs/summaries/001.md\n", ""))
+    r = CLI.invoke(app, ["corpus", "migrate-brief", "corp", "--file", "docs/summaries/001.md"])
+    assert r.exit_code == EXIT_RUNTIME
+    assert "refused: brief-unavailable:" in r.stdout
+
+
+def test_migrate_io_error_does_not_abort_fleet(w, monkeypatch):
+    from mneme.corpus import brief_migrate as bm
+    two = w.root / "corp2"
+    shutil.copytree(w.camp, two)
+    for rel, old, new in ((".mneme/corpus.yaml", "campaign: corp", "campaign: corp2"),
+                          (".mneme/mempalace.yaml", "corp", "corp2")):
+        (two / rel).write_text((two / rel).read_text().replace(old, new))
+    for c in (w.camp, two):
+        q = c / ".mneme" / "corpus.yaml"
+        q.write_text(q.read_text().replace("brief:\n  - docs/planning.md\n", ""))
+    real = bm.apply
+
+    def boom(plan):
+        if plan.campaign_dir.name == "corp":
+            raise PermissionError("denied")
+        return real(plan)
+
+    monkeypatch.setattr(bm, "apply", boom)
+    r = CLI.invoke(app, ["corpus", "migrate-brief", "--all", "--apply"])
+    assert r.exit_code == EXIT_RUNTIME, r.output
+    assert "refused: io: denied" in r.stdout
+    assert "== corp2" in r.stdout and "applied: " in r.stdout
+    assert r.exception is None or isinstance(r.exception, SystemExit)
+
+
+def test_migrate_dir_alone_selects_campaign(w):
+    _strip_brief(w)
+    r = CLI.invoke(app, ["corpus", "migrate-brief", "--dir", str(w.camp)])
+    assert r.exit_code == 0, r.output
+    assert "docs/planning.md" in r.stdout
+
+
+def test_migrate_all_with_dir_is_usage_error(w):
+    r = CLI.invoke(app, ["corpus", "migrate-brief", "--all", "--dir", str(w.camp)])
+    assert r.exit_code == 2, r.output

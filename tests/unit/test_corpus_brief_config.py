@@ -120,3 +120,26 @@ def test_skeleton_documents_brief_but_declares_none(camp):
     declared = text + "kinds:\n  npcs:\n    dirs: [docs/npcs]\n"
     cfg = config.parse(declared.encode(), REC, camp)
     assert cfg.brief == ()
+
+
+def test_deleted_file_under_declared_dir_is_absent_not_a_finding(camp):
+    (camp / "docs/npcs/a.md").unlink()
+    cfg = parse(camp, "brief: [docs/npcs/a.md]\n")
+    res = resolve.resolve(cfg, camp, REC)
+    assert brief_findings(res) == []
+    assert resolve.brief_standing(cfg, res, camp, "docs/npcs/a.md") == ("absent", ("npcs",))
+
+
+def test_missing_declared_dir_as_brief_entry_is_undeclared(camp):
+    import shutil
+    shutil.rmtree(camp / "docs/npcs")
+    res = resolved(camp, "brief: [docs/npcs]\n")
+    assert brief_findings(res) == ["docs/npcs"]
+
+
+def test_existing_ignored_file_under_dir_is_undeclared_standing(camp):
+    write(camp, "docs/npcs/secret.md")
+    (camp / ".gitignore").write_text("docs/npcs/secret.md\n")
+    cfg = parse(camp, "brief: [docs/npcs/secret.md]\n")
+    res = resolve.resolve(cfg, camp, REC)
+    assert resolve.brief_standing(cfg, res, camp, "docs/npcs/secret.md")[0] == "undeclared"
