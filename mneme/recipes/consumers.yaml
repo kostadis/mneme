@@ -357,11 +357,17 @@ consumers:
   issue: kostadis/CampaignGenerator#593
 - name: skill.campaign-prep
   repo: ~/.claude/skills
-  entry: campaign-prep/SKILL.md:13-28
+  entry: campaign-prep/SKILL.md:23-26
   kinds:
   - grounding
-  mode: toc
-  via: 'Files come from `_shared/corpus/corpus_files.py grounding`, which runs `mneme corpus toc <campaign> --dir <root> --kind grounding --json` and refuses (no glob, no hardcoded path) if mneme cannot answer. party.md is read as part of grounding; the party kind (character sheets) is not read.'
+  - party
+  mode: independent
+  via: Four hardcoded paths; mempalace only as a fallback (:47).
+  reads:
+  - docs/campaign_state.md
+  - docs/world_state.md
+  - docs/planning.md
+  - docs/party.md
   issue: kostadis/mytools#87
 - name: skill.campaign-chapter-review
   repo: ~/.claude/skills
