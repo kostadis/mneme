@@ -149,7 +149,7 @@ the migration), then US4 (P3, consumer inventory).
 - [X] T028 (Opus) Commit the feature in logical commits on `corpus-brief` (Foundational; US1; US2+US3; US5; US4+docs), each message ending with the Co-Authored-By line.
 - [X] T029 (Opus) Run ONE `/code-review` pass over `main...corpus-brief`. Fix confirmed findings that are small and in scope, in one follow-up commit, and run the suite again. Do not run a second review.
 - [X] T030 (Opus) File every confirmed review finding not fixed in T029, every unchecked task, and every gap deferred during implementation as a sub-issue of kostadis/mneme#92 (`issue_write` with `parent_issue_number: 92`), each with the failing scenario and the file:line.
-- [ ] T031 (Opus) Push `corpus-brief` and open a PR against `main` that closes #92 and lists its sub-issues. Do not merge without the GM's go-ahead.
+- [X] T031 (Opus) Push `corpus-brief` and open a PR against `main` that closes #92 and lists its sub-issues. Do not merge without the GM's go-ahead.
 - [ ] T032 (GM) Review the PR and merge it. Then run `mneme corpus migrate-brief --all` (preview), check each proposal, run `--apply`, and commit each campaign's `corpus.yaml` in the campaigns repo (quickstart 6).
 
 ---
