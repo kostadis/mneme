@@ -24,7 +24,7 @@ hypostasis = "hypostasis.cli:app"   # configure the environment (run once)
 mneme = "mneme.cli:app"             # spin up per campaign (run each time)
 
 [tool.setuptools]
-packages = ["hypostasis", "mneme", "mneme.mempalace", "mneme.mcp"]
+packages = ["hypostasis", "mneme", "mneme.mempalace", "mneme.mcp", "mneme.corpus"]
 
 [tool.setuptools.package-data]
 hypostasis = ["templates/*.j2"]
